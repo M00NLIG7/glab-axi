@@ -1,0 +1,92 @@
+{
+  "schema": "glab-axi/no-mistakes-contract-v1",
+  "source": {
+    "module": "github.com/kunchenguid/no-mistakes",
+    "version": "v1.45.4",
+    "commit": "0c58eb7110427cfc1d716641ae4b878e7f8582ac"
+  },
+  "cwd": "local Git repository fixture with an origin remote",
+  "stdin": "closed; no compatibility command reads stdin",
+  "vectors": [
+    {
+      "name": "auth-status",
+      "argv": ["auth", "status", "--hostname", "${host}"],
+      "stdout": "empty",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "mr-list",
+      "argv": ["mr", "list", "--source-branch", "${source}", "--target-branch", "${target}", "--output", "json"],
+      "stdout": "json-array",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "mr-create",
+      "argv": ["mr", "create", "--source-branch", "${source}", "--target-branch", "${target}", "--title", "${title}", "--description", "${description}", "--yes"],
+      "stdout": "json-object",
+      "exit": 0,
+      "network_mutation": true
+    },
+    {
+      "name": "mr-update",
+      "argv": ["mr", "update", "${iid}", "--title", "${title}", "--description", "${description}", "--yes"],
+      "stdout": "json-object",
+      "exit": 0,
+      "network_mutation": true
+    },
+    {
+      "name": "mr-view",
+      "argv": ["mr", "view", "${iid}", "--output", "json"],
+      "stdout": "json-object",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "ci-status",
+      "argv": ["ci", "status", "--mr", "${iid}", "--output", "json"],
+      "stdout": "json-array",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "pipeline-jobs-api",
+      "argv": ["api", "--paginate", "projects/${encoded_project}/pipelines/${pipeline_id}/jobs"],
+      "stdout": "json-array",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "ci-get",
+      "argv": ["ci", "get", "--pipeline-id", "${pipeline_id}", "--output", "json", "--with-job-details"],
+      "stdout": "json-array",
+      "exit": 0,
+      "network_mutation": false
+    },
+    {
+      "name": "ci-trace",
+      "argv": ["ci", "trace", "${job_id}"],
+      "stdout": "raw-trace",
+      "exit": 0,
+      "network_mutation": false
+    }
+  ],
+  "denied": [
+    ["auth", "login"],
+    ["mr", "merge", "1"],
+    ["mr", "close", "1"],
+    ["mr", "approve", "1"],
+    ["mr", "delete", "1"],
+    ["mr", "reopen", "1"],
+    ["mr", "comment", "1", "--message", "x"],
+    ["mr", "create", "--source-branch", "x", "--target-branch", "main", "--title", "x", "--description", "x", "--reviewer", "admin", "--yes"],
+    ["ci", "retry", "1"],
+    ["ci", "cancel", "1"],
+    ["repo", "clone", "group/project"],
+    ["api", "/user"],
+    ["api", "--method", "DELETE", "projects/1"],
+    ["api", "--paginate", "projects/other%2Fproject/pipelines/99/jobs"],
+    ["api", "--paginate", "projects/group%2Fproject/pipelines/99/jobs", "--header", "X-Test:value"]
+  ]
+}

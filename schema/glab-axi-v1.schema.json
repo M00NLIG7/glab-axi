@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/glab-axi-v1.schema.json",
+  "title": "glab-axi/v1 envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "meta"],
+  "properties": {
+    "schema": {"const": "glab-axi/v1"},
+    "ok": {"type": "boolean"},
+    "data": {},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": [
+            "validation_error",
+            "authentication_error",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "rate_limited",
+            "upstream_error",
+            "safety_violation",
+            "canceled",
+            "internal_error",
+            "unsupported",
+            "ambiguous_create",
+            "ambiguous_update"
+          ]
+        },
+        "message": {"type": "string", "maxLength": 4096},
+        "retryable": {"type": "boolean"}
+      }
+    },
+    "help": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {"type": "string", "maxLength": 256}
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truncated"],
+      "properties": {"truncated": {"type": "boolean"}}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"ok": {"const": true}}},
+      "then": {"required": ["data"], "not": {"required": ["error"]}},
+      "else": {"required": ["error"], "not": {"required": ["data"]}}
+    }
+  ]
+}
