@@ -142,7 +142,7 @@ func TopHelp() string {
 	out.WriteString("      --format toon|json        output format (default toon)\n")
 	out.WriteString("  -h, --help                    show contextual help\n")
 	out.WriteString("  -v, -V, --version             show version (the long form preserves the v1 handshake)\n")
-	out.WriteString("\nBackends:\n  safe reads and human login use pinned official glab 1.112.0; exact\n  glab-axi/v1 automation remains a standalone native backend.\n")
+	out.WriteString("\nBackends:\n  safe reads and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
 	out.WriteString("\nSecurity boundary:\n  no generic API, merge, approve, comment, close/reopen/delete, repository\n  mutation, release/label mutation, secrets/variables, or pipeline mutation.\n")
 	return out.String()
 }
@@ -212,7 +212,7 @@ func leafHelp(definition Definition) string {
 	out.WriteString("Usage:\n  " + definition.Usage + "\n\n")
 	out.WriteString(definition.Summary + "\n")
 	if definition.Backend == "official-glab" {
-		out.WriteString("Backend: pinned official glab 1.112.0; output is bounded and normalized.\n")
+		out.WriteString("Backend: pinned official glab 1.112.0 (816e3a52); output is bounded and normalized.\n")
 	}
 	if definition.Write {
 		out.WriteString("Write boundary: this is the only provider mutation in the initial parity release.\n")
