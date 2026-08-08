@@ -225,6 +225,26 @@ func TestDeniedAndHelpPathsNeverConstructDelegateOrResolveCredentials(t *testing
 	}
 }
 
+func TestHelpSurfacesExactPinnedOfficialGlabBuild(t *testing.T) {
+	want := "pinned official glab " + glab.SupportedVersion + " (" + glab.SupportedBuild + ")"
+	for _, args := range [][]string{
+		{"--help"},
+		{"auth", "login", "--help"},
+		{"issue", "list", "--help"},
+	} {
+		var stdout bytes.Buffer
+		deps := Dependencies{
+			Runtime: runtimepkg.Dependencies{Stdout: &stdout, Stderr: io.Discard},
+		}
+		if code := Run(context.Background(), args, deps); code != 0 {
+			t.Fatalf("help %v exit=%d", args, code)
+		}
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("help %v did not surface the exact pinned upstream build %q: %s", args, want, stdout.String())
+		}
+	}
+}
+
 func TestProductAuthenticationDoesNotNormalizeOfficialCredentials(t *testing.T) {
 	delegate := &fakeDelegate{statusErr: uxv1.NewError(uxv1.CodeAuthentication, "not authenticated")}
 	stdout, _, deps := productTestDeps(t, delegate)
