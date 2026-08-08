@@ -95,20 +95,21 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 		meta.UpstreamVersion = response.UpstreamVersion
 	}
 	if writeErr == nil {
-		created, _, err := decodeAndValidateEnsureMR(response.Body, target, project.ID, source, targetBranch)
-		if err != nil {
-			return commandOutput{meta: meta}, err
+		created, _, validateErr := decodeAndValidateEnsureMR(response.Body, target, project.ID, source, targetBranch)
+		if validateErr == nil && created.Title == title && created.Description == description {
+			return commandOutput{data: ensureResult{MR: created, Action: "created"}, meta: meta}, nil
 		}
-		if created.Title != title || created.Description != description {
-			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeAmbiguousCreate, "created merge request did not preserve the requested content")
+		if validateErr != nil {
+			writeErr = validateErr
+		} else {
+			writeErr = errors.New("created merge request did not preserve requested content")
 		}
-		return commandOutput{data: ensureResult{MR: created, Action: "created"}, meta: meta}, nil
 	}
 	return reconcileEnsure(ctx, client, target, project.ID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousCreate, "reconciled_create", writeErr)
 }
 
 func ensureExisting(ctx context.Context, client delegateClient, target Target, projectID int64, record upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta) (commandOutput, error) {
-	normalized, _, err := normalizeMR(record, target.Host, true)
+	normalized, _, err := normalizeMR(record, target.Host, target.Repo, true)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
@@ -125,14 +126,15 @@ func ensureExisting(ctx context.Context, client delegateClient, target Target, p
 		meta.UpstreamVersion = response.UpstreamVersion
 	}
 	if writeErr == nil {
-		updated, _, err := decodeAndValidateEnsureMR(response.Body, target, projectID, source, targetBranch)
-		if err != nil {
-			return commandOutput{meta: meta}, err
+		updated, _, validateErr := decodeAndValidateEnsureMR(response.Body, target, projectID, source, targetBranch)
+		if validateErr == nil && updated.IID == record.IID && updated.Title == title && updated.Description == description {
+			return commandOutput{data: ensureResult{MR: updated, Action: "updated"}, meta: meta}, nil
 		}
-		if updated.IID != record.IID || updated.Title != title || updated.Description != description {
-			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeAmbiguousUpdate, "updated merge request did not preserve the requested content")
+		if validateErr != nil {
+			writeErr = validateErr
+		} else {
+			writeErr = errors.New("updated merge request did not preserve requested content")
 		}
-		return commandOutput{data: ensureResult{MR: updated, Action: "updated"}, meta: meta}, nil
 	}
 	return reconcileEnsure(ctx, client, target, projectID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousUpdate, "reconciled_update", writeErr)
 }
@@ -143,7 +145,7 @@ func reconcileEnsure(ctx context.Context, client delegateClient, target Target, 
 		meta.UpstreamVersion = version
 	}
 	if err == nil && len(matches) == 1 && matches[0].Title == title && matches[0].Description == description {
-		normalized, _, normalizeErr := normalizeMR(matches[0], target.Host, true)
+		normalized, _, normalizeErr := normalizeMR(matches[0], target.Host, target.Repo, true)
 		if normalizeErr == nil {
 			return commandOutput{data: ensureResult{MR: normalized, Action: action}, meta: meta}, nil
 		}
@@ -168,7 +170,7 @@ func loadEnsureProject(ctx context.Context, client delegateClient, target Target
 	if project.ID < 1 || project.PathWithNamespace != target.Repo {
 		return ensureProject{}, response.UpstreamVersion, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different repository identity")
 	}
-	if _, err := authorityURL(project.WebURL, target.Host, true); err != nil {
+	if _, err := authorityRepoURL(project.WebURL, target.Host, target.Repo, true); err != nil {
 		return ensureProject{}, response.UpstreamVersion, err
 	}
 	return project, response.UpstreamVersion, nil
@@ -212,7 +214,7 @@ func validateEnsureRecord(record upstreamMR, target Target, projectID int64, sou
 	if record.ID < 1 || record.IID < 1 || record.SourceProjectID != projectID || record.TargetProjectID != projectID || record.SourceBranch != source || record.TargetBranch != targetBranch || record.State != "opened" {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned an out-of-scope merge request")
 	}
-	if _, _, err := normalizeMR(record, target.Host, true); err != nil {
+	if _, _, err := normalizeMR(record, target.Host, target.Repo, true); err != nil {
 		return err
 	}
 	return nil
@@ -226,7 +228,7 @@ func decodeAndValidateEnsureMR(body []byte, target Target, projectID int64, sour
 	if err := validateEnsureRecord(record, target, projectID, source, targetBranch); err != nil {
 		return MergeRequest{}, upstreamMR{}, err
 	}
-	normalized, _, err := normalizeMR(record, target.Host, true)
+	normalized, _, err := normalizeMR(record, target.Host, target.Repo, true)
 	return normalized, record, err
 }
 

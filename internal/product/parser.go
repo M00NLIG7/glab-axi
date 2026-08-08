@@ -31,6 +31,9 @@ var deniedTop = map[string]string{
 }
 
 var deniedNested = map[string]map[string]string{
+	"auth": {
+		"token": "credential display", "show-token": "credential display",
+	},
 	"mr": {
 		"merge": "merging", "approve": "approval", "comment": "commenting", "note": "commenting",
 		"close": "closing", "reopen": "reopening", "delete": "deletion",
@@ -170,6 +173,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		}
 		name, inline, hasInline := strings.Cut(arg, "=")
 		if strings.HasPrefix(arg, "-") {
+			if reason := deniedFlag(definition, name); reason != "" {
+				return Parsed{}, uxv1.NewError(uxv1.CodeSecurityBoundary, reason+" is not delegated")
+			}
 			spec, ok := specs[name]
 			if !ok {
 				return Parsed{}, uxv1.NewError(uxv1.CodeUnsupported, "unsupported flag: "+name)
@@ -225,6 +231,20 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		parsed.Limit = limit
 	}
 	return parsed, nil
+}
+
+func deniedFlag(definition Definition, name string) string {
+	path := strings.Join(definition.Path, " ")
+	if path == "auth status" && (name == "--show-token" || name == "-t") {
+		return "credential display"
+	}
+	if path == "auth login" {
+		switch name {
+		case "--token", "-t", "--job-token", "-j", "--stdin", "--insecure-storage", "--device", "--web":
+			return "credential-bearing or policy-bypassing login flags"
+		}
+	}
+	return ""
 }
 
 func validArgument(value string) bool {

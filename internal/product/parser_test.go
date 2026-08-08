@@ -49,9 +49,11 @@ func TestParserAcceptsCommandFirstGlobalEqualsForms(t *testing.T) {
 
 func TestParserClassifiesPermanentSecurityBoundaries(t *testing.T) {
 	for _, args := range [][]string{
-		{"api", "projects"}, {"mr", "merge", "1"}, {"mr", "comment", "1"},
-		{"issue", "close", "1"}, {"pipeline", "retry", "2"}, {"repo", "create"},
-		{"release", "upload"}, {"label", "delete"}, {"secret", "list"}, {"variable", "list"},
+		{"api", "projects"}, {"auth", "token"}, {"auth", "show-token"},
+		{"auth", "status", "--show-token"}, {"auth", "login", "--token", "sentinel"},
+		{"mr", "merge", "1"}, {"mr", "comment", "1"}, {"issue", "close", "1"},
+		{"pipeline", "retry", "2"}, {"repo", "create"}, {"release", "upload"},
+		{"label", "delete"}, {"secret", "list"}, {"variable", "list"},
 	} {
 		if _, err := Parse(args); err == nil || string(uxCode(err)) != "security_boundary" {
 			t.Fatalf("%v error=%v", args, err)
@@ -91,6 +93,41 @@ func TestTargetUsesExplicitThenEnvironmentThenLocalContext(t *testing.T) {
 }
 
 func uxCode(err error) uxv1.Code { return uxv1.AsError(err).Code }
+
+func TestTargetDoesNotTreatKnownGitHubRemoteAsGitLabAuthority(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "remote", "add", "origin", "git@github.com:group/project.git")
+	parsed, err := Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveTarget(context.Background(), *parsed.Command, dir, func(string) (string, bool) { return "", false }); err == nil {
+		t.Fatal("known GitHub remote was accepted as implicit GitLab authority")
+	}
+}
+
+func TestTargetRequiresExplicitAuthorityForSelfManagedRemote(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "remote", "add", "origin", "git@gitlab.internal:group/project.git")
+	parsed, err := Parse([]string{"issue", "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveTarget(context.Background(), *parsed.Command, dir, func(string) (string, bool) { return "", false }); err == nil || uxCode(err) != uxv1.CodeSafety {
+		t.Fatalf("implicit self-managed authority error=%v", err)
+	}
+
+	explicit, err := Parse([]string{"issue", "list", "--hostname", "gitlab.internal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := resolveTarget(context.Background(), *explicit.Command, dir, func(string) (string, bool) { return "", false })
+	if err != nil || target != (Target{Host: "gitlab.internal", Repo: "group/project"}) {
+		t.Fatalf("explicit target=%#v err=%v", target, err)
+	}
+}
 
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()

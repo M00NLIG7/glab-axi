@@ -55,7 +55,7 @@ func helpFor(code Code) []string {
 	case CodeRateLimited:
 		return []string{"retry after the provider rate limit resets"}
 	case CodeSafety:
-		return []string{"verify the selected GitLab host, repository, and returned URL authority"}
+		return []string{"verify the reported local or provider authority safety condition"}
 	default:
 		return nil
 	}

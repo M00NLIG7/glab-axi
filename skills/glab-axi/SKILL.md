@@ -23,8 +23,8 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi job list --pipeline-id ID [global flags]` — List jobs for one pipeline.
 - `glab-axi job view <id> [global flags]` — View one CI/CD job.
 - `glab-axi job trace <id> [global flags]` — View a bounded, redacted tail of one job trace.
-- `glab-axi release list [global flags]` — List project releases.
-- `glab-axi release view [tag] [global flags]` — View a release (latest when tag is omitted).
+- `glab-axi release list [global flags]` — List project releases and bounded download metadata.
+- `glab-axi release view [tag] [global flags]` — View a release and project-bound download metadata (latest when omitted).
 - `glab-axi repo list [--hostname HOST] [--limit N]` — List repositories visible to the official profile.
 - `glab-axi repo view [namespace/project] [global flags]` — View a project/repository.
 - `glab-axi label list [global flags]` — List project labels.

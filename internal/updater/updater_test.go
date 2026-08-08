@@ -152,6 +152,23 @@ func TestApplyRequiresTTYBeforeArtifactDownload(t *testing.T) {
 	}
 }
 
+func TestManagedExecutablePathDetection(t *testing.T) {
+	for _, path := range []string{
+		"/usr/local/bin/glab-axi",
+		"/opt/homebrew/Cellar/glab-axi/0.2.0/bin/glab-axi",
+		"/home/linuxbrew/.linuxbrew/Cellar/glab-axi/0.2.0/bin/glab-axi",
+		"/nix/store/abc-glab-axi/bin/glab-axi",
+		"/home/user/.local/share/mise/installs/glab-axi/0.2.0/bin/glab-axi",
+	} {
+		if !managedExecutablePath(path) {
+			t.Fatalf("managed path was accepted: %s", path)
+		}
+	}
+	if path := filepath.Join(t.TempDir(), "glab-axi"); managedExecutablePath(path) {
+		t.Fatalf("private standalone path was classified as managed: %s", path)
+	}
+}
+
 func signManifest(t *testing.T, manifest Manifest, private ed25519.PrivateKey) []byte {
 	t.Helper()
 	payload, err := CanonicalPayload(manifest)

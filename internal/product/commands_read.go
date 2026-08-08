@@ -13,14 +13,10 @@ func fetchList[T any](ctx context.Context, client delegateClient, request glab.R
 	state := listState{}
 	items := make([]T, 0, limit)
 	fieldTruncated := false
+	// GitLab page offsets depend on a stable per-page value. Changing the page
+	// width between requests can overlap or skip resources.
+	perPage := min(100, limit+1)
 	for page := 1; page <= 10; page++ {
-		remainingWithProbe := limit + 1 - len(items)
-		if remainingWithProbe <= 0 {
-			state.truncated = true
-			state.reason = "display_limit"
-			break
-		}
-		perPage := min(100, remainingWithProbe)
 		request.Page, request.PerPage = page, perPage
 		response, err := client.Do(ctx, request)
 		if err != nil {
@@ -38,13 +34,13 @@ func fetchList[T any](ctx context.Context, client delegateClient, request glab.R
 		}
 		fieldTruncated = fieldTruncated || pageTruncated
 		items = append(items, pageItems...)
-		if len(pageItems) < perPage {
-			state.complete = true
-			break
-		}
 		if len(items) > limit {
 			state.reason = "display_limit"
 			state.truncated = true
+			break
+		}
+		if len(pageItems) < perPage {
+			state.complete = true
 			break
 		}
 		if page == 10 {
@@ -69,19 +65,19 @@ func fetchList[T any](ctx context.Context, client delegateClient, request glab.R
 
 func fetchIssues(ctx context.Context, client delegateClient, target Target, limit int) ([]Issue, listState, error) {
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpIssueList, Host: target.Host, Repo: target.Repo}, limit, func(body []byte) ([]Issue, bool, error) {
-		return normalizeIssues(body, target.Host, false)
+		return normalizeIssues(body, target.Host, target.Repo, false)
 	})
 }
 
 func fetchMRs(ctx context.Context, client delegateClient, target Target, limit int) ([]MergeRequest, listState, error) {
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpMRList, Host: target.Host, Repo: target.Repo}, limit, func(body []byte) ([]MergeRequest, bool, error) {
-		return normalizeMRs(body, target.Host, false)
+		return normalizeMRs(body, target.Host, target.Repo, false)
 	})
 }
 
 func fetchPipelines(ctx context.Context, client delegateClient, target Target, limit int) ([]Pipeline, listState, error) {
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpPipelineList, Host: target.Host, Repo: target.Repo}, limit, func(body []byte) ([]Pipeline, bool, error) {
-		items, err := normalizePipelines(body, target.Host)
+		items, err := normalizePipelines(body, target.Host, target.Repo)
 		return items, false, err
 	})
 }
@@ -92,14 +88,14 @@ func fetchJobs(ctx context.Context, client delegateClient, target Target, parsed
 		return nil, listState{}, uxv1.NewError(uxv1.CodeValidation, "--pipeline-id must be a positive integer")
 	}
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpJobList, Host: target.Host, Repo: target.Repo, PipelineID: pipelineID}, parsed.Limit, func(body []byte) ([]Job, bool, error) {
-		items, err := normalizeJobs(body, target.Host)
+		items, err := normalizeJobs(body, target.Host, target.Repo)
 		return items, false, err
 	})
 }
 
 func fetchReleases(ctx context.Context, client delegateClient, target Target, limit int) ([]Release, listState, error) {
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpReleaseList, Host: target.Host, Repo: target.Repo}, limit, func(body []byte) ([]Release, bool, error) {
-		return normalizeReleases(body, target.Host, false)
+		return normalizeReleases(body, target.Host, target.Repo, false)
 	})
 }
 
@@ -119,7 +115,7 @@ func fetchSearch(ctx context.Context, client delegateClient, target Target, pars
 	scope := parsed.Definition.Path[1]
 	query := parsed.Positionals[0]
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpSearch, Host: target.Host, Repo: target.Repo, Scope: scope, Query: query}, parsed.Limit, func(body []byte) ([]map[string]any, bool, error) {
-		return normalizeSearch(body, scope, target.Host)
+		return normalizeSearch(body, scope, target.Host, target.Repo)
 	})
 }
 
@@ -133,7 +129,7 @@ func executeIssueView(ctx context.Context, client delegateClient, target Target,
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	issue, truncated, err := normalizeIssueObject(response.Body, target.Host)
+	issue, truncated, err := normalizeIssueObject(response.Body, target.Host, target.Repo)
 	meta.Truncated, meta.Complete = truncated, true
 	if truncated {
 		meta.Reason = "field_limit"
@@ -151,7 +147,7 @@ func executeMRView(ctx context.Context, client delegateClient, target Target, pa
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	mr, truncated, err := normalizeMRObject(response.Body, target.Host)
+	mr, truncated, err := normalizeMRObject(response.Body, target.Host, target.Repo)
 	meta.Truncated, meta.Complete = truncated, true
 	if truncated {
 		meta.Reason = "field_limit"
@@ -169,7 +165,7 @@ func executeMRChecks(ctx context.Context, client delegateClient, target Target, 
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	pipeline, jobs, err := normalizeChecks(response.Body, target.Host)
+	pipeline, jobs, err := normalizeChecks(response.Body, target.Host, target.Repo)
 	meta.Count = len(jobs)
 	return commandOutput{data: map[string]any{"mr_iid": iid, "pipeline": pipeline, "jobs": jobs}, meta: meta}, err
 }
@@ -202,7 +198,7 @@ func executePipelineView(ctx context.Context, client delegateClient, target Targ
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	pipeline, err := normalizePipelineObject(response.Body, target.Host)
+	pipeline, err := normalizePipelineObject(response.Body, target.Host, target.Repo)
 	return commandOutput{data: map[string]any{"pipeline": pipeline}, meta: meta}, err
 }
 
@@ -216,7 +212,7 @@ func executeJobView(ctx context.Context, client delegateClient, target Target, p
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	job, err := normalizeJobObject(response.Body, target.Host)
+	job, err := normalizeJobObject(response.Body, target.Host, target.Repo)
 	return commandOutput{data: map[string]any{"job": job}, meta: meta}, err
 }
 
@@ -248,7 +244,7 @@ func executeReleaseView(ctx context.Context, client delegateClient, target Targe
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	release, truncated, err := normalizeReleaseObject(response.Body, target.Host)
+	release, truncated, err := normalizeReleaseObject(response.Body, target.Host, target.Repo)
 	meta.Truncated = truncated
 	if truncated {
 		meta.Reason = "field_limit"

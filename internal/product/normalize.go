@@ -16,6 +16,7 @@ import (
 	"glab-axi/internal/gitlab"
 	"glab-axi/internal/limits"
 	"glab-axi/internal/redact"
+	"glab-axi/internal/safeurl"
 )
 
 type upstreamUser struct {
@@ -89,6 +90,17 @@ type upstreamChecks struct {
 	Jobs []upstreamJob `json:"jobs"`
 }
 
+type upstreamReleaseAssetSource struct {
+	Format string `json:"format"`
+	URL    string `json:"url"`
+}
+
+type upstreamReleaseAssetLink struct {
+	Name           string `json:"name"`
+	DirectAssetURL string `json:"direct_asset_url"`
+	LinkType       string `json:"link_type"`
+}
+
 type upstreamRelease struct {
 	Name        string `json:"name"`
 	TagName     string `json:"tag_name"`
@@ -96,7 +108,12 @@ type upstreamRelease struct {
 	CreatedAt   string `json:"created_at"`
 	ReleasedAt  string `json:"released_at"`
 	Upcoming    bool   `json:"upcoming_release"`
-	Links       struct {
+	Assets      struct {
+		Count   int                          `json:"count"`
+		Sources []upstreamReleaseAssetSource `json:"sources"`
+		Links   []upstreamReleaseAssetLink   `json:"links"`
+	} `json:"assets"`
+	Links struct {
 		Self string `json:"self"`
 	} `json:"_links"`
 }
@@ -183,14 +200,24 @@ type Job struct {
 	FinishedAt    *time.Time `json:"finished_at,omitempty"`
 }
 
+type ReleaseAsset struct {
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Format   string `json:"format,omitempty"`
+	LinkType string `json:"link_type,omitempty"`
+	URL      string `json:"url"`
+}
+
 type Release struct {
-	Name        string `json:"name"`
-	Tag         string `json:"tag"`
-	Description string `json:"description,omitempty"`
-	WebURL      string `json:"web_url,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"`
-	ReleasedAt  string `json:"released_at,omitempty"`
-	Upcoming    bool   `json:"upcoming"`
+	Name        string         `json:"name"`
+	Tag         string         `json:"tag"`
+	Description string         `json:"description,omitempty"`
+	WebURL      string         `json:"web_url,omitempty"`
+	CreatedAt   string         `json:"created_at,omitempty"`
+	ReleasedAt  string         `json:"released_at,omitempty"`
+	Upcoming    bool           `json:"upcoming"`
+	AssetsCount int            `json:"assets_count"`
+	Assets      []ReleaseAsset `json:"assets,omitempty"`
 }
 
 type Repository struct {
@@ -216,7 +243,7 @@ type Label struct {
 	OpenMRsCount      int    `json:"open_merge_requests_count"`
 }
 
-func normalizeIssues(body []byte, host string, includeDescription bool) ([]Issue, bool, error) {
+func normalizeIssues(body []byte, host, repo string, includeDescription bool) ([]Issue, bool, error) {
 	var source []upstreamIssue
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
@@ -224,7 +251,7 @@ func normalizeIssues(body []byte, host string, includeDescription bool) ([]Issue
 	out := make([]Issue, 0, len(source))
 	truncated := false
 	for _, item := range source {
-		normalized, cut, err := normalizeIssue(item, host, includeDescription)
+		normalized, cut, err := normalizeIssue(item, host, repo, includeDescription)
 		if err != nil {
 			return nil, false, err
 		}
@@ -234,15 +261,15 @@ func normalizeIssues(body []byte, host string, includeDescription bool) ([]Issue
 	return out, truncated, nil
 }
 
-func normalizeIssueObject(body []byte, host string) (Issue, bool, error) {
+func normalizeIssueObject(body []byte, host, repo string) (Issue, bool, error) {
 	var source upstreamIssue
 	if err := decodeStrict(body, &source); err != nil {
 		return Issue{}, false, err
 	}
-	return normalizeIssue(source, host, true)
+	return normalizeIssue(source, host, repo, true)
 }
 
-func normalizeIssue(item upstreamIssue, host string, includeDescription bool) (Issue, bool, error) {
+func normalizeIssue(item upstreamIssue, host, repo string, includeDescription bool) (Issue, bool, error) {
 	if item.ID < 1 || item.IID < 1 {
 		return Issue{}, false, malformed("issue identity")
 	}
@@ -250,7 +277,7 @@ func normalizeIssue(item upstreamIssue, host string, includeDescription bool) (I
 	if err != nil {
 		return Issue{}, false, err
 	}
-	web, err := authorityURL(item.WebURL, host, true)
+	web, err := authorityRepoURL(item.WebURL, host, repo, true)
 	if err != nil {
 		return Issue{}, false, err
 	}
@@ -264,7 +291,7 @@ func normalizeIssue(item upstreamIssue, host string, includeDescription bool) (I
 	return out, cut, nil
 }
 
-func normalizeMRs(body []byte, host string, includeDescription bool) ([]MergeRequest, bool, error) {
+func normalizeMRs(body []byte, host, repo string, includeDescription bool) ([]MergeRequest, bool, error) {
 	var source []upstreamMR
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
@@ -272,7 +299,7 @@ func normalizeMRs(body []byte, host string, includeDescription bool) ([]MergeReq
 	out := make([]MergeRequest, 0, len(source))
 	truncated := false
 	for _, item := range source {
-		normalized, cut, err := normalizeMR(item, host, includeDescription)
+		normalized, cut, err := normalizeMR(item, host, repo, includeDescription)
 		if err != nil {
 			return nil, false, err
 		}
@@ -282,15 +309,15 @@ func normalizeMRs(body []byte, host string, includeDescription bool) ([]MergeReq
 	return out, truncated, nil
 }
 
-func normalizeMRObject(body []byte, host string) (MergeRequest, bool, error) {
+func normalizeMRObject(body []byte, host, repo string) (MergeRequest, bool, error) {
 	var source upstreamMR
 	if err := decodeStrict(body, &source); err != nil {
 		return MergeRequest{}, false, err
 	}
-	return normalizeMR(source, host, true)
+	return normalizeMR(source, host, repo, true)
 }
 
-func normalizeMR(item upstreamMR, host string, includeDescription bool) (MergeRequest, bool, error) {
+func normalizeMR(item upstreamMR, host, repo string, includeDescription bool) (MergeRequest, bool, error) {
 	if item.ID < 1 || item.IID < 1 {
 		return MergeRequest{}, false, malformed("merge request identity")
 	}
@@ -298,7 +325,7 @@ func normalizeMR(item upstreamMR, host string, includeDescription bool) (MergeRe
 	if err != nil {
 		return MergeRequest{}, false, err
 	}
-	web, err := authorityURL(item.WebURL, host, true)
+	web, err := authorityRepoURL(item.WebURL, host, repo, true)
 	if err != nil {
 		return MergeRequest{}, false, err
 	}
@@ -318,7 +345,7 @@ func normalizeMR(item upstreamMR, host string, includeDescription bool) (MergeRe
 		out.RawMergeStatus = boundedEnum(mergeRaw)
 	}
 	if item.HeadPipeline != nil {
-		pipeline, err := normalizePipeline(*item.HeadPipeline, host)
+		pipeline, err := normalizePipeline(*item.HeadPipeline, host, repo)
 		if err != nil {
 			return MergeRequest{}, false, err
 		}
@@ -333,14 +360,14 @@ func normalizeMR(item upstreamMR, host string, includeDescription bool) (MergeRe
 	return out, cut, nil
 }
 
-func normalizePipelines(body []byte, host string) ([]Pipeline, error) {
+func normalizePipelines(body []byte, host, repo string) ([]Pipeline, error) {
 	var source []upstreamPipeline
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, err
 	}
 	out := make([]Pipeline, 0, len(source))
 	for _, item := range source {
-		normalized, err := normalizePipeline(item, host)
+		normalized, err := normalizePipeline(item, host, repo)
 		if err != nil {
 			return nil, err
 		}
@@ -349,19 +376,19 @@ func normalizePipelines(body []byte, host string) ([]Pipeline, error) {
 	return out, nil
 }
 
-func normalizePipelineObject(body []byte, host string) (Pipeline, error) {
+func normalizePipelineObject(body []byte, host, repo string) (Pipeline, error) {
 	var source upstreamPipeline
 	if err := decodeStrict(body, &source); err != nil {
 		return Pipeline{}, err
 	}
-	return normalizePipeline(source, host)
+	return normalizePipeline(source, host, repo)
 }
 
-func normalizePipeline(item upstreamPipeline, host string) (Pipeline, error) {
+func normalizePipeline(item upstreamPipeline, host, repo string) (Pipeline, error) {
 	if item.ID < 1 {
 		return Pipeline{}, malformed("pipeline identity")
 	}
-	web, err := authorityURL(item.WebURL, host, false)
+	web, err := authorityRepoURL(item.WebURL, host, repo, false)
 	if err != nil {
 		return Pipeline{}, err
 	}
@@ -373,7 +400,7 @@ func normalizePipeline(item upstreamPipeline, host string) (Pipeline, error) {
 	return out, nil
 }
 
-func normalizeJobs(body []byte, host string) ([]Job, error) {
+func normalizeJobs(body []byte, host, repo string) ([]Job, error) {
 	var source []upstreamJob
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, err
@@ -381,22 +408,22 @@ func normalizeJobs(body []byte, host string) ([]Job, error) {
 	if len(source) > limits.MaxJobs {
 		return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned too many jobs")
 	}
-	return normalizeJobValues(source, host)
+	return normalizeJobValues(source, host, repo)
 }
 
-func normalizeJobObject(body []byte, host string) (Job, error) {
+func normalizeJobObject(body []byte, host, repo string) (Job, error) {
 	var source upstreamJob
 	if err := decodeStrict(body, &source); err != nil {
 		return Job{}, err
 	}
-	jobs, err := normalizeJobValues([]upstreamJob{source}, host)
+	jobs, err := normalizeJobValues([]upstreamJob{source}, host, repo)
 	if err != nil {
 		return Job{}, err
 	}
 	return jobs[0], nil
 }
 
-func normalizeJobValues(source []upstreamJob, host string) ([]Job, error) {
+func normalizeJobValues(source []upstreamJob, host, repo string) ([]Job, error) {
 	native := make([]gitlab.Job, 0, len(source))
 	for _, item := range source {
 		native = append(native, gitlab.Job{ID: item.ID, Name: item.Name, Stage: item.Stage, Status: item.Status, AllowFailure: item.AllowFailure, FinishedAt: item.FinishedAt})
@@ -407,7 +434,7 @@ func normalizeJobValues(source []upstreamJob, host string) ([]Job, error) {
 	}
 	out := make([]Job, 0, len(source))
 	for index, item := range source {
-		web, err := authorityURL(item.WebURL, host, false)
+		web, err := authorityRepoURL(item.WebURL, host, repo, false)
 		if err != nil {
 			return nil, err
 		}
@@ -416,23 +443,23 @@ func normalizeJobValues(source []upstreamJob, host string) ([]Job, error) {
 	return out, nil
 }
 
-func normalizeChecks(body []byte, host string) (Pipeline, []Job, error) {
+func normalizeChecks(body []byte, host, repo string) (Pipeline, []Job, error) {
 	var source upstreamChecks
 	if err := decodeStrict(body, &source); err != nil {
 		return Pipeline{}, nil, err
 	}
-	pipeline, err := normalizePipeline(source.upstreamPipeline, host)
+	pipeline, err := normalizePipeline(source.upstreamPipeline, host, repo)
 	if err != nil {
 		return Pipeline{}, nil, err
 	}
 	if len(source.Jobs) > limits.MaxJobs {
 		return Pipeline{}, nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned too many jobs")
 	}
-	jobs, err := normalizeJobValues(source.Jobs, host)
+	jobs, err := normalizeJobValues(source.Jobs, host, repo)
 	return pipeline, jobs, err
 }
 
-func normalizeReleases(body []byte, host string, includeDescription bool) ([]Release, bool, error) {
+func normalizeReleases(body []byte, host, repo string, includeDescription bool) ([]Release, bool, error) {
 	var source []upstreamRelease
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
@@ -440,7 +467,7 @@ func normalizeReleases(body []byte, host string, includeDescription bool) ([]Rel
 	out := make([]Release, 0, len(source))
 	truncated := false
 	for _, item := range source {
-		normalized, cut, err := normalizeRelease(item, host, includeDescription)
+		normalized, cut, err := normalizeRelease(item, host, repo, includeDescription)
 		if err != nil {
 			return nil, false, err
 		}
@@ -450,15 +477,15 @@ func normalizeReleases(body []byte, host string, includeDescription bool) ([]Rel
 	return out, truncated, nil
 }
 
-func normalizeReleaseObject(body []byte, host string) (Release, bool, error) {
+func normalizeReleaseObject(body []byte, host, repo string) (Release, bool, error) {
 	var source upstreamRelease
 	if err := decodeStrict(body, &source); err != nil {
 		return Release{}, false, err
 	}
-	return normalizeRelease(source, host, true)
+	return normalizeRelease(source, host, repo, true)
 }
 
-func normalizeRelease(item upstreamRelease, host string, includeDescription bool) (Release, bool, error) {
+func normalizeRelease(item upstreamRelease, host, repo string, includeDescription bool) (Release, bool, error) {
 	name, cut, err := boundedText(item.Name, "release name", 4096, true)
 	if err != nil {
 		return Release{}, false, err
@@ -467,18 +494,71 @@ func normalizeRelease(item upstreamRelease, host string, includeDescription bool
 	if err != nil {
 		return Release{}, false, err
 	}
-	web, err := authorityURL(item.Links.Self, host, false)
+	web, err := authorityRepoURL(item.Links.Self, host, repo, false)
 	if err != nil {
 		return Release{}, false, err
 	}
-	out := Release{Name: name, Tag: tag, WebURL: web, CreatedAt: boundedIdentity(item.CreatedAt), ReleasedAt: boundedIdentity(item.ReleasedAt), Upcoming: item.Upcoming}
+	assets, assetsCut, err := normalizeReleaseAssets(item, host, repo)
+	if err != nil {
+		return Release{}, false, err
+	}
+	out := Release{Name: name, Tag: tag, WebURL: web, CreatedAt: boundedIdentity(item.CreatedAt), ReleasedAt: boundedIdentity(item.ReleasedAt), Upcoming: item.Upcoming, AssetsCount: item.Assets.Count, Assets: assets}
+	if out.AssetsCount < len(assets) {
+		out.AssetsCount = len(assets)
+	}
+	if out.AssetsCount < 0 || out.AssetsCount > 1000 {
+		return Release{}, false, malformed("release asset count")
+	}
 	if includeDescription {
-		out.Description, cut, err = boundedText(item.Description, "release description", limits.MaxDescriptionBytes, false)
+		var descriptionCut bool
+		out.Description, descriptionCut, err = boundedText(item.Description, "release description", limits.MaxDescriptionBytes, false)
+		cut = cut || descriptionCut
 		if err != nil {
 			return Release{}, false, err
 		}
 	}
-	return out, cut, nil
+	return out, cut || assetsCut, nil
+}
+
+func normalizeReleaseAssets(item upstreamRelease, host, repo string) ([]ReleaseAsset, bool, error) {
+	const maxAssets = 100
+	assets := make([]ReleaseAsset, 0, min(maxAssets, len(item.Assets.Sources)+len(item.Assets.Links)))
+	truncated := false
+	appendAsset := func(asset ReleaseAsset) {
+		if len(assets) == maxAssets {
+			truncated = true
+			return
+		}
+		assets = append(assets, asset)
+	}
+	for _, source := range item.Assets.Sources {
+		format := boundedEnum(source.Format)
+		if format == "unknown" {
+			return nil, false, malformed("release source format")
+		}
+		assetURL, err := authorityRepoURL(source.URL, host, repo, true)
+		if err != nil {
+			return nil, false, err
+		}
+		appendAsset(ReleaseAsset{Name: "source_" + format, Kind: "source", Format: format, URL: assetURL})
+	}
+	for _, link := range item.Assets.Links {
+		name, cut, err := boundedText(link.Name, "release asset name", 4096, true)
+		if err != nil {
+			return nil, false, err
+		}
+		truncated = truncated || cut
+		if link.DirectAssetURL == "" {
+			truncated = true
+			continue
+		}
+		assetURL, err := authorityRepoURL(link.DirectAssetURL, host, repo, true)
+		if err != nil {
+			return nil, false, err
+		}
+		appendAsset(ReleaseAsset{Name: name, Kind: "link", LinkType: boundedEnum(link.LinkType), URL: assetURL})
+	}
+	return assets, truncated, nil
 }
 
 func normalizeRepos(body []byte, host string) ([]Repository, bool, error) {
@@ -508,7 +588,7 @@ func normalizeRepoObject(body []byte, host string) (Repository, bool, error) {
 }
 
 func normalizeRepo(item upstreamRepo, host string) (Repository, bool, error) {
-	if item.ID < 1 || item.PathWithNamespace == "" {
+	if item.ID < 1 || safeurl.ValidateProject(item.PathWithNamespace) != nil {
 		return Repository{}, false, malformed("repository identity")
 	}
 	name, cut, err := boundedText(item.Name, "repository name", 4096, true)
@@ -519,7 +599,7 @@ func normalizeRepo(item upstreamRepo, host string) (Repository, bool, error) {
 	if err != nil {
 		return Repository{}, false, err
 	}
-	web, err := authorityURL(item.WebURL, host, true)
+	web, err := authorityRepoURL(item.WebURL, host, item.PathWithNamespace, true)
 	if err != nil {
 		return Repository{}, false, err
 	}
@@ -551,7 +631,7 @@ func normalizeLabels(body []byte) ([]Label, bool, error) {
 	return out, truncated, nil
 }
 
-func normalizeSearch(body []byte, scope, host string) ([]map[string]any, bool, error) {
+func normalizeSearch(body []byte, scope, host, repo string) ([]map[string]any, bool, error) {
 	var source []map[string]any
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
@@ -585,7 +665,17 @@ func normalizeSearch(body []byte, scope, host string) ([]map[string]any, bool, e
 		}
 		for _, field := range []string{"web_url", "url"} {
 			if value, ok := item[field].(string); ok && value != "" {
-				web, err := authorityURL(value, host, true)
+				var web string
+				var err error
+				if scope == "repos" {
+					project, ok := normalized["path_with_namespace"].(string)
+					if !ok || safeurl.ValidateProject(project) != nil {
+						return nil, false, malformed("search repository identity")
+					}
+					web, err = authorityRepoURL(value, host, project, true)
+				} else {
+					web, err = authorityRepoURL(value, host, repo, true)
+				}
 				if err != nil {
 					return nil, false, err
 				}
@@ -622,10 +712,27 @@ func authorityURL(raw, host string, required bool) (string, error) {
 		return "", nil
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || !strings.EqualFold(parsed.Host, host) {
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(parsed.EscapedPath(), "\\") || !strings.EqualFold(parsed.Host, host) {
 		return "", uxv1.NewError(uxv1.CodeSafety, "official glab returned a URL outside the selected GitLab authority")
 	}
 	return parsed.String(), nil
+}
+
+func authorityRepoURL(raw, host, repo string, required bool) (string, error) {
+	value, err := authorityURL(raw, host, required)
+	if err != nil || value == "" {
+		return value, err
+	}
+	parsed, _ := url.Parse(value)
+	path := strings.TrimSuffix(parsed.EscapedPath(), "/")
+	if marker := strings.Index(path, "/-/"); marker >= 0 {
+		path = path[:marker]
+	}
+	escapedRepo := strings.TrimPrefix((&url.URL{Path: repo}).EscapedPath(), "/")
+	if path != "/"+escapedRepo && !strings.HasSuffix(path, "/"+escapedRepo) {
+		return "", uxv1.NewError(uxv1.CodeSafety, "official glab returned a URL for a different repository")
+	}
+	return value, nil
 }
 
 func boundedText(value, label string, maxBytes int, required bool) (string, bool, error) {

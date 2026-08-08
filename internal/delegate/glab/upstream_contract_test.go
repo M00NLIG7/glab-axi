@@ -43,8 +43,8 @@ func TestPinnedUpstreamPublicContract(t *testing.T) {
 		}
 		return stdout.String() + stderr.String()
 	}
-	if got := strings.TrimSpace(run("version")); !strings.HasPrefix(got, "glab "+SupportedVersion+" (") {
-		t.Fatalf("version=%q", got)
+	if got, want := strings.TrimSpace(run("version")), "glab "+SupportedVersion+" ("+SupportedBuild+")"; got != want {
+		t.Fatalf("version=%q want=%q", got, want)
 	}
 	checks := []struct {
 		args     []string

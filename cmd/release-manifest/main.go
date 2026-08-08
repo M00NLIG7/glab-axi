@@ -17,12 +17,13 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fail("usage: release-manifest public-key|sign")
+		fail("usage: release-manifest public-key|sign|sign-file")
 	}
 	private, err := readPrivateKey(os.Stdin)
 	if err != nil {
 		fail("invalid signing key")
 	}
+	defer zero(private)
 	switch os.Args[1] {
 	case "public-key":
 		if len(os.Args) != 2 {
@@ -47,6 +48,10 @@ func main() {
 		if err := decoder.Decode(&manifest); err != nil || manifest.Signature != "" {
 			fail("unsigned manifest is malformed")
 		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			fail("unsigned manifest contains trailing data")
+		}
 		payload, err := updater.CanonicalPayload(manifest)
 		if err != nil {
 			fail("cannot canonicalize manifest")
@@ -60,6 +65,19 @@ func main() {
 		if _, err := os.Stdout.Write(encoded); err != nil {
 			fail("cannot write signed manifest")
 		}
+	case "sign-file":
+		flags := flag.NewFlagSet("sign-file", flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		input := flags.String("input", "", "file to sign")
+		if err := flags.Parse(os.Args[2:]); err != nil || flags.NArg() != 0 || *input == "" {
+			fail("sign-file requires --input FILE")
+		}
+		data, err := os.ReadFile(*input)
+		if err != nil || len(data) > 1<<20 {
+			fail("cannot read bounded signing input")
+		}
+		signature := ed25519.Sign(private, data)
+		fmt.Println(base64.StdEncoding.EncodeToString(signature))
 	default:
 		fail("unknown release-manifest command")
 	}
@@ -71,19 +89,24 @@ func readPrivateKey(reader io.Reader) (ed25519.PrivateKey, error) {
 		return nil, err
 	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
-	for index := range data {
-		data[index] = 0
-	}
+	zero(data)
 	if err != nil {
 		return nil, err
 	}
+	defer zero(decoded)
 	switch len(decoded) {
 	case ed25519.SeedSize:
 		return ed25519.NewKeyFromSeed(decoded), nil
 	case ed25519.PrivateKeySize:
-		return ed25519.PrivateKey(decoded), nil
+		return append(ed25519.PrivateKey(nil), decoded...), nil
 	default:
 		return nil, fmt.Errorf("unexpected key size")
+	}
+}
+
+func zero(value []byte) {
+	for index := range value {
+		value[index] = 0
 	}
 }
 

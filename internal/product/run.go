@@ -19,6 +19,8 @@ import (
 	"glab-axi/internal/securestore"
 	"glab-axi/internal/setuphooks"
 	"glab-axi/internal/updater"
+
+	"golang.org/x/term"
 )
 
 type delegateClient interface {
@@ -41,13 +43,12 @@ type Dependencies struct {
 func Defaults(runtimeDeps runtimepkg.Dependencies) Dependencies {
 	deps := Dependencies{Runtime: runtimeDeps, Env: os.Environ()}
 	deps.IsHumanTerminal = allStandardStreamsAreTerminals
-	home, homeErr := os.UserHomeDir()
-	command := portableInstalledCommand()
 	deps.SetupHooks = func(context.Context) (any, error) {
-		if homeErr != nil {
-			return nil, uxv1.Wrap(uxv1.CodeUpstream, "cannot locate home directory for agent setup", homeErr)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, uxv1.Wrap(uxv1.CodeUpstream, "cannot locate home directory for agent setup", err)
 		}
-		return setuphooks.Install(home, command, SkillMarkdown())
+		return setuphooks.Install(home, portableInstalledCommand(), SkillMarkdown())
 	}
 	deps.Update = func(ctx context.Context, checkOnly bool) (any, uxv1.Meta, error) {
 		result, err := updater.Run(ctx, checkOnly, updater.Config{
@@ -86,9 +87,12 @@ func portableInstalledCommand() string {
 }
 
 func allStandardStreamsAreTerminals() bool {
-	for _, file := range []*os.File{os.Stdin, os.Stdout, os.Stderr} {
-		info, err := file.Stat()
-		if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+	return streamsAreTerminals(os.Stdin, os.Stdout, os.Stderr)
+}
+
+func streamsAreTerminals(files ...*os.File) bool {
+	for _, file := range files {
+		if file == nil || !term.IsTerminal(int(file.Fd())) {
 			return false
 		}
 	}

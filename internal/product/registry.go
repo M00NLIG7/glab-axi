@@ -54,8 +54,8 @@ var definitions = []Definition{
 	{Path: []string{"job", "list"}, Summary: "List jobs for one pipeline.", Usage: "glab-axi job list --pipeline-id ID [global flags]", RepoMode: RepoRequired, Flags: []FlagDefinition{{Name: "--pipeline-id", Value: "ID", Description: "Pipeline ID."}}, Schema: "job-list", Backend: "official-glab"},
 	{Path: []string{"job", "view"}, Summary: "View one CI/CD job.", Usage: "glab-axi job view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-view", Backend: "official-glab"},
 	{Path: []string{"job", "trace"}, Summary: "View a bounded, redacted tail of one job trace.", Usage: "glab-axi job trace <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-trace", Backend: "official-glab"},
-	{Path: []string{"release", "list"}, Summary: "List project releases.", Usage: "glab-axi release list [global flags]", RepoMode: RepoRequired, Schema: "release-list", Backend: "official-glab"},
-	{Path: []string{"release", "view"}, Summary: "View a release (latest when tag is omitted).", Usage: "glab-axi release view [tag] [global flags]", RepoMode: RepoRequired, MaxPositions: 1, Schema: "release-view", Backend: "official-glab"},
+	{Path: []string{"release", "list"}, Summary: "List project releases and bounded download metadata.", Usage: "glab-axi release list [global flags]", RepoMode: RepoRequired, Schema: "release-list", Backend: "official-glab"},
+	{Path: []string{"release", "view"}, Summary: "View a release and project-bound download metadata (latest when omitted).", Usage: "glab-axi release view [tag] [global flags]", RepoMode: RepoRequired, MaxPositions: 1, Schema: "release-view", Backend: "official-glab"},
 	{Path: []string{"repo", "list"}, Summary: "List repositories visible to the official profile.", Usage: "glab-axi repo list [--hostname HOST] [--limit N]", RepoMode: RepoNone, Schema: "repo-list", Backend: "official-glab"},
 	{Path: []string{"repo", "view"}, Summary: "View a project/repository.", Usage: "glab-axi repo view [namespace/project] [global flags]", RepoMode: RepoOptional, MaxPositions: 1, Schema: "repo-view", Backend: "official-glab"},
 	{Path: []string{"label", "list"}, Summary: "List project labels.", Usage: "glab-axi label list [global flags]", RepoMode: RepoRequired, Schema: "label-list", Backend: "official-glab"},
@@ -120,12 +120,17 @@ func TopHelp() string {
 	out.WriteString("  (none)       bounded current-project dashboard\n")
 	for _, name := range names {
 		leaves := make([]string, 0, len(groups[name]))
+		topSummary := ""
 		for _, definition := range groups[name] {
 			if len(definition.Path) == 1 {
-				leaves = append(leaves, definition.Path[0])
+				topSummary = definition.Summary
 			} else {
 				leaves = append(leaves, definition.Path[1])
 			}
+		}
+		if topSummary != "" {
+			out.WriteString(fmt.Sprintf("  %-12s %s\n", name, topSummary))
+			continue
 		}
 		sort.Strings(leaves)
 		out.WriteString(fmt.Sprintf("  %-12s %s\n", name, strings.Join(leaves, ", ")))

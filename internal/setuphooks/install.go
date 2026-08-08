@@ -90,18 +90,42 @@ func updateHookJSON(current []byte, command string) ([]byte, error) {
 			return nil, uxv1.NewError(uxv1.CodeValidation, "agent hook config contains trailing JSON")
 		}
 	}
-	hooks, _ := root["hooks"].(map[string]any)
-	if hooks == nil {
-		hooks = map[string]any{}
+	if root == nil {
+		return nil, uxv1.NewError(uxv1.CodeValidation, "agent hook config must contain a JSON object")
+	}
+	hooks := map[string]any{}
+	if rawHooks, exists := root["hooks"]; exists {
+		var ok bool
+		hooks, ok = rawHooks.(map[string]any)
+		if !ok {
+			return nil, uxv1.NewError(uxv1.CodeValidation, "agent hook config hooks field must be an object")
+		}
+	} else {
 		root["hooks"] = hooks
 	}
-	groups, _ := hooks["SessionStart"].([]any)
+	groups := []any{}
+	if rawGroups, exists := hooks["SessionStart"]; exists {
+		var ok bool
+		groups, ok = rawGroups.([]any)
+		if !ok {
+			return nil, uxv1.NewError(uxv1.CodeValidation, "agent SessionStart hooks must be an array")
+		}
+	}
 	found := false
 	for _, rawGroup := range groups {
-		group, _ := rawGroup.(map[string]any)
-		entries, _ := group["hooks"].([]any)
+		group, ok := rawGroup.(map[string]any)
+		if !ok {
+			return nil, uxv1.NewError(uxv1.CodeValidation, "agent SessionStart hook group must be an object")
+		}
+		entries, ok := group["hooks"].([]any)
+		if !ok {
+			return nil, uxv1.NewError(uxv1.CodeValidation, "agent SessionStart hook entries must be an array")
+		}
 		for _, rawEntry := range entries {
-			entry, _ := rawEntry.(map[string]any)
+			entry, ok := rawEntry.(map[string]any)
+			if !ok {
+				return nil, uxv1.NewError(uxv1.CodeValidation, "agent SessionStart hook entry must be an object")
+			}
 			if entry["command"] == command {
 				entry["type"] = "command"
 				entry["timeout"] = json.Number("10")
@@ -148,12 +172,19 @@ func updateCodexConfig(current []byte) ([]byte, error) {
 			}
 			continue
 		}
-		if inFeatures && (strings.HasPrefix(trimmed, "hooks =") || strings.HasPrefix(trimmed, "hooks=")) {
-			if strings.Contains(trimmed, "true") {
-				return current, nil
+		if inFeatures {
+			compact := strings.ReplaceAll(trimmed, " ", "")
+			if strings.HasPrefix(compact, "hooks=") {
+				switch compact {
+				case "hooks=true":
+					return current, nil
+				case "hooks=false":
+					lines[index] = "hooks = true"
+					return []byte(strings.Join(lines, newline)), nil
+				default:
+					return nil, uxv1.NewError(uxv1.CodeValidation, "Codex features.hooks must be a boolean")
+				}
 			}
-			lines[index] = "hooks = true"
-			return []byte(strings.Join(lines, newline)), nil
 		}
 	}
 	if featuresIndex >= 0 {

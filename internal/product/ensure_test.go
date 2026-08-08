@@ -42,6 +42,60 @@ func TestMREnsureReplayAndDuplicateDenialMakeNoWrite(t *testing.T) {
 	}
 }
 
+func TestMREnsureCreatesOnceAfterEmptyRecheck(t *testing.T) {
+	desired := ensureMR(9, "wanted", "body")
+	empty, _ := json.Marshal([]upstreamMR{})
+	created, _ := json.Marshal(desired)
+	project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+		glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+		glab.OpEnsureList: {
+			{Body: empty, UpstreamVersion: glab.SupportedVersion},
+			{Body: empty, UpstreamVersion: glab.SupportedVersion},
+		},
+		glab.OpEnsureCreate: {{Body: created, UpstreamVersion: glab.SupportedVersion}},
+	}}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), ensureArgs(t, "wanted", "body"), deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"action":"created"`) {
+		t.Fatalf("output=%s", stdout.String())
+	}
+	writes := 0
+	for _, request := range delegate.requests {
+		if request.Operation == glab.OpEnsureCreate {
+			writes++
+		}
+	}
+	if writes != 1 {
+		t.Fatalf("writes=%d requests=%#v", writes, delegate.requests)
+	}
+}
+
+func TestMREnsureRecheckObservesConcurrentCreateWithoutPost(t *testing.T) {
+	desired := ensureMR(10, "wanted", "body")
+	empty, _ := json.Marshal([]upstreamMR{})
+	found, _ := json.Marshal([]upstreamMR{desired})
+	project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+		glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+		glab.OpEnsureList: {
+			{Body: empty, UpstreamVersion: glab.SupportedVersion},
+			{Body: found, UpstreamVersion: glab.SupportedVersion},
+		},
+	}}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), ensureArgs(t, "wanted", "body"), deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	for _, request := range delegate.requests {
+		if request.Operation == glab.OpEnsureCreate || request.Operation == glab.OpEnsureUpdate {
+			t.Fatalf("recheck performed a write: %#v", request)
+		}
+	}
+}
+
 func TestMREnsureReconcilesAmbiguousCreateWithoutSecondMutation(t *testing.T) {
 	desired := ensureMR(9, "wanted", "body")
 	empty, _ := json.Marshal([]upstreamMR{})
@@ -75,6 +129,72 @@ func TestMREnsureReconcilesAmbiguousCreateWithoutSecondMutation(t *testing.T) {
 		t.Fatalf("writes=%d output=%s requests=%#v", writes, stdout.String(), delegate.requests)
 	}
 	assertPrivateEnsurePayload(t, delegate, map[string]any{"source_branch": "feature", "target_branch": "main", "title": "wanted", "description": "body"})
+}
+
+func TestMREnsureReconcilesMalformedSuccessfulMutationResponse(t *testing.T) {
+	desired := ensureMR(10, "wanted", "body")
+	empty, _ := json.Marshal([]upstreamMR{})
+	reconciled, _ := json.Marshal([]upstreamMR{desired})
+	project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+		glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+		glab.OpEnsureList: {
+			{Body: empty, UpstreamVersion: glab.SupportedVersion},
+			{Body: empty, UpstreamVersion: glab.SupportedVersion},
+			{Body: reconciled, UpstreamVersion: glab.SupportedVersion},
+		},
+		glab.OpEnsureCreate: {{Body: []byte(`{"unexpected":true}`), UpstreamVersion: glab.SupportedVersion}},
+	}}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), ensureArgs(t, "wanted", "body"), deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"action":"reconciled_create"`) {
+		t.Fatalf("output=%s", stdout.String())
+	}
+	writes := 0
+	for _, request := range delegate.requests {
+		if request.Operation == glab.OpEnsureCreate {
+			writes++
+		}
+	}
+	if writes != 1 {
+		t.Fatalf("writes=%d requests=%#v", writes, delegate.requests)
+	}
+}
+
+func TestMREnsureReconcilesAmbiguousUpdateWithoutSecondMutation(t *testing.T) {
+	existing := ensureMR(11, "old", "old body")
+	desired := ensureMR(11, "new", "new body")
+	initial, _ := json.Marshal([]upstreamMR{existing})
+	reconciled, _ := json.Marshal([]upstreamMR{desired})
+	project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+	delegate := &fakeDelegate{
+		responses: map[glab.Operation][]glab.Response{
+			glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+			glab.OpEnsureList: {
+				{Body: initial, UpstreamVersion: glab.SupportedVersion},
+				{Body: reconciled, UpstreamVersion: glab.SupportedVersion},
+			},
+		},
+		errors: map[glab.Operation][]error{glab.OpEnsureUpdate: {uxv1.NewError(uxv1.CodeUpstream, "synthetic ambiguous transport")}},
+	}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), ensureArgs(t, "new", "new body"), deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	writes := 0
+	for _, request := range delegate.requests {
+		if request.Operation == glab.OpEnsureUpdate {
+			writes++
+		}
+		if request.Operation == glab.OpEnsureCreate {
+			t.Fatal("update reconciliation sent a create")
+		}
+	}
+	if writes != 1 || !strings.Contains(stdout.String(), `"action":"reconciled_update"`) {
+		t.Fatalf("writes=%d output=%s requests=%#v", writes, stdout.String(), delegate.requests)
+	}
 }
 
 func TestMREnsureUpdateUsesOnePrivateTypedPayload(t *testing.T) {

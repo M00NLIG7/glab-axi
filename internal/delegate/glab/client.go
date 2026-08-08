@@ -159,9 +159,9 @@ func (c *Client) ensureVersion(parent context.Context) (string, error) {
 	if match == nil {
 		return "", uxv1.NewError(uxv1.CodeDependencyUnsupported, "official glab returned an unsupported version document")
 	}
-	version := string(match[1])
-	if version != SupportedVersion {
-		return "", uxv1.NewError(uxv1.CodeDependencyUnsupported, fmt.Sprintf("official glab %s is unsupported; require %s", version, SupportedVersion))
+	version, build := string(match[1]), string(match[2])
+	if version != SupportedVersion || build != SupportedBuild {
+		return "", uxv1.NewError(uxv1.CodeDependencyUnsupported, fmt.Sprintf("official glab build is unsupported; require %s (%s)", SupportedVersion, SupportedBuild))
 	}
 	c.path, c.version = path, version
 	return version, nil
@@ -212,60 +212,29 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 	cmd.Env = sanitizedEnv(c.config.Env, host, login)
 	cmd.Stdin = nil
 	cmd.WaitDelay = 2 * time.Second
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, uxv1.Wrap(uxv1.CodeInternal, "cannot capture official glab output", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, uxv1.Wrap(uxv1.CodeInternal, "cannot capture official glab error output", err)
-	}
+	stdout := &boundedCapture{max: maxStdout, cancel: cancel}
+	stderr := &boundedCapture{max: limits.MaxStderrBytes, cancel: cancel}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
 	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return nil, contextFailure(ctx, "official glab operation")
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, uxv1.NewError(uxv1.CodeDependencyMissing, "official glab executable disappeared before execution")
 		}
 		return nil, uxv1.Wrap(uxv1.CodeUpstream, "cannot start official glab", err)
 	}
-
-	type capture struct {
-		data     []byte
-		overflow bool
-		err      error
-	}
-	outCh := make(chan capture, 1)
-	errCh := make(chan capture, 1)
-	go func() {
-		data, overflow, readErr := readBounded(stdout, maxStdout)
-		if overflow {
-			cancel()
-		}
-		outCh <- capture{data: data, overflow: overflow, err: readErr}
-	}()
-	go func() {
-		data, overflow, readErr := readBounded(stderr, limits.MaxStderrBytes)
-		if overflow {
-			cancel()
-		}
-		errCh <- capture{data: data, overflow: overflow, err: readErr}
-	}()
 	waitErr := cmd.Wait()
-	out, errOut := <-outCh, <-errCh
-	if out.overflow || errOut.overflow {
+	if stdout.overflow || stderr.overflow {
 		return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab output exceeded the safety limit")
 	}
-	if out.err != nil || errOut.err != nil {
-		return nil, uxv1.NewError(uxv1.CodeUpstream, "cannot read official glab output")
-	}
 	if ctx.Err() != nil {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, uxv1.Wrap(uxv1.CodeCanceled, "official glab operation was canceled", ctx.Err())
-		}
-		return nil, uxv1.Wrap(uxv1.CodeUpstream, "official glab operation timed out", ctx.Err())
+		return nil, contextFailure(ctx, "official glab operation")
 	}
 	if waitErr != nil {
-		return nil, classifyChildFailure(errOut.data, waitErr)
+		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr)
 	}
-	return out.data, nil
+	return stdout.buffer.Bytes(), nil
 }
 
 func (c *Client) runLogin(ctx context.Context, args []string, host string) error {
@@ -278,35 +247,26 @@ func (c *Client) runLogin(ctx context.Context, args []string, host string) error
 	cmd.Dir = c.config.Dir
 	cmd.Env = sanitizedEnv(c.config.Env, host, true)
 	cmd.Stdin = c.config.Stdin
-	cmd.Stdout = c.config.Stdout
+	// Keep the product stdout contract parseable even during a human flow:
+	// official interactive text is relayed to the terminal on stderr, while the
+	// caller emits the final ux-v1 envelope on stdout.
+	loginOutput := &lockedWriter{destination: c.config.Stderr}
+	cmd.Stdout = loginOutput
 	cmd.WaitDelay = 2 * time.Second
-	pipe, err := cmd.StderrPipe()
-	if err != nil {
-		return uxv1.Wrap(uxv1.CodeInternal, "cannot monitor official glab login", err)
-	}
+	var fallback atomic.Bool
+	cmd.Stderr = &fallbackDetector{destination: loginOutput, cancel: cancel, found: &fallback}
 	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return contextFailure(ctx, "official glab login")
+		}
 		return uxv1.Wrap(uxv1.CodeUpstream, "cannot start official glab login", err)
 	}
-	var fallback atomic.Bool
-	done := make(chan error, 1)
-	go func() {
-		detector := &fallbackDetector{destination: c.config.Stderr, cancel: cancel, found: &fallback}
-		_, copyErr := io.Copy(detector, pipe)
-		done <- copyErr
-	}()
 	waitErr := cmd.Wait()
-	copyErr := <-done
 	if fallback.Load() {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab reported insecure credential storage; login was aborted")
 	}
-	if copyErr != nil {
-		return uxv1.Wrap(uxv1.CodeUpstream, "cannot monitor official glab login", copyErr)
-	}
 	if ctx.Err() != nil {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return uxv1.Wrap(uxv1.CodeCanceled, "official glab login was canceled", ctx.Err())
-		}
-		return uxv1.Wrap(uxv1.CodeUpstream, "official glab login timed out", ctx.Err())
+		return contextFailure(ctx, "official glab login")
 	}
 	if waitErr != nil {
 		return uxv1.Wrap(uxv1.CodeAuthentication, "official glab login did not complete", waitErr)
@@ -314,32 +274,34 @@ func (c *Client) runLogin(ctx context.Context, args []string, host string) error
 	return nil
 }
 
-func readBounded(reader io.Reader, max int) ([]byte, bool, error) {
-	var buffer bytes.Buffer
-	chunk := make([]byte, 32<<10)
-	overflow := false
-	for {
-		n, err := reader.Read(chunk)
-		if n > 0 {
-			remaining := max - buffer.Len()
-			if remaining > 0 {
-				write := n
-				if write > remaining {
-					write = remaining
-				}
-				_, _ = buffer.Write(chunk[:write])
-			}
-			if n > remaining {
-				overflow = true
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return buffer.Bytes(), overflow, nil
-			}
-			return buffer.Bytes(), overflow, err
-		}
+func contextFailure(ctx context.Context, operation string) error {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return uxv1.Wrap(uxv1.CodeCanceled, operation+" was canceled", ctx.Err())
 	}
+	return uxv1.Wrap(uxv1.CodeUpstream, operation+" timed out", ctx.Err())
+}
+
+type boundedCapture struct {
+	buffer   bytes.Buffer
+	max      int
+	overflow bool
+	cancel   context.CancelFunc
+}
+
+func (c *boundedCapture) Write(p []byte) (int, error) {
+	original := len(p)
+	remaining := c.max - c.buffer.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		_, _ = c.buffer.Write(p)
+	}
+	if original > remaining {
+		c.overflow = true
+		c.cancel()
+	}
+	return original, nil
 }
 
 func classifyChildFailure(stderr []byte, cause error) error {
@@ -369,17 +331,24 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 		"GITLAB_HOST":              true,
 	}
 	if login {
-		blocked["CI"] = true
-		blocked["GITLAB_CI"] = true
-	} else {
-		for _, name := range []string{"PAGER", "GLAB_PAGER", "EDITOR", "VISUAL", "BROWSER", "NO_PROMPT", "PROMPT_DISABLED"} {
+		for _, name := range []string{"CI", "GITLAB_CI"} {
+			blocked[name] = true
+		}
+	}
+	if login || host == "" {
+		for _, name := range []string{"GLAB_AXI_TOKEN", "GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN", "CI_JOB_TOKEN"} {
+			blocked[name] = true
+		}
+	}
+	if !login {
+		for _, name := range []string{"PAGER", "GLAB_PAGER", "EDITOR", "VISUAL", "BROWSER", "TERM", "NO_PROMPT", "PROMPT_DISABLED", "GLAB_NO_PROMPT"} {
 			blocked[name] = true
 		}
 	}
 	out := make([]string, 0, len(base)+12)
 	for _, item := range base {
 		name, _, ok := strings.Cut(item, "=")
-		if ok && !blocked[name] {
+		if ok && !blocked[strings.ToUpper(name)] {
 			out = append(out, item)
 		}
 	}
@@ -395,9 +364,20 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 	if login {
 		out = append(out, "CI=false", "GITLAB_CI=false")
 	} else {
-		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "NO_PROMPT=1", "PROMPT_DISABLED=1")
+		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=1")
 	}
 	return out
+}
+
+type lockedWriter struct {
+	mu          sync.Mutex
+	destination io.Writer
+}
+
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.destination.Write(p)
 }
 
 type fallbackDetector struct {

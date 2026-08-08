@@ -15,7 +15,10 @@ import (
 	"glab-axi/internal/safeurl"
 )
 
-const SupportedVersion = "1.112.0"
+const (
+	SupportedVersion = "1.112.0"
+	SupportedBuild   = "816e3a52"
+)
 
 type Operation string
 
@@ -173,8 +176,8 @@ func build(request Request) (invocation, error) {
 	case OpReleaseView:
 		args := []string{"release", "view"}
 		if request.Tag != "" {
-			if err := validateText(request.Tag, "release tag", 512); err != nil {
-				return invocation{}, err
+			if err := validateText(request.Tag, "release tag", 512); err != nil || strings.HasPrefix(request.Tag, "-") {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "release tag is invalid")
 			}
 			args = append(args, request.Tag)
 		}

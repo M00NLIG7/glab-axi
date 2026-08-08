@@ -67,6 +67,25 @@ func TestInstallPreservesConfigAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestInstallRefusesMalformedExistingHookShape(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const malformed = `{"hooks":{"SessionStart":"not-an-array"}}`
+	if err := os.WriteFile(path, []byte(malformed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(home, "glab-axi", "skill"); err == nil {
+		t.Fatal("malformed existing hook shape was overwritten")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != malformed {
+		t.Fatalf("existing config changed: %q %v", data, err)
+	}
+}
+
 func TestInstallRefusesSymlinkTargetBeforeAnyWrite(t *testing.T) {
 	home := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.json")

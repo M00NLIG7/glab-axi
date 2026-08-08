@@ -168,7 +168,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/job-trace.schema.json`.
 glab-axi release list [global flags]
 ```
 
-List project releases.
+List project releases and bounded download metadata.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/release-list.schema.json`.
 
@@ -178,7 +178,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/release-list.schema.json`.
 glab-axi release view [tag] [global flags]
 ```
 
-View a release (latest when tag is omitted).
+View a release and project-bound download metadata (latest when omitted).
 
 Backend: `official-glab`. Schema: `schema/ux-v1/release-view.schema.json`.
 

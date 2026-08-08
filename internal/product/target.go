@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"os"
+	"strings"
 
 	"glab-axi/internal/auth"
 	"glab-axi/internal/contract/uxv1"
@@ -31,12 +32,22 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 			target.Host = host
 		}
 	}
-	identity, identityErr := gitremote.Origin(ctx, cwd)
-	if target.Host == "" && identityErr == nil {
-		target.Host = identity.Host
-	}
-	if target.Repo == "" && parsed.Definition.RepoMode != RepoNone && identityErr == nil {
+	if target.Repo == "" && parsed.Definition.RepoMode != RepoNone {
+		identity, identityErr := gitremote.Origin(ctx, cwd)
+		if identityErr != nil {
+			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repository is required; run inside a GitLab checkout or pass -R namespace/project")
+		}
 		target.Repo = identity.Project
+		if target.Host == "" {
+			switch {
+			case strings.EqualFold(identity.Host, "gitlab.com"):
+				target.Host = "gitlab.com"
+			case knownNonGitLabHost(identity.Host):
+				return Target{}, uxv1.NewError(uxv1.CodeValidation, "origin is not a GitLab authority; pass an explicit GitLab --hostname and repository")
+			default:
+				return Target{}, uxv1.NewError(uxv1.CodeSafety, "self-managed GitLab remotes require explicit --hostname or GITLAB_HOST authority")
+			}
+		}
 	}
 	if target.Host == "" {
 		target.Host = "gitlab.com"
@@ -53,4 +64,9 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 		}
 	}
 	return target, nil
+}
+
+func knownNonGitLabHost(host string) bool {
+	host = strings.ToLower(host)
+	return host == "github.com" || strings.HasSuffix(host, ".github.com")
 }

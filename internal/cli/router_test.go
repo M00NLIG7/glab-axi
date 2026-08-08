@@ -26,6 +26,7 @@ func TestFrozenV1RoutesNeverConstructOfficialGlab(t *testing.T) {
 		var stdout bytes.Buffer
 		deps := product.Dependencies{
 			Runtime:  runtimepkg.Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}},
+			Env:      []string{"PATH=" + t.TempDir()},
 			GlabPath: "/must/not/be/executed/glab",
 		}
 		if code := Run(context.Background(), args, deps); code == 0 {

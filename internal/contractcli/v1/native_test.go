@@ -274,6 +274,29 @@ func TestPrivateInputFilesRejectSymlinksAndBroadPermissions(t *testing.T) {
 	}
 }
 
+func TestFrozenV1DataSchemasAreClosed(t *testing.T) {
+	for _, name := range []string{"auth-import", "auth-status", "mr-ensure", "mr-view", "ci-status", "ci-jobs", "ci-trace"} {
+		path := filepath.Join("..", "..", "..", "schema", "v1", name+".schema.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var schema struct {
+			ID                   string         `json:"$id"`
+			Type                 string         `json:"type"`
+			AdditionalProperties bool           `json:"additionalProperties"`
+			Required             []string       `json:"required"`
+			Properties           map[string]any `json:"properties"`
+		}
+		if err := json.Unmarshal(data, &schema); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if schema.ID == "" || schema.Type != "object" || schema.AdditionalProperties || len(schema.Required) == 0 || len(schema.Properties) == 0 {
+			t.Fatalf("%s is not a closed command data schema: %#v", name, schema)
+		}
+	}
+}
+
 func TestNativeForbiddenCommandDoesNotResolveCredentials(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	lookup := func(string) (string, bool) {

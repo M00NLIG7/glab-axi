@@ -77,10 +77,22 @@
         "finished_at": {"type": "string", "format": "date-time"}
       }
     },
+    "release_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "url"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 4096},
+        "kind": {"enum": ["source", "link"]},
+        "format": {"type": "string", "maxLength": 128},
+        "link_type": {"type": "string", "maxLength": 128},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://"}
+      }
+    },
     "release": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "tag", "upcoming"],
+      "required": ["name", "tag", "upcoming", "assets_count"],
       "properties": {
         "name": {"type": "string", "maxLength": 4096},
         "tag": {"type": "string", "maxLength": 512},
@@ -88,7 +100,9 @@
         "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
         "created_at": {"type": "string", "maxLength": 1024},
         "released_at": {"type": "string", "maxLength": 1024},
-        "upcoming": {"type": "boolean"}
+        "upcoming": {"type": "boolean"},
+        "assets_count": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "assets": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/release_asset"}}
       }
     },
     "repository": {

@@ -1,6 +1,8 @@
 package glab
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -82,10 +84,46 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 	}
 }
 
+func TestPinnedEvidenceFilesMatchCapabilityManifest(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "contracts", "official-glab", "v1.112.0")
+	manifestData, err := os.ReadFile(filepath.Join(root, "capabilities.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Evidence struct {
+			Help        string `json:"help_sha256"`
+			Checksums   string `json:"upstream_checksums_sha256"`
+			AuthStorage string `json:"auth_storage_source_sha256"`
+		} `json:"evidence"`
+	}
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	for _, contract := range []struct {
+		name string
+		want string
+	}{
+		{"help.txt", manifest.Evidence.Help},
+		{"upstream-checksums.txt", manifest.Evidence.Checksums},
+		{"auth-storage-source.go.txt", manifest.Evidence.AuthStorage},
+	} {
+		data, err := os.ReadFile(filepath.Join(root, contract.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		if got := hex.EncodeToString(sum[:]); got != contract.want {
+			t.Fatalf("%s digest=%s want=%s", contract.name, got, contract.want)
+		}
+	}
+}
+
 func TestRequestBuilderRejectsInjectionBeforeExecution(t *testing.T) {
 	for _, request := range []Request{
 		{Operation: OpIssueView, Host: "gitlab.com", Repo: "-R", IID: 1},
 		{Operation: OpReleaseView, Host: "gitlab.com", Repo: "group/project", Tag: "v1\n--web"},
+		{Operation: OpReleaseView, Host: "gitlab.com", Repo: "group/project", Tag: "--web"},
 		{Operation: OpSearch, Host: "gitlab.com", Repo: "group/project", Scope: "issues", Query: "", Page: 1, PerPage: 30},
 		{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: "relative.json"},
 	} {

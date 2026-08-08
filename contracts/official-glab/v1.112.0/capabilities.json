@@ -26,7 +26,8 @@
     "secure_default": "operating-system keyring when available",
     "upstream_plaintext_fallback": true,
     "fallback_warning": "The operating system keyring is unavailable. Storing credentials as plaintext in the configuration file.",
-    "glab_axi_policy": "preflight a non-secret secure-store probe and abort on the pinned fallback warning before token acquisition"
+    "login_environment_credentials": "removed before child execution; approved token variables remain available only to headless reads",
+    "glab_axi_policy": "require a real human TTY, preflight a non-secret secure-store probe, and abort on the pinned fallback warning before token acquisition"
   },
   "operations": [
     {

@@ -82,7 +82,14 @@ func Run(ctx context.Context, checkOnly bool, config Config) (Result, error) {
 		return Result{}, err
 	}
 	result := Result{CurrentVersion: config.CurrentVersion, LatestVersion: manifest.Version, UpdateAvailable: comparison < 0}
-	if checkOnly || !result.UpdateAvailable {
+	if !result.UpdateAvailable {
+		return result, nil
+	}
+	artifact, err := selectArtifact(manifest, config.GOOS, config.GOARCH, config.TestOrigin)
+	if err != nil {
+		return Result{}, err
+	}
+	if checkOnly {
 		return result, nil
 	}
 	if config.GOOS == "windows" {
@@ -97,10 +104,6 @@ func Run(ctx context.Context, checkOnly bool, config Config) (Result, error) {
 	}
 	if !confirmed {
 		return Result{}, uxv1.NewError(uxv1.CodeCanceled, "update canceled by human")
-	}
-	artifact, err := selectArtifact(manifest, config.GOOS, config.GOARCH, config.TestOrigin)
-	if err != nil {
-		return Result{}, err
 	}
 	if err := install(ctx, config, manifest.Version, artifact); err != nil {
 		return Result{}, err
@@ -223,6 +226,9 @@ func install(ctx context.Context, config Config, version string, artifact Artifa
 	if err != nil {
 		return uxv1.Wrap(uxv1.CodeSafety, "cannot resolve current executable", err)
 	}
+	if managedExecutablePath(target) {
+		return uxv1.NewError(uxv1.CodeSafety, "self-update refuses package-managed executable paths; use the package channel")
+	}
 	linkInfo, err := os.Lstat(target)
 	if err != nil || linkInfo.Mode()&os.ModeSymlink != 0 || !linkInfo.Mode().IsRegular() {
 		return uxv1.NewError(uxv1.CodeSafety, "self-update refuses symlinked or managed executable paths; use the package channel")
@@ -292,6 +298,24 @@ func install(ctx context.Context, config Config, version string, artifact Artifa
 		_ = directory.Close()
 	}
 	return nil
+}
+
+func managedExecutablePath(path string) bool {
+	normalized := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
+	for _, prefix := range []string{
+		"/usr/", "/bin/", "/sbin/", "/opt/homebrew/", "/opt/local/",
+		"/nix/store/", "/snap/", "/var/lib/flatpak/",
+	} {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	for _, marker := range []string{"/cellar/", "/.linuxbrew/", "/.local/share/mise/installs/"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func verifyCandidate(ctx context.Context, path, version string) error {
