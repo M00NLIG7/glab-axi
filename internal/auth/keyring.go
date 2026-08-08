@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 )
 
@@ -15,6 +17,29 @@ var (
 type Keyring interface {
 	Get(context.Context, string, string) (string, error)
 	Set(context.Context, string, string, string) error
+	Delete(context.Context, string, string) error
+}
+
+// Probe verifies that a keyring can complete a noninteractive write/delete
+// cycle without reading or modifying a credential. The random account avoids
+// collisions with both glab-axi and official-glab entries.
+func Probe(ctx context.Context, keyring Keyring) error {
+	if keyring == nil {
+		return ErrKeyringUnavailable
+	}
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return err
+	}
+	account := hex.EncodeToString(nonce[:])
+	const service = "glab-axi/secure-store-probe"
+	if err := keyring.Set(ctx, service, account, "1"); err != nil {
+		return err
+	}
+	if err := keyring.Delete(ctx, service, account); err != nil {
+		return err
+	}
+	return nil
 }
 
 func SystemKeyring() Keyring { return systemKeyring{} }

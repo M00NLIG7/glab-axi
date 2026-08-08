@@ -1,0 +1,69 @@
+// Exact excerpts from gitlab-org/cli v1.112.0 source commit 816e3a52411aba73d90237859fdc6ecbc86bd169.
+
+// internal/commands/auth/login/login.go lines 185-202 and 228-252
+
+
+	cmd.Flags().StringVarP(&opts.Hostname, "hostname", "", "", "The hostname of the GitLab instance to authenticate with.")
+	cmd.Flags().StringVarP(&opts.Token, "token", "t", "", "Your GitLab access token.")
+	cmd.Flags().StringVarP(&opts.JobToken, "job-token", "j", "", "CI job token.")
+	cmd.Flags().BoolVar(&tokenStdin, "stdin", false, "Read the token from standard input.")
+	cmd.Flags().BoolVar(&opts.UseKeyring, "use-keyring", false, "Store the token in your operating system's keyring.")
+	cmd.Flags().BoolVar(&opts.InsecureStorage, "insecure-storage", false, "Store the token as plaintext in the configuration file instead of the operating system's keyring.")
+	cobra.CheckErr(cmd.Flags().MarkDeprecated("use-keyring", "keyring storage is now the default. Use --insecure-storage to store the token in the configuration file."))
+	cmd.Flags().BoolVar(&opts.WebLogin, "web", false, "Skip the login type prompt and use web/OAuth login.")
+	cmd.Flags().BoolVar(&opts.DeviceLogin, "device", false, "Use the OAuth 2.0 device authorization flow. Useful for headless environments where a local browser is not available. Requires GitLab 17.9 or later.")
+	cmd.Flags().StringVarP(&opts.ApiHost, "api-host", "a", "", "Hostname for the API endpoint, if different from --hostname. Accepts a hostname or hostname:port. Use only when the API is served from a different host than the Git remote.")
+	cmd.Flags().StringVarP(&opts.ApiProtocol, "api-protocol", "p", "", "API protocol. Options: https, http.")
+	cmd.Flags().StringVarP(&opts.GitProtocol, "git-protocol", "g", "", "Git protocol. Options: ssh, https, http.")
+	cmd.Flags().StringVar(&opts.SSHHostname, "ssh-hostname", "", "SSH hostname for instances with a different SSH endpoint. A port is not required; Git uses the port from the remote URL.")
+	cmd.Flags().StringVar(&opts.ContainerRegistryDomains, "container-registry-domains", "", "Container registry and image dependency proxy domains, comma-separated.")
+
+	cmd.MarkFlagsMutuallyExclusive("token", "stdin", "job-token", "web", "device")
+	cmd.MarkFlagsMutuallyExclusive("use-keyring", "insecure-storage")
+
+// ...
+
+	cfg := opts.Config()
+
+	// Decide once whether credentials should be stored in the OS keyring.
+	// Keyring is the default when a backend is available. --insecure-storage
+	// forces plaintext file storage. The deprecated --use-keyring only still
+	// matters in CI, where it opts back in to the keyring. The resolved value
+	// is persisted per-host in each authentication path below.
+	keyringPref := "false"
+	switch {
+	case opts.InsecureStorage:
+		// Explicit opt-out: store in the configuration file without warning.
+	case !opts.UseKeyring && config.InCI():
+		// In CI, credentials are ephemeral and usually supplied via environment
+		// variables, and an OS keyring is typically unavailable or not persisted
+		// across job steps (a locked keyring would also make later reads fail).
+		// Default to file storage there unless the keyring is explicitly
+		// requested with the (deprecated) --use-keyring.
+	case config.KeyringAvailable():
+		keyringPref = "true"
+	default:
+		// No keyring backend available: fall back to file storage, but warn that
+		// credentials are stored as plaintext.
+		opts.IO.LogErrorf("%s The operating system keyring is unavailable. Storing credentials as plaintext in the configuration file.\n", c.Yellow("WARNING:"))
+	}
+
+
+// internal/config/config.go lines 313-328
+
+// keyringProbeService is the sentinel service name used to check whether a
+// working OS keyring backend is present.
+const keyringProbeService = "glab:__keyring_probe__"
+
+// KeyringAvailable reports whether a usable OS keyring backend is present by
+// performing a lightweight write/delete of a sentinel entry. It returns false
+// on platforms without a keyring (for example, headless Linux without a Secret
+// Service, or CI runners), which lets callers fall back to file storage.
+func KeyringAvailable() bool {
+	if err := keyring.Set(keyringProbeService, "", "1"); err != nil {
+		return false
+	}
+	// Best effort cleanup; a lingering sentinel is harmless.
+	_ = keyring.Delete(keyringProbeService, "")
+	return true
+}

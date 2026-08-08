@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/v1/mr-ensure.schema.json",
+  "title": "glab-axi/v1 mr-ensure data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mr"
+  ],
+  "properties": {
+    "mr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iid",
+        "web_url",
+        "has_conflicts"
+      ],
+      "properties": {
+        "iid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "web_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "state": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "source_branch": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "target_branch": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "head_sha": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "sha": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "has_conflicts": {
+          "type": "boolean"
+        },
+        "detailed_merge_status": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "merge_status": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "head_pipeline": {
+          "type": "object"
+        }
+      }
+    },
+    "action": {
+      "type": "string",
+      "maxLength": 4096
+    }
+  }
+}

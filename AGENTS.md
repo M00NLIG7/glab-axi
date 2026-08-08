@@ -2,9 +2,10 @@
 
 This file is the project's committed home for project-intrinsic agent knowledge: build, test, release, architecture, and sharp-edge notes that should travel with the code.
 
-- `glab-axi` is intentionally narrow. Do not add commands or HTTP routes without a pinned consumer contract and fail-closed tests; generic API, merge/close/comment, repository writes, and pipeline mutations are out of scope.
-- Run `go test ./...`, `go test -race ./...`, and `go vet ./...`; build locally with `make build`. Tests must use TLS fake servers only—never live GitLab or real credentials.
-- `contracts/no-mistakes/v1.45.4.json` is the authoritative legacy argv boundary. A no-mistakes upgrade requires a new versioned fixture before parser changes.
+- `glab-axi` is intentionally narrow. Do not add commands or HTTP routes without a pinned consumer contract and fail-closed tests; MR ensure is the only provider write, while generic API, merge/close/comment, repository writes, and pipeline mutations are out of scope.
+- Product reads/login delegate only typed argv from `contracts/official-glab/v1.112.0/`; changing official glab requires a new evidence fixture and offline version/help gate. Never parse or export its credential store.
+- Run `go test ./...`, `go test -race ./...`, and `go vet ./...`; build locally with `make build`. Provider tests must use TLS fake servers and synthetic credentials only—never live GitLab or real credentials.
+- `contracts/no-mistakes/v1.45.4.json` is the authoritative legacy argv boundary; direct run-private automation remains standalone `glab-axi/v1`. A no-mistakes upgrade requires a new versioned fixture before parser changes.
 - Keep credentials out of argv, config, output, logs, fixtures, and source. Token-import tests construct runtime sentinels and inject an in-memory keyring.
 - Host/API/web binding, returned URL validation, pagination limits, replay reconciliation, and stale-pipeline normalization are security properties, not convenience behavior.
 

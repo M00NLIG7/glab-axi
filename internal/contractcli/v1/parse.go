@@ -1,4 +1,4 @@
-package cli
+package v1cli
 
 import (
 	"strings"

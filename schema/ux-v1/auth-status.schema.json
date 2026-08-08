@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/auth-status.schema.json",
+  "title": "glab-axi/ux-v1 auth-status data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authenticated",
+    "host"
+  ],
+  "properties": {
+    "authenticated": {
+      "const": true
+    },
+    "host": {
+      "type": "string",
+      "maxLength": 253
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/mr-diff.schema.json",
+  "title": "glab-axi/ux-v1 mr-diff data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mr_iid",
+    "diff"
+  ],
+  "properties": {
+    "mr_iid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "diff": {
+      "type": "string",
+      "maxLength": 1048576
+    }
+  }
+}

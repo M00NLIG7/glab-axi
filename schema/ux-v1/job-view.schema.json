@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/job-view.schema.json",
+  "title": "glab-axi/ux-v1 job-view data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job"
+  ],
+  "properties": {
+    "job": {
+      "$ref": "resources.schema.json#/$defs/job"
+    }
+  }
+}

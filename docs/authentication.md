@@ -1,26 +1,103 @@
 # Authentication
 
-## Noninteractive sources
+`glab-axi` has two intentionally separate authentication lanes. There is no
+automatic fallback, import, export, or token copy between them.
 
-Credential resolution checks these environment names:
+## Product lane: official glab profile
+
+A human on a real terminal runs:
+
+```sh
+glab-axi auth login --hostname gitlab.com
+```
+
+The product accepts only `--hostname`; it does not expose official glab's token,
+job-token, stdin, insecure-storage, web, device, API-protocol, or Git-protocol
+flags. It delegates the exact argv below only after checking the official
+binary/version and secure-store policy:
+
+```text
+glab auth login --hostname <validated-host>
+```
+
+Official `glab` v1.112.0 normally stores credentials in macOS Keychain, Windows
+Credential Manager, or Linux Secret Service, but its documented fallback is a
+plaintext config file when no keyring is available (and in CI). `glab-axi`
+refuses that fallback:
+
+1. all standard streams must pass an actual terminal ioctl/console check (a
+   character device such as `/dev/null` is not sufficient);
+2. CI/GitLab-CI storage mode and ambient GitLab token/job-token variables are
+   removed for the child, so login cannot persist a headless credential;
+3. a random, non-secret sentinel is written/deleted through the same
+   cross-platform keyring library used by the pinned official release;
+4. stderr is monitored for the exact pinned plaintext-fallback warning; and
+5. the child is canceled if either secure-store check fails.
+
+Official interactive stdout/stderr is relayed to the human terminal on stderr;
+stdout is reserved for the final parseable `glab-axi/ux-v1` envelope.
+
+The sentinel uses a unique service/account and is not a credential. The probe
+does not list or read keyring entries. `glab-axi` never opens official glab's
+config, asks official glab to print a token, parses a credential source, or
+copies a value into its native store.
+
+A profile configured independently by a human with official `glab` is an
+external trust decision. Product reads use it as official glab normally would.
+`glab-axi auth status` delegates without `--show-token`, discards all child
+text, and returns only normalized authentication state/host/backend metadata.
+
+### Headless product reads
+
+Official glab v1.112.0 gives these approved environment values precedence over
+stored profiles:
+
+- `GITLAB_TOKEN`
+- `GITLAB_ACCESS_TOKEN`
+- `OAUTH_TOKEN`
+
+They remain available to noninteractive delegated reads, but are stripped from
+`auth login`. Product data commands close stdin and disable prompts, pager,
+editor, browser, debug HTTP, CI auto-login, color, and update checks. Do not put credentials in argv, shell
+history, chat, fixtures, or logs.
+
+### OAuth/device and private-host limitations
+
+`glab-axi` intentionally does not promise a universal device flow. Official
+glab's browser/device support depends on its pinned release, GitLab server
+version (device flow requires GitLab 17.9+), host OAuth configuration, and an
+appropriate client identity. Self-managed instances may disable OAuth, use a
+relative URL, separate API host, private CA, or proxy.
+
+A human who needs a special official-glab onboarding path may configure the
+profile directly outside glab-axi, subject to organizational policy. A
+`gitlab.com` checkout may supply product host/repository context; self-managed
+checkout hosts require explicit `--hostname` or `GITLAB_HOST` authority. The AXI
+will use that selected authenticated host but never expose insecure TLS/storage
+flags. Native private-host REST remains separately configured as described
+below.
+
+## Native v1 lane: noninteractive credential
+
+Native `glab-axi/v1` resolution checks:
 
 1. `GLAB_AXI_TOKEN`
 2. `GITLAB_TOKEN`
 3. `GITLAB_ACCESS_TOKEN`
 4. `OAUTH_TOKEN`
-5. the host/API-scoped OS keyring item
+5. the host/API-scoped glab-axi OS keyring item
 
 Empty values are ignored. If populated environment variables disagree, the
-command fails rather than choosing an authority silently. `OAUTH_TOKEN` uses a
-Bearer header; other sources use `PRIVATE-TOKEN`. Tokens are never accepted as
-argv flags, URL/query values, config fields, or interactive input.
+command fails rather than choosing silently. `OAUTH_TOKEN` uses a Bearer header;
+other native values use `PRIVATE-TOKEN`. No native token is accepted in argv,
+URL/query, config, or interactive input.
 
-A project access token with project role Developer and scope `api` is the
-recommended minimum for the complete lookup/create/update/MR/CI surface.
-Read-only commands can use narrower authority, but `read_api` cannot create or
-update MRs. SSH push authorization is unrelated to REST API authorization.
+A project access token with project role Developer and `api` scope is the
+recommended minimum for the full native MR ensure/CI surface. Read-only native
+commands can use narrower authority; `read_api` cannot create/update an MR. SSH
+push authorization is unrelated to REST API authority.
 
-## Import
+### Transactional native import
 
 ```sh
 printf '%s\n' "$TOKEN" | glab-axi auth import \
@@ -30,24 +107,25 @@ printf '%s\n' "$TOKEN" | glab-axi auth import \
   --token-stdin
 ```
 
-The command:
+Import is part of the frozen native grammar, not the primary human onboarding
+story. It:
 
 1. refuses character-device stdin;
 2. reads one bounded printable token;
-3. validates it with `GET /user` without displaying identity or token;
-4. writes only host metadata to mode-0600 config; and
-5. stores the value through the no-UI keyring interface.
+3. validates it with native `GET /user` without displaying identity/value;
+4. prepares validated non-secret host metadata;
+5. records any previous keyring value;
+6. stores the credential through the no-UI keyring interface;
+7. atomically writes mode-0600 config; and
+8. restores/deletes the keyring entry if config installation fails.
 
-On macOS the backend calls the Security framework directly, disables keychain
-user interaction, and never places the secret in a child-process argument.
-Platforms without a safe compiled keyring backend reject import; environment
-credentials remain available. There is no plaintext fallback.
+A keyring write failure leaves no config. An incomplete rollback is a safety
+error rather than false success. On macOS+cgo, native keyring calls the Security
+framework directly with authentication UI disabled. Platforms without a proven
+no-UI native backend reject persistent import; environment credentials remain
+available. There is no plaintext fallback.
 
-Use `--ca-bundle /absolute/file.pem` for an operator-approved private CA and
-`--no-proxy` to disable environment proxy discovery for that host. There is no
-insecure TLS option.
-
-## Config
+## Native host config
 
 Default config is the platform user-config directory under
 `glab-axi/config.json`. Tests/automation may select an absolute file with
@@ -68,11 +146,9 @@ Default config is the platform user-config directory under
 }
 ```
 
-Config and its directory must be owned by the current user, private, regular,
-and not symlinks. It contains no credential values.
-
-## Operational rule
-
-Do not paste tokens into chat, shell history, process arguments, fixtures, test
-source, or config. Provision and validate live credentials only under the
-separate authorization governing the target GitLab project.
+Config and directory must be owned by the current user, private, regular, and
+not symlinks. Config contains no credential values. Native HTTPS requires TLS
+1.2+, verifies hostnames, supports one explicit private CA bundle and explicit
+proxy disable, and has no insecure mode. Product delegation uses the trust/TLS
+settings of the human-controlled official profile and identifies its backend in
+output; those properties are not falsely attributed to native validation.

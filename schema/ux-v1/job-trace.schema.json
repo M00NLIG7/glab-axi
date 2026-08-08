@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/job-trace.schema.json",
+  "title": "glab-axi/ux-v1 job-trace data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "trace"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "trace": {
+      "type": "string",
+      "maxLength": 262200
+    }
+  }
+}

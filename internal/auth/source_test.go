@@ -15,6 +15,7 @@ type fakeKeyring struct{ value string }
 
 func (f fakeKeyring) Get(context.Context, string, string) (string, error) { return f.value, nil }
 func (f fakeKeyring) Set(context.Context, string, string, string) error   { return nil }
+func (f fakeKeyring) Delete(context.Context, string, string) error        { return nil }
 
 func TestResolverRejectsDisagreeingEnvironmentTokens(t *testing.T) {
 	values := map[string]string{

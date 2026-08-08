@@ -22,13 +22,19 @@ const (
 )
 
 func Write(w io.Writer, format Format, envelope v1.Envelope) error {
+	return WriteValue(w, format, envelope)
+}
+
+// WriteValue emits either versioned envelope type through the same bounded,
+// deterministic encoder. Keeping v1 on this exact path preserves its bytes.
+func WriteValue(w io.Writer, format Format, value any) error {
 	var data []byte
 	var err error
 	switch format {
 	case JSON:
-		data, err = json.Marshal(envelope)
+		data, err = json.Marshal(value)
 	case TOON:
-		data, err = marshalTOON(envelope)
+		data, err = marshalTOON(value)
 	default:
 		return v1.NewError(v1.CodeValidation, "format must be toon or json")
 	}

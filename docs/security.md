@@ -1,34 +1,89 @@
 # Security model
 
-## Trust boundary
+## Trust boundaries
 
-The local operator controls the executable, private host config, credential
-source, repository identity, and private MR content files. Git remotes, proxy
-environment, API responses, pagination links, redirects, job names/statuses,
-and traces are untrusted.
+The operator controls the `glab-axi` executable, selected official `glab`
+package/profile, explicit target flags, native private-host config, credential
+source, local repository, private MR files, setup command, and release signing
+key. Git remotes, PATH entries, official child output/stderr, provider JSON,
+URLs, pagination, redirects, proxies, traces/diffs, update servers, and existing
+agent config are untrusted.
 
-## Controls
+The product and native lanes have different trust properties and always report
+the backend. Official-glab results do not inherit claims made by the stricter
+native HTTP transport.
 
-- strict argv grammars; no shell execution or token flags;
+## Product delegation controls
+
+- exact official version/build `1.112.0 (816e3a52)`, with pinned public package checksums/source/help;
+- regular executable resolution and no shell interpolation;
+- operation enum with fixed argv builders—no public/raw argv or API method/path;
+- strict command/flag/positional parsing before target, credentials, or child;
+- permanent denied-command classification with zero child/request tests;
+- closed stdin plus prompt/pager/editor/browser/debug/update suppression for
+  data commands;
+- real terminal/console check plus non-secret secure-store probe for human login;
+- ambient token/job-token removal and pinned plaintext-fallback warning cancellation;
+- 5-second version check, 30/45-second operations, bounded stdout/stderr;
+- malformed, ANSI-prefixed, trailing, non-UTF-8, or oversized child output
+  rejected;
+- controlled exit/error mapping without raw stderr or server body;
+- typed normalization and per-command JSON schemas;
+- HTTPS host and selected repository path validation on returned URLs;
+- item/field/page/display caps with explicit completeness/truncation metadata;
+- unknown CI/merge states normalize pending-compatible, never green;
+- fixed internal API routes only where official v1.112.0 lacks safe JSON
+  commands; public `api` remains denied.
+
+Approved environment credentials pass directly to official glab for reads but
+are never placed in AXI argv/output; login removes them before child execution.
+Only `gitlab.com` can be inferred as a host authority. Self-managed remotes need
+explicit `--hostname` or `GITLAB_HOST`, preventing an untrusted Git remote from
+selecting the destination for an environment credential. `GLAB_DEBUG_HTTP`, CI auto-login, update
+checks, and output helpers are forced off. The AXI does not inspect the official
+profile or token source.
+
+## Provider-write boundary
+
+The only product provider write is MR ensure/create-or-update. It permits only
+title/description on one exact open same-project source/target pair. It uses:
+
+- validated project identity;
+- all-page lookup and duplicate denial;
+- a second GET immediately before POST;
+- private mode-0600 JSON child input;
+- one POST or PUT maximum;
+- validation of mutation response; and
+- GET-only reconciliation after transport errors, malformed success, content
+  mismatch, or ambiguity.
+
+There is no blind mutation retry. Generic API, merge, approve, comment/note,
+close/reopen/delete, repository mutation, release/label mutation,
+secrets/variables, and pipeline/job trigger/retry/cancel/delete are denied
+before child execution.
+
+## Native v1 controls
+
+- exact host/API/web origin and project identity;
 - HTTPS only, TLS 1.2 minimum, normal hostname verification, optional explicit
   CA bundle, and no insecure mode;
-- exact configured API/web origins and project identity before project actions;
-- same-project MRs only; returned IDs, branches, paths, SHAs, and URLs validated;
-- POST/PUT redirects refused; GET redirects stay on the exact API origin/prefix;
-- same-origin, same-route pagination with page, byte, and item caps;
-- tokens only in request headers; no plaintext keyring fallback;
-- typed JSON decoding with bounded bodies; server error bodies are not rendered;
-- bounded retries for GET only; mutations use read-after-ambiguity reconciliation;
-- 30-second read and 45-second write operation deadlines plus connect, TLS, and
-  response-header deadlines;
-- signal/context cancellation across requests and retry waits;
-- trace tail ring, UTF-8 repair, truncation marker, and credential-pattern
-  redaction;
-- unknown CI/merge states and stale SHA relationships never normalize green.
+- environment-token disagreement failure and no token flags/config/output;
+- no-UI native keyring; transactional import and no plaintext fallback;
+- descriptor-based no-follow private-file reads, private modes, size/UTF-8/NUL
+  checks;
+- typed route constructors only; no native generic request method;
+- same-project MRs and validated returned URLs/branches/IDs/SHAs;
+- POST/PUT redirects refused; GET redirects exact-origin/prefix only;
+- same-origin/same-route pagination, loop detection, and hard caps;
+- bounded GET retry; one mutation plus read-after-ambiguity reconciliation;
+- stale MR/head-pipeline/local SHA never green;
+- unknown/manual/allowed-failure CI fail-closed normalization;
+- signal/context cancellation across HTTP and retry waits;
+- bounded redacted trace tail.
 
-Environment proxy discovery is supported only after authority selection. Proxy
-URLs are never printed. `proxy_disabled` turns it off for a host. Cross-origin
-redirects are rejected before credential forwarding.
+Environment proxy discovery occurs only after authority selection; proxy URLs
+are never printed. Per-host `proxy_disabled` turns it off. Cross-origin
+redirects are rejected before forwarding credentials.
 
 ## Hard limits
 
@@ -39,45 +94,76 @@ redirects are rejected before credential forwarding.
 | branch | 1,024 bytes |
 | title | 1,024 bytes |
 | description | 128 KiB |
-| JSON page | 2 MiB |
-| operation bodies/output | 8 MiB |
-| pagination | 10 pages / 1,000 jobs |
+| native JSON page | 2 MiB |
+| operation/output | 8 MiB |
+| official child stderr | 4 KiB (never rendered raw) |
+| pagination | 10 pages / 1,000 items/jobs |
+| release download metadata | 100 entries |
 | trace tail | 256 KiB |
-| compatibility stderr | 4 KiB |
+| product diff | 1 MiB |
+| release executable/custody | 128 MiB |
+| setup/config/manifest | 1 MiB |
 
-Limit overflow is an error. Partial pagination is never returned as an all-green
-snapshot.
+A limit overflow is an error unless a product display/field/trace/diff contract
+explicitly returns bounded content with `complete:false` or `truncated:true`.
+Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 
 ## Deterministic exits
 
 | Exit | Meaning |
 |---:|---|
 | 0 | success |
-| 2 | bad/unsupported syntax or local input |
-| 3 | missing, invalid, or expired authentication |
+| 2 | validation, unsupported, or security-boundary input |
+| 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | duplicate/conflicting/ambiguous mutation |
-| 7 | rate limited after bounded policy |
-| 8 | network, TLS, timeout, malformed/oversized upstream, or internal failure |
-| 9 | host/project/URL/fork/redirect safety violation |
+| 6 | conflict/duplicate/ambiguous mutation |
+| 7 | rate limited |
+| 8 | dependency/version/network/timeout/malformed upstream/internal |
+| 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |
 | 130 / 143 | canceled by SIGINT / SIGTERM |
 
-## Explicitly absent capabilities
+`glab-axi/v1` retains its exact error enum/exit mapping. Product-only dependency,
+interactive, and security-boundary codes exist only in `glab-axi/ux-v1`.
+Help always exits 0 and performs no auth/dependency/network work.
 
-There is no merge, close, reopen, approve, delete, note/comment, reviewer,
-label, branch/repository write, pipeline retry/cancel, arbitrary REST, GraphQL,
-webhook, issue, release, package, browser, login, extension, or shell command.
-The HTTP route constructors contain no endpoint for those actions.
+## Setup/update controls
+
+`setup hooks` plans all files before writes, refuses symlinks/non-regular or
+malformed hook structures, preserves unrelated configuration, writes mode-0600
+files atomically, and rolls back prior targets on failure. Hook commands are the
+fixed portable name `glab-axi`, not a shell-quoted arbitrary path. Setup never
+authenticates.
+
+Release CI publishes no compatibility executable. It verifies the private
+signing secret against a separately configured public key while platform build
+jobs receive only that public value. Raw product binaries and packages receive
+SHA-256 checksums; checksums have a detached Ed25519 signature and the public key
+is published for comparison with a captain-pinned out-of-band value. Raw update
+artifacts are covered by an Ed25519-signed canonical manifest. Release binaries
+embed only the public key. Self-update is explicit and human
+confirmed, validates signature/size/checksum/standalone handshake, detects path
+replacement, and uses same-directory atomic rename with rollback. Development,
+symlinked/package-managed, unsupported-platform, wrong-key, wrong-checksum, and
+wrong-handshake paths refuse replacement. No update check occurs during help,
+version, dashboard, or native contract execution.
 
 ## Residual risks
 
-- The v1.45.4 adapter receives MR title/description in argv because its consumer
-  does so. Use only in an isolated, explicitly authorized integration.
-- Job traces can contain application-specific secrets that generic redaction
-  cannot recognize. GitLab masked variables and least-privilege CI remain
+- Official glab itself is a substantial trusted dependency. Exact-version/help
+  CI catches declared drift; behavior or supply-chain compromise within that
+  release remains residual.
+- Secure-store availability can change between probe and official storage. The
+  pinned fallback-warning kill switch reduces but cannot eliminate OS-level
+  races; human onboarding acceptance must inspect the resulting storage policy.
+- Delegated fixed API calls inherit official-glab/profile TLS/proxy behavior.
+  Native private-host controls are stronger and remain preferable for the
+  no-mistakes contract.
+- Job traces/diffs/descriptions may contain application secrets unknown to
+  generic redaction. Least privilege and GitLab masked variables remain
   required.
-- An environment token is visible to processes with authority to inspect the
-  caller. The OS keyring is preferred for persistent local use.
-- A project access token with `api` is powerful inside its project. Keep it
-  short-lived and scoped to one project.
+- Environment tokens are visible to processes authorized to inspect the caller.
+- Installed no-mistakes v1.45.4 passes legacy MR content in compatibility argv;
+  the direct v1 run-private consumer avoids that exposure.
+- A project token with `api` can be powerful within its project; keep it scoped
+  and short-lived.

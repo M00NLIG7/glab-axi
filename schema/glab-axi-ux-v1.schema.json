@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/glab-axi-ux-v1.schema.json",
+  "title": "glab-axi/ux-v1 envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "meta"],
+  "properties": {
+    "schema": {"const": "glab-axi/ux-v1"},
+    "ok": {"type": "boolean"},
+    "data": {"type": "object"},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": [
+            "validation_error", "unsupported", "security_boundary",
+            "interactive_required", "dependency_missing", "dependency_unsupported",
+            "authentication_error", "forbidden", "not_found", "conflict",
+            "rate_limited", "upstream_error", "safety_violation", "canceled",
+            "internal_error", "ambiguous_create", "ambiguous_update"
+          ]
+        },
+        "message": {"type": "string", "maxLength": 4096},
+        "retryable": {"type": "boolean"}
+      }
+    },
+    "help": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 512}},
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "truncated"],
+      "properties": {
+        "backend": {"enum": ["official-glab", "native-v1", "local"]},
+        "host": {"type": "string", "maxLength": 253},
+        "repo": {"type": "string", "maxLength": 1024},
+        "complete": {"type": "boolean"},
+        "truncated": {"type": "boolean"},
+        "count": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "reason": {"type": "string", "maxLength": 128},
+        "upstream_version": {"const": "1.112.0"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"ok": {"const": true}}},
+      "then": {"required": ["data"], "not": {"required": ["error"]}},
+      "else": {"required": ["error"], "not": {"required": ["data"]}}
+    }
+  ]
+}

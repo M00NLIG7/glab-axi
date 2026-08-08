@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/v1/ci-trace.schema.json",
+  "title": "glab-axi/v1 ci-trace data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trace",
+    "truncated"
+  ],
+  "properties": {
+    "trace": {
+      "type": "string",
+      "maxLength": 262200
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  }
+}

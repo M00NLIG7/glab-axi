@@ -1,10 +1,50 @@
-# no-mistakes v1.45.4 compatibility
+# no-mistakes compatibility
 
-The binary built from `cmd/glab-compat` is normally written to `dist/glab`. Its
-name exists only for a pinned consumer boundary. Help and version output state
-that it is not upstream `glab`.
+There are two different consumer generations. Neither uses the product-facing
+official-glab backend.
 
-## Accepted argv
+## Direct run-private `glab-axi/v1` consumer
+
+The accepted current no-mistakes integration selects one absolute
+`--gitlab-client` path, copies that single `glab-axi` executable into a private
+mode-0500 run directory, records SHA-256, verifies it before each call, and
+requires this exact handshake shape:
+
+```text
+glab-axi <version> (contract glab-axi/v1)
+```
+
+It invokes native `auth status`, `mr ensure`, `mr view`, `ci status`, and
+`ci trace` (plus jobs as needed) with explicit host/repository, private
+mode-0600 title/description files, and `--format json`. The consumer strictly
+decodes `glab-axi/v1`, validates project/MR/URL/SHA identity, treats selected
+client failure as fatal, and removes custody at terminal cleanup.
+
+The v0.2 router preserves these migration properties:
+
+- old unnamespaced argv still routes native;
+- `--contract glab-axi/v1` is an additional explicit alias, not a required
+  migration;
+- v1 output/error fields and handshake shape are unchanged;
+- official `glab` is never discovered or executed;
+- one executable remains sufficient and below the 128 MiB limit;
+- no prompt, ANSI, banner, product update notice, or delegated stderr appears;
+- private-file semantics remain compatible and are now descriptor/no-follow;
+- data schemas are pinned under `schema/v1/`.
+
+A no-mistakes parser/argv cleanup must add a new versioned consumer fixture
+before requiring the explicit alias. Old forms remain for at least one full
+installed-consumer upgrade window.
+
+## Installed no-mistakes v1.45.4 compatibility artifact
+
+The binary built explicitly by `make compat` from `cmd/glab-compat` is written to
+`dist/test-only/glab`. Its name exists only for the pinned installed
+no-mistakes v1.45.4 boundary. Help/version state that it is not official glab.
+The normal `make build`, release workflow, package archives, setup, and updater
+never build, publish, install, suggest, or expose this executable.
+
+### Accepted legacy argv
 
 ```text
 glab auth status [--hostname HOST]
@@ -18,43 +58,30 @@ glab ci get --pipeline-id ID --output json --with-job-details
 glab ci trace JOB_ID
 ```
 
-Flags may be ordered differently, but duplicates, `--flag=value`, extra
-positionals, unknown flags, and missing values fail with exit 2. The command
-spelled `api` is matched to the configured project and anchored pipeline-jobs
-route before the typed jobs method is called. It is not generic REST access.
+Flags may be ordered differently, but duplicates, equals forms, extra
+positionals, unknown flags, and missing values fail with exit 2. The spelling
+`api` is anchored to the configured project's exact pipeline-jobs route before
+the typed native jobs method runs; it is not generic REST authority.
 
-The compatibility process infers host/project from the local `origin` remote,
-then resolves that host through `glab-axi/config-v1`. The auth check with an
-explicit hostname does not require a repository.
+The legacy process infers host/project from local origin, then resolves native
+`glab-axi/config-v1`. Auth with explicit hostname does not require repository.
+It emits bounded legacy JSON/raw trace shapes, no prompts/pagers/ANSI/update
+notices, and one controlled stderr error line.
 
-## Output contract
+no-mistakes v1.45.4 puts MR title/description in argv; the adapter cannot remove
+that consumer exposure. Use only in its isolated legacy boundary. Never put the
+compatibility executable on shared PATH or use a PATH prefix as run-scoped
+custody.
 
-- auth status: no stdout on success;
-- MR list: one JSON array with zero or one `{iid,web_url}` item;
-- create/update: one `{iid,web_url}` object;
-- view: one bounded object with MR state, URL, conflict/merge status, SHA, and
-  head-pipeline metadata;
-- CI status/get/API: one normalized JSON job array;
-- trace: bounded, redacted raw UTF-8 bytes.
+## Contract gates
 
-Errors are one controlled, redacted stderr line. Exit codes are documented in
-[security](security.md). There are no prompts, pagers, ANSI, update notices, or
-terminal-table parsing.
+`contracts/no-mistakes/v1.45.4.json` remains authoritative for the legacy
+binary. `internal/compat` builds and executes every vector against TLS fake
+GitLab, verifies response/exit/mutation classification, and asserts denied
+commands make zero requests.
 
-## Consumer limitations
-
-no-mistakes v1.45.4 passes title and description in argv. The adapter cannot
-remove that legacy exposure. A future direct `glab-axi/v1` integration must use
-private files or stdin and a run-scoped absolute executable path.
-
-The installed shared no-mistakes daemon does not inherit a task caller's PATH.
-Do not expose this compatibility executable globally or treat a PATH prefix as
-a safe run-scoped integration.
-
-## Contract gate
-
-`contracts/no-mistakes/v1.45.4.json` pins source module, version, commit, argv,
-stdin, output shape, exit, and mutation classification. The test builds the
-real executable, runs every vector against a TLS fake server, and verifies all
-denied commands make zero requests. A no-mistakes upgrade must add a new pinned
-contract before code accepts a new command.
+The direct native gate additionally executes the frozen v1 command suite with
+no official `glab` on PATH, validates handshake/output schemas and one-file
+copy behavior, and is exercised by the accepted no-mistakes repository's
+native-host/custody tests. All provider tests use synthetic credentials and
+local TLS servers only—never a live GitLab account.
