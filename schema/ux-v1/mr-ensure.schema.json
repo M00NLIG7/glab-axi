@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/mr-ensure.schema.json",
+  "title": "glab-axi/ux-v1 mr-ensure data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mr",
+    "action"
+  ],
+  "properties": {
+    "mr": {
+      "$ref": "resources.schema.json#/$defs/mr"
+    },
+    "action": {
+      "enum": [
+        "created",
+        "updated",
+        "unchanged",
+        "reconciled_create",
+        "reconciled_update"
+      ]
+    }
+  }
+}

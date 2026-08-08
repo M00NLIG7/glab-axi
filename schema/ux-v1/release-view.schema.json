@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/release-view.schema.json",
+  "title": "glab-axi/ux-v1 release-view data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "release"
+  ],
+  "properties": {
+    "release": {
+      "$ref": "resources.schema.json#/$defs/release"
+    }
+  }
+}

@@ -4,13 +4,15 @@ import (
 	"context"
 	"os"
 
+	"glab-axi/internal/cli"
 	"glab-axi/internal/commandctx"
-	v1cli "glab-axi/internal/contractcli/v1"
+	"glab-axi/internal/product"
 	runtimepkg "glab-axi/internal/runtime"
 )
 
 func main() {
 	os.Exit(commandctx.Run(func(ctx context.Context) int {
-		return v1cli.RunNative(ctx, os.Args[1:], runtimepkg.Defaults())
+		runtimeDeps := runtimepkg.Defaults()
+		return cli.Run(ctx, os.Args[1:], product.Defaults(runtimeDeps))
 	}))
 }

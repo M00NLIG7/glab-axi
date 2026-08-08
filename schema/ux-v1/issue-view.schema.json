@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/issue-view.schema.json",
+  "title": "glab-axi/ux-v1 issue-view data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "issue"
+  ],
+  "properties": {
+    "issue": {
+      "$ref": "resources.schema.json#/$defs/issue"
+    }
+  }
+}

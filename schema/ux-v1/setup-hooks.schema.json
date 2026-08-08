@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/setup-hooks.schema.json",
+  "title": "glab-axi/ux-v1 setup-hooks data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "integrations",
+    "skill"
+  ],
+  "properties": {
+    "status": {
+      "const": "installed"
+    },
+    "integrations": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      }
+    },
+    "skill": {
+      "const": "glab-axi"
+    }
+  }
+}

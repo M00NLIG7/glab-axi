@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/auth-login.schema.json",
+  "title": "glab-axi/ux-v1 auth-login data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authenticated",
+    "host",
+    "storage"
+  ],
+  "properties": {
+    "authenticated": {
+      "const": true
+    },
+    "host": {
+      "type": "string",
+      "maxLength": 253
+    },
+    "storage": {
+      "const": "operating_system_keyring"
+    }
+  }
+}

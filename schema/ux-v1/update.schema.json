@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/update.schema.json",
+  "title": "glab-axi/ux-v1 update data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "current_version",
+    "latest_version",
+    "update_available",
+    "installed"
+  ],
+  "properties": {
+    "current_version": {
+      "type": "string"
+    },
+    "latest_version": {
+      "type": "string"
+    },
+    "update_available": {
+      "type": "boolean"
+    },
+    "installed": {
+      "type": "boolean"
+    }
+  }
+}

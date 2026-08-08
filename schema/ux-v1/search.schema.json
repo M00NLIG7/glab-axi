@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/search.schema.json",
+  "title": "glab-axi/ux-v1 search data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "results"
+  ],
+  "properties": {
+    "results": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "resources.schema.json#/$defs/search_result"
+      }
+    }
+  }
+}

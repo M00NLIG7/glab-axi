@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/resources.schema.json",
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iid", "title", "state", "web_url", "confidential", "user_notes_count"],
+      "properties": {
+        "iid": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "maxLength": 4096},
+        "description": {"type": "string", "maxLength": 131072},
+        "state": {"type": "string", "maxLength": 128},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "author": {"type": "string", "maxLength": 1024},
+        "labels": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+        "confidential": {"type": "boolean"},
+        "user_notes_count": {"type": "integer", "minimum": 0},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["success", "failed", "canceled", "skipped", "running"]},
+        "raw_status": {"type": "string", "maxLength": 128},
+        "source": {"type": "string", "maxLength": 128},
+        "ref": {"type": "string", "maxLength": 1024},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "user": {"type": "string", "maxLength": 1024},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "mr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iid", "title", "state", "draft", "web_url", "source_branch", "target_branch", "has_conflicts", "merge_status"],
+      "properties": {
+        "iid": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "maxLength": 4096},
+        "description": {"type": "string", "maxLength": 131072},
+        "state": {"type": "string", "maxLength": 128},
+        "draft": {"type": "boolean"},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "source_branch": {"type": "string", "maxLength": 1024},
+        "target_branch": {"type": "string", "maxLength": 1024},
+        "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+        "has_conflicts": {"type": "boolean"},
+        "merge_status": {"enum": ["can_be_merged", "cannot_be_merged", "checking"]},
+        "raw_merge_status": {"type": "string", "maxLength": 128},
+        "author": {"type": "string", "maxLength": 1024},
+        "labels": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 1024}},
+        "head_pipeline": {"$ref": "#/$defs/pipeline"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "stage", "status", "allow_failure"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "maxLength": 1024},
+        "stage": {"type": "string", "maxLength": 1024},
+        "status": {"enum": ["success", "failed", "canceled", "skipped", "running"]},
+        "raw_status": {"type": "string", "maxLength": 128},
+        "allow_failure": {"type": "boolean"},
+        "failure_reason": {"type": "string", "maxLength": 128},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "finished_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tag", "upcoming"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 4096},
+        "tag": {"type": "string", "maxLength": 512},
+        "description": {"type": "string", "maxLength": 131072},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "created_at": {"type": "string", "maxLength": 1024},
+        "released_at": {"type": "string", "maxLength": 1024},
+        "upcoming": {"type": "boolean"}
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "path_with_namespace", "web_url", "archived"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "maxLength": 4096},
+        "path_with_namespace": {"type": "string", "maxLength": 1024},
+        "description": {"type": "string", "maxLength": 131072},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "default_branch": {"type": "string", "maxLength": 1024},
+        "visibility": {"type": "string", "maxLength": 128},
+        "archived": {"type": "boolean"},
+        "last_activity_at": {"type": "string", "maxLength": 1024}
+      }
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "open_issues_count", "closed_issues_count", "open_merge_requests_count"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "maxLength": 4096},
+        "description": {"type": "string", "maxLength": 16384},
+        "color": {"type": "string", "maxLength": 128},
+        "text_color": {"type": "string", "maxLength": 128},
+        "open_issues_count": {"type": "integer", "minimum": 0},
+        "closed_issues_count": {"type": "integer", "minimum": 0},
+        "open_merge_requests_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "search_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope"],
+      "minProperties": 2,
+      "properties": {
+        "scope": {"enum": ["issues", "mrs", "repos", "commits", "code"]},
+        "id": {"type": "integer", "minimum": 1},
+        "iid": {"type": "integer", "minimum": 1},
+        "project_id": {"type": "integer", "minimum": 1},
+        "startline": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "maxLength": 4096},
+        "name": {"type": "string", "maxLength": 4096},
+        "path_with_namespace": {"type": "string", "maxLength": 4096},
+        "filename": {"type": "string", "maxLength": 4096},
+        "path": {"type": "string", "maxLength": 4096},
+        "ref": {"type": "string", "maxLength": 4096},
+        "sha": {"type": "string", "maxLength": 4096},
+        "excerpt": {"type": "string", "maxLength": 16384},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"}
+      }
+    }
+  }
+}
