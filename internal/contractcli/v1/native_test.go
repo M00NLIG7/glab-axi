@@ -1,9 +1,11 @@
-package cli
+package v1cli
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,20 +19,40 @@ import (
 )
 
 type memoryKeyring struct {
-	mu      sync.Mutex
-	service string
-	account string
-	secret  string
+	mu        sync.Mutex
+	service   string
+	account   string
+	secret    string
+	setErr    error
+	deleteErr error
 }
 
 func (m *memoryKeyring) Get(context.Context, string, string) (string, error) {
-	return "", auth.ErrKeyringNotFound
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.secret == "" {
+		return "", auth.ErrKeyringNotFound
+	}
+	return m.secret, nil
 }
 
 func (m *memoryKeyring) Set(_ context.Context, service, account, secret string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.setErr != nil {
+		return m.setErr
+	}
 	m.service, m.account, m.secret = service, account, secret
+	return nil
+}
+
+func (m *memoryKeyring) Delete(context.Context, string, string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	m.secret = ""
 	return nil
 }
 
@@ -96,6 +118,62 @@ func TestTokenImportUsesOnlyStdinAndKeyring(t *testing.T) {
 			t.Fatal("credential sentinel reached argv")
 		}
 	}
+}
+
+func TestTokenImportIsTransactionalAcrossKeyringAndConfig(t *testing.T) {
+	secret := generatedToken()
+	server := testgitlab.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/user" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "username": "import-bot"})
+	}))
+	defer server.Close()
+	host := strings.TrimPrefix(server.HTTP.URL, "https://")
+	args := []string{"auth", "import", "--host", host, "--api-base", server.HTTP.URL + "/api/v4", "--web-base", server.HTTP.URL, "--token-stdin", "--format", "json"}
+
+	t.Run("keyring failure leaves no config", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := filepath.Join(dir, "config.json")
+		keyring := &memoryKeyring{setErr: errors.New("synthetic keyring failure")}
+		var stdout bytes.Buffer
+		deps := runtimepkg.Dependencies{
+			Stdin: strings.NewReader(secret + "\n"), Stdout: &stdout, Stderr: io.Discard,
+			Cwd: dir, ConfigPath: configPath, Keyring: keyring,
+			HTTPClient: server.HTTP.Client(), IsTerminal: func() bool { return false },
+		}
+		if code := RunNative(context.Background(), args, deps); code != 3 {
+			t.Fatalf("exit=%d output=%s", code, stdout.String())
+		}
+		if _, err := os.Stat(configPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("config exists after keyring failure: %v", err)
+		}
+	})
+
+	t.Run("config failure restores previous keyring value", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		configPath := filepath.Join(dir, "config.json")
+		keyring := &memoryKeyring{secret: "previous-secure-value"}
+		var stdout bytes.Buffer
+		deps := runtimepkg.Dependencies{
+			Stdin: strings.NewReader(secret + "\n"), Stdout: &stdout, Stderr: io.Discard,
+			Cwd: dir, ConfigPath: configPath, Keyring: keyring,
+			HTTPClient: server.HTTP.Client(), IsTerminal: func() bool { return false },
+		}
+		if code := RunNative(context.Background(), args, deps); code != 9 {
+			t.Fatalf("exit=%d output=%s", code, stdout.String())
+		}
+		if keyring.secret != "previous-secure-value" {
+			t.Fatal("previous keyring value was not restored")
+		}
+		if _, err := os.Stat(configPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("config exists after save failure: %v", err)
+		}
+	})
 }
 
 func TestNativeAuthStatusEmitsVersionedJSONAndTOON(t *testing.T) {

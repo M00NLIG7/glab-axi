@@ -111,6 +111,14 @@ static OSStatus glab_axi_set(const char *service, const char *account,
     return status;
 }
 
+static OSStatus glab_axi_delete(const char *service, const char *account) {
+    CFMutableDictionaryRef query = glab_axi_query(service, account);
+    if (query == NULL) return errSecAllocate;
+    OSStatus status = SecItemDelete(query);
+    CFRelease(query);
+    return status;
+}
+
 static void glab_axi_zero(void *data, size_t length) {
     if (data != NULL && length > 0) memset(data, 0, length);
 }
@@ -163,6 +171,24 @@ func (systemKeyring) Set(ctx context.Context, service, account, secret string) e
 		C.free(data)
 	}()
 	status := C.glab_axi_set(cs, ca, data, C.size_t(len(secret)))
+	if status != C.errSecSuccess {
+		return fmt.Errorf("%w: OSStatus %d", ErrKeyringUnavailable, int(status))
+	}
+	return nil
+}
+
+func (systemKeyring) Delete(ctx context.Context, service, account string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	cs := C.CString(service)
+	ca := C.CString(account)
+	defer C.free(unsafe.Pointer(cs))
+	defer C.free(unsafe.Pointer(ca))
+	status := C.glab_axi_delete(cs, ca)
+	if status == C.errSecItemNotFound {
+		return nil
+	}
 	if status != C.errSecSuccess {
 		return fmt.Errorf("%w: OSStatus %d", ErrKeyringUnavailable, int(status))
 	}

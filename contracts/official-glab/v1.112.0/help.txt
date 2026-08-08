@@ -1,0 +1,913 @@
+### glab version
+glab 1.112.0 (816e3a52)
+
+### glab auth login --help
+
+  Authenticates with a GitLab instance.                                                                                 
+                                                                                                                        
+  By default, glab stores your credentials in your operating system's                                                   
+  keyring (macOS Keychain, Windows Credential Manager, or the Secret                                                    
+  Service on Linux) when one is available. If no keyring is available,                                                  
+  or if you pass `--insecure-storage`, glab stores them in the global                                                   
+  configuration file (default `~/.config/glab-cli/config.yml`) as                                                       
+  plaintext instead. After authentication, all glab commands use the                                                    
+  stored credentials.                                                                                                   
+                                                                                                                        
+  If you previously signed in and your credentials are stored as                                                        
+  plaintext in the configuration file, run `glab auth login` again to                                                   
+  move them into the keyring.                                                                                           
+                                                                                                                        
+  In CI (when `GITLAB_CI` or `CI` is set), glab stores credentials in the                                               
+  configuration file rather than the keyring. Credentials in CI are                                                     
+  usually supplied through environment variables, and an OS keyring is                                                  
+  often unavailable there.                                                                                              
+                                                                                                                        
+  If `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, or `OAUTH_TOKEN` are set,                                                   
+  they take precedence over the stored credentials. When CI auto-login is                                               
+  enabled, these variables also override `CI_JOB_TOKEN`.                                                                
+                                                                                                                        
+  To pass a token on standard input, use `--stdin`.                                                                     
+                                                                                                                        
+  In interactive mode, glab detects GitLab instances from your Git remotes                                              
+  and lists them as options, so you do not have to type the hostname manually.                                          
+                                                                                                                        
+         
+  USAGE  
+         
+    glab auth login [--flags]                                                                                         
+            
+  EXAMPLES  
+            
+    # Start interactive setup                                                                                         
+    # If in a Git repository, glab detects and suggests GitLab instances from remotes                                 
+    glab auth login                                                                                                   
+                                                                                                                      
+    # Authenticate against `gitlab.com` by reading the token from a file                                              
+    glab auth login --stdin < myaccesstoken.txt                                                                       
+                                                                                                                      
+    # Authenticate with GitLab Self-Managed or GitLab Dedicated                                                       
+    glab auth login --hostname salsa.debian.org                                                                       
+                                                                                                                      
+    # Non-interactive setup                                                                                           
+    glab auth login --hostname gitlab.example.org --token glpat-xxx --api-host gitlab.example.org:3443 --api-protoc…  
+                                                                                                                      
+    # Non-interactive setup reading the token from a file                                                             
+    glab auth login --hostname gitlab.example.org --api-host gitlab.example.org:3443 --api-protocol https --git-pro…  
+                                                                                                                      
+    # Semi-interactive OAuth login, skipping all prompts except browser auth                                          
+    glab auth login --hostname gitlab.com --web --git-protocol ssh --container-registry-domains "gitlab.com,gitlab.…  
+                                                                                                                      
+    # OAuth device authorization flow for headless environments without a local browser.                              
+    # glab displays a one-time code and verification URL; you authorize on any                                        
+    # other device with a browser. Requires GitLab 17.9 or later.                                                     
+    glab auth login --hostname gitlab.com --device                                                                    
+                                                                                                                      
+    # CI/CD setup: for most cases, prefer auto-login over manual login                                                
+    GLAB_ENABLE_CI_AUTOLOGIN=true glab release list -R $CI_PROJECT_PATH                                               
+                                                                                                                      
+    # CI/CD setup with manual login: use when the command does not support CI job tokens, or you need a personal ac…  
+    glab auth login --hostname $CI_SERVER_FQDN --job-token $CI_JOB_TOKEN --api-protocol $CI_SERVER_PROTOCOL           
+         
+  FLAGS  
+         
+    -a --api-host                 Hostname for the API endpoint, if different from --hostname. Accepts a hostname or hostname:port. Use only when the API is served from a different host than the Git remote.
+    -p --api-protocol             Api protocol. Options: https, http.
+    --container-registry-domains  Container registry and image dependency proxy domains, comma-separated.
+    --device                      Use the OAuth 2.0 device authorization flow. Useful for headless environments where a local browser is not available. Requires GitLab 17.9 or later.
+    -g --git-protocol             Git protocol. Options: ssh, https, http.
+    -h --help                     Show help for this command.
+    --hostname                    The hostname of the GitLab instance to authenticate with.
+    --insecure-storage            Store the token as plaintext in the configuration file instead of the operating system's keyring.
+    -j --job-token                Ci job token.
+    --ssh-hostname                Ssh hostname for instances with a different SSH endpoint. A port is not required; Git uses the port from the remote URL.
+    --stdin                       Read the token from standard input.
+    -t --token                    Your GitLab access token.
+    --web                         Skip the login type prompt and use web/OAuth login.
+
+
+What's new in glab v1.112.0
+  Run: glab whatsnew
+
+### glab auth status --help
+
+  Verifies and displays information about your authentication state.                                                    
+                                                                                                                        
+  By default, this command checks the authentication state of the GitLab instance                                       
+  determined by your current context (`git remote`, `GITLAB_HOST` environment variable,                                 
+  or configuration). To check all configured instances, use `--all`.                                                    
+  To check a specific instance, use `--hostname`.                                                                       
+                                                                                                                        
+         
+  USAGE  
+         
+    glab auth status [--flags]                                              
+            
+  EXAMPLES  
+            
+    # Check authentication status for the instance in your current context  
+    glab auth status                                                        
+                                                                            
+    # Check authentication status for all configured instances              
+    glab auth status --all                                                  
+                                                                            
+    # Check authentication status for a specific instance                   
+    glab auth status --hostname gitlab.example.com                          
+                                                                            
+    # Display the authentication token alongside the status                 
+    glab auth status --show-token                                           
+         
+  FLAGS  
+         
+    -a --all         Check the authentication status of all configured instances.
+    -h --help        Show help for this command.
+    --hostname       Check the authentication status of a specific instance.
+    -t --show-token  Display the authentication token.
+
+
+### glab issue list --help
+
+  Defaults to open items. Use `--group` to list for a group                                                             
+  instead of the current project.                                                                                       
+                                                                                                                        
+         
+  USAGE  
+         
+    glab issue list [--flags]                           
+            
+  EXAMPLES  
+            
+    glab issue list --all                               
+    glab issue ls --all                                 
+    glab issue list --assignee=@me                      
+    glab issue list --milestone release-2.0.0 --opened  
+         
+  FLAGS  
+         
+    -A --all            Get all issues.
+    -a --assignee       Filter issue by assignee <username>.
+    --author            Filter issue by author <username>.
+    -c --closed         Get only closed issues.
+    -C --confidential   Filter by confidential issues.
+    -e --epic           List issues belonging to a given epic (requires --group, no pagination support).
+    -g --group          Select a group or subgroup. Ignored if a repo argument is set.
+    -h --help           Show help for this command.
+    --in                Search in: title, description. (title,description)
+    -t --issue-type     Filter issue by its type. Options: issue, incident, test_case.
+    -i --iteration      Filter issue by iteration <id>.
+    --jq                Filter JSON output with a jq expression.
+    -l --label          Filter issue by label <name>. Multiple labels can be comma-separated or specified by repeating the flag.
+    -m --milestone      Filter issue by milestone <id>.
+    --not-assignee      Filter issue by not being assigned to <username>.
+    --not-author        Filter issue by not being by author(s) <username>.
+    --not-label         Filter issue by lack of label <name>. Multiple labels can be comma-separated or specified by repeating the flag.
+    --order             Order issue by <field>. Order options: created_at, updated_at, priority, due_date, relative_position, label_priority, milestone_due, popularity, weight. (created_at)
+    -O --output         Options: 'text' or 'json'. (text)
+    -F --output-format  Options: 'details', 'ids', 'urls'. (details)
+    -p --page           Page number. (1)
+    -P --per-page       Number of items to list per page. (30)
+    -R --repo           Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    --search            Search <string> in the fields defined by '--in'.
+    -s --sort           Sort direction for --order field: asc or desc. (desc)
+
+
+### glab issue view --help
+
+  You can use a full GitLab URL instead of an ID. Use `--web`                                                           
+  to open in a browser.                                                                                                 
+                                                                                                                        
+         
+  USAGE  
+         
+    glab issue view <id> [--flags]                                  
+            
+  EXAMPLES  
+            
+    glab issue view 123                                             
+    glab issue show 123                                             
+    glab issue view --web 123                                       
+    glab issue view --comments 123                                  
+    glab issue view https://gitlab.com/NAMESPACE/REPO/-/issues/123  
+         
+  FLAGS  
+         
+    -c --comments     Show issue comments and activities.
+    -h --help         Show help for this command.
+    --jq              Filter JSON output with a jq expression.
+    -F --output       Format output as: text, json. (text)
+    -p --page         Page number. (1)
+    -P --per-page     Number of items to list per page. (20)
+    -R --repo         Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    -s --system-logs  Show system activities and logs.
+    -w --web          Open issue in a browser. Uses the default browser, or the browser specified in the $BROWSER variable.
+
+
+### glab mr list --help
+
+  Defaults to open merge requests. Use `--all` to include closed                                                        
+  and merged requests. Use `--group` to list for a group instead                                                        
+  of the current project.                                                                                               
+                                                                                                                        
+         
+  USAGE  
+         
+    glab mr list [--flags]                                            
+            
+  EXAMPLES  
+            
+    glab mr list --all                                                
+    glab mr ls -a                                                     
+    glab mr list --assignee=@me                                       
+    glab mr list --reviewer=@me                                       
+    glab mr list --source-branch=new-feature                          
+    glab mr list --target-branch=main                                 
+    glab mr list --search "this adds feature X"                       
+    glab mr list --label needs-review                                 
+    glab mr list --not-label waiting-maintainer-feedback,subsystem-x  
+    glab mr list -M --per-page 10                                     
+    glab mr list --draft                                              
+    glab mr list --not-draft                                          
+         
+  FLAGS  
+         
+    -A --all            Get all merge requests.
+    -a --assignee       Get only merge requests assigned to users. Multiple users can be comma-separated or specified by repeating the flag.
+    --author            Filter merge request by author <username>.
+    -c --closed         Get only closed merge requests.
+    --created-after     Filter merge requests created after a certain date (ISO 8601 format).
+    --created-before    Filter merge requests created before a certain date (ISO 8601 format).
+    --deployed-after    Filter merge requests deployed after a certain date (ISO 8601 format).
+    --deployed-before   Filter merge requests deployed before a certain date (ISO 8601 format).
+    -d --draft          Filter by draft merge requests.
+    --environment       Filter merge requests deployed to the given environment <name>.
+    -g --group          Select a group/subgroup. This option is ignored if a repo argument is set.
+    -h --help           Show help for this command.
+    --jq                Filter JSON output with a jq expression.
+    -l --label          Filter merge request by label <name>. Multiple labels can be comma-separated or specified by repeating the flag.
+    -M --merged         Get only merged merge requests.
+    -m --milestone      Filter merge request by milestone <id>.
+    --not-draft         Filter by non-draft merge requests.
+    --not-label         Filter merge requests by not having label <name>. Multiple labels can be comma-separated or specified by repeating the flag.
+    -o --order          Order merge requests by <field>. Order options: created_at, updated_at, merged_at, title, priority, label_priority, milestone_due, and popularity.
+    -F --output         Format output as: text, json. (text)
+    -p --page           Page number. (1)
+    -P --per-page       Number of items to list per page. (30)
+    -R --repo           Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    -r --reviewer       Get only merge requests with users as reviewer. Multiple users can be comma-separated or specified by repeating the flag.
+    --search            Filter by <string> in title and description.
+    -S --sort           Sort direction for --order field: asc or desc.
+    -s --source-branch  Filter by source branch <name>.
+    -t --target-branch  Filter by target branch <name>.
+
+
+### glab mr view --help
+
+  You can use a branch name or ID. Use `--web` to open in a browser.                                                    
+                                                                                                                        
+         
+  USAGE  
+         
+    glab mr view [<id | branch>] [--flags]  
+            
+  EXAMPLES  
+            
+    glab mr view 123                        
+    glab mr view branch-name                
+    glab mr view 123 --comments             
+    glab mr view 123 --web                  
+         
+  FLAGS  
+         
+    -c --comments     Show merge request comments and activities.
+    -h --help         Show help for this command.
+    --jq              Filter JSON output with a jq expression.
+    -F --output       Format output as: text, json. (text)
+    -p --page         Page number.
+    -P --per-page     Number of items to list per page. (20)
+    -R --repo         Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    --resolved        Show only resolved discussions (implies --comments).
+    -s --system-logs  Show system activities and logs.
+    --unresolved      Show only unresolved discussions (implies --comments).
+    -w --web          Open merge request in a browser. Uses default browser or browser specified in BROWSER variable.
+
+
+### glab mr diff --help
+
+  Defaults to the currently checked-out branch. Use `--color=never`                                                     
+  to disable color output.                                                                                              
+                                                                                                                        
+         
+  USAGE  
+         
+    glab mr diff [<id> | <branch>] [--flags]  
+            
+  EXAMPLES  
+            
+    glab mr diff 123                          
+    glab mr diff branch                       
+                                              
+    # Get merge request from current branch   
+    glab mr diff                              
+                                              
+    glab mr diff 123 --color=never            
+         
+  FLAGS  
+         
+    --color    Use color in diff output: always, never, auto. (auto)
+    -h --help  Show help for this command.
+    --raw      Use raw diff format that can be piped to commands.
+    -R --repo  Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab mr create --help
+
+  Defaults to the current branch as the source branch. Use `--fill`                                                     
+  to automatically fill the title and description from the commit history. Use                                          
+  `--draft` to create a draft merge request.                                                                            
+                                                                                                                        
+  The `--recover` flag is an experiment: it might be unstable or                                                        
+  removed at any time, and is not ready for production use. For more                                                    
+  information, see                                                                                                      
+  https://docs.gitlab.com/policy/development_stages_support/.                                                           
+                                                                                                                        
+         
+  USAGE  
+         
+    glab mr create [--flags]                                             
+            
+  EXAMPLES  
+            
+    glab mr new                                                          
+    glab mr create -a username -t "fix annoying bug"                     
+    glab mr create -f --draft --label RFC                                
+    glab mr create --fill --web                                          
+    glab mr create --fill --fill-commit-body --yes                       
+    glab mr create -t "Fix login bug" --template bug_fix                 
+    glab mr create -t "Security patch" --template security_fix.md --yes  
+         
+  FLAGS  
+         
+    --allow-collaboration   Allow commits from other members. Set to true/false to override project defaults, or omit to use project settings.
+    -a --assignee           Assign merge request to people by their `usernames`. Multiple usernames can be comma-separated or specified by repeating the flag.
+    --auto-merge            Set the merge request to merge when all merge checks pass.
+    --copy-issue-labels     Copy labels from issue to the merge request. Used with --related-issue.
+    --create-source-branch  Create a source branch if it does not exist.
+    -d --description        Supply a description for the merge request. Set to "-" to open an editor.
+    --draft                 Mark merge request as a draft.
+    -f --fill               Do not prompt for title or description, and just use commit info. Sets `push` to `true`, and pushes the branch.
+    --fill-commit-body      Fill description with each commit body when multiple commits. Can only be used with --fill.
+    -H --head               Select another head repository using the `OWNER/REPO` or `GROUP/NAMESPACE/REPO` format, the project ID, or the full URL.
+    -h --help               Show help for this command.
+    -l --label              Add label by name. Multiple labels can be comma-separated or specified by repeating the flag.
+    -m --milestone          The global ID or title of a milestone to assign.
+    --no-editor             Don't open editor to enter a description. If true, uses prompt. Defaults to false.
+    --push                  Push committed changes after creating merge request. Make sure you have committed changes.
+    --recover               Save the options to a file if the merge request creation fails. If the file exists, the options are loaded from the recovery file. (EXPERIMENTAL)
+    -i --related-issue      Create a merge request for an issue. If --title is not provided, uses the issue title.
+    --remove-source-branch  Remove source branch on merge. Set to true/false to override project defaults, or omit to use project settings.
+    -R --repo               Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    --reviewer              Request review from users by their `usernames`. Multiple usernames can be comma-separated or specified by repeating the flag.
+    --signoff               Append a DCO signoff to the merge request description.
+    -s --source-branch      Create a merge request from this branch. Default is the current branch.
+    --squash-before-merge   Squash commits into a single commit when merging. Set to true/false to override project defaults, or omit to use project settings.
+    -b --target-branch      The target or base branch into which you want your code merged into.
+    --template              Name of a template in '.gitlab/merge_request_templates/' to pre-populate the description. The '.md' extension is optional. Templates are loaded from the local repository only.
+    -t --title              Supply a title for the merge request.
+    -w --web                Continue merge request creation in a browser.
+    --wip                   Mark merge request as a draft. Alternative to --draft.
+    -y --yes                Skip submission confirmation prompt. Use --fill to skip all optional prompts.
+
+
+### glab mr update --help
+
+  Defaults to the currently checked-out branch. Use `--fill` to                                                         
+  automatically fill the title and description from the commit history.                                                 
+                                                                                                                        
+         
+  USAGE  
+         
+    glab mr update [<id> | <branch>] [--flags]          
+            
+  EXAMPLES  
+            
+    # Mark a merge request as ready                     
+    glab mr update 23 --ready                           
+                                                        
+    # Mark a merge request as draft                     
+    glab mr update 23 --draft                           
+                                                        
+    # Updates the merge request for the current branch  
+    glab mr update --draft                              
+                                                        
+    # Update merge request with commit information      
+    glab mr update 23 --fill --fill-commit-body --yes   
+         
+  FLAGS  
+         
+    -a --assignee           Assign users via username. Prefix with '!' or '-' to remove from existing assignees, '+' to add. Otherwise, replace existing assignees with given users. Multiple usernames can be comma-separated or specified by repeating the flag.
+    -d --description        Merge request description. Set to "-" to open an editor.
+    --draft                 Mark merge request as a draft.
+    -f --fill               Do not prompt for title or body, and just use commit info.
+    --fill-commit-body      Fill body with each commit body when multiple commits. Can only be used with --fill.
+    -h --help               Show help for this command.
+    -l --label              Add labels.
+    --lock-discussion       Lock discussion on merge request.
+    -m --milestone          Title of the milestone to assign. Set to "" or 0 to unassign.
+    -r --ready              Mark merge request as ready to be reviewed and merged.
+    --remove-source-branch  Toggles the removal of the source branch on merge.
+    -R --repo               Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    --reviewer              Request review from users by their usernames. Prefix with '!' or '-' to remove from existing reviewers, '+' to add. Otherwise, replace existing reviewers with given users. Multiple usernames can be comma-separated or specified by repeating the flag.
+    --squash-before-merge   Toggles the option to squash commits into a single commit when merging.
+    --target-branch         Set target branch.
+    -t --title              Title of merge request.
+    --unassign              Unassign all users.
+    -u --unlabel            Remove labels.
+    --unlock-discussion     Unlock discussion on merge request.
+    --wip                   Mark merge request as a work in progress. Alternative to --draft.
+    -y --yes                Skip confirmation prompt.
+
+
+### glab ci list --help
+
+  Defaults to the current project. Use `--status` to filter pipelines by status.                                        
+                                                                                                                        
+         
+  USAGE  
+         
+    glab ci list [--flags]        
+            
+  EXAMPLES  
+            
+    glab ci list                  
+    glab ci list --status=failed  
+         
+  FLAGS  
+         
+    -h --help            Show help for this command.
+    --jq                 Filter JSON output with a jq expression.
+    -n --name            Return only pipelines with the given name.
+    -o --order           Order pipelines by this field. Options: id, status, ref, updated_at, user_id. (id)
+    -F --output          Format output. Options: text, json. (text)
+    -p --page            Page number. (1)
+    -P --per-page        Number of items to list per page. Defaults to the GitLab API default (20).
+    -r --ref             Return only pipelines for the given ref.
+    -R --repo            Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    --scope              Return only pipelines with the given scope. Options: running, pending, finished, branches, tags.
+    --sha                Return only pipelines with the given SHA.
+    --sort               Sort direction for '--order': asc or desc. (desc)
+    --source             Return only pipelines triggered by the given source. For the full list, see https://docs.gitlab.com/ci/jobs/job_rules/#ci_pipeline_source-predefined-variable. Commonly used options: merge_request_event, parent_pipeline, pipeline, push, trigger.
+    -s --status          Filter pipelines by status. Options: running, pending, success, failed, canceled, skipped, created, manual, waiting_for_resource, preparing, scheduled.
+    -a --updated-after   Return only pipelines updated after the specified date. Expected in ISO 8601 format (2019-03-15T08:00:00Z).
+    -b --updated-before  Return only pipelines updated before the specified date. Expected in ISO 8601 format (2019-03-15T08:00:00Z).
+    -u --username        Return only pipelines triggered by the given username.
+    -y --yaml-errors     Return only pipelines with invalid configurations.
+
+
+### glab ci get --help
+
+  Defaults to the current branch. Use `--pipeline-id` to specify a pipeline                                             
+  instead of fetching the latest for a branch.                                                                          
+                                                                                                                        
+  Use `--merge-request` to target the head pipeline of a specific merge                                                 
+  request by IID. This differs from `--branch` when the MR's head pipeline                                              
+  diverges from the latest pipeline on its source branch — for example, forks or                                        
+  detached pipelines.                                                                                                   
+                                                                                                                        
+  Use `--status` to filter jobs by state (passed through to the API's                                                   
+  `scope` parameter).                                                                                                   
+                                                                                                                        
+  Use `--output json` to get the pipeline details as JSON.                                                              
+                                                                                                                        
+         
+  USAGE  
+         
+    glab ci get [--flags]                                              
+            
+  EXAMPLES  
+            
+    # Get the pipeline for the current branch                          
+    glab ci get                                                        
+                                                                       
+    # Get a specific pipeline by ID in another project                 
+    glab ci get -R some/project -p 12345                               
+                                                                       
+    # Show only failed jobs for the head pipeline of MR !42            
+    glab ci get --merge-request=42 --status=failed --with-job-details  
+         
+  FLAGS  
+         
+    -b --branch            Get the pipeline for a branch. Defaults to the current branch.
+    -h --help              Show help for this command.
+    --jq                   Filter JSON output with a jq expression.
+    --merge-request        Show the pipeline for the given merge request <iid>.
+    -F --output            Format output. Options: text, json. (text)
+    -p --pipeline-id       Get the pipeline with the given <id>.
+    -R --repo              Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    -s --status            Show only jobs in the given state. Passed through to the API's scope parameter.
+    -d --with-job-details  Show extended job information.
+    --with-variables       Show variables in pipeline. Requires the Maintainer role.
+
+
+### glab ci trace --help
+
+  Streams the job log to the terminal. The output updates in real time                                                  
+  while the job runs. Without a job argument, you can select one                                                        
+  interactively.                                                                                                        
+                                                                                                                        
+         
+  USAGE  
+         
+    glab ci trace [<job-id>|<job-name>] [--flags]  
+            
+  EXAMPLES  
+            
+    # Interactively select a job to trace          
+    glab ci trace                                  
+                                                   
+    # Trace job with ID 224356863                  
+    glab ci trace 224356863                        
+                                                   
+    # Trace job with the name 'lint'               
+    glab ci trace lint                             
+         
+  FLAGS  
+         
+    -b --branch       The branch to search for the job. Defaults to the current branch.
+    -h --help         Show help for this command.
+    -p --pipeline-id  The pipeline ID to search for the job.
+    -R --repo         Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab release list --help
+
+  By default, lists the releases for the current project, most recent                                                   
+  first. Use `--repo` to target a different project, or `-F json` for                                                   
+  machine-readable output.                                                                                              
+                                                                                                                        
+         
+  USAGE  
+         
+    glab release list [--flags]            
+            
+  EXAMPLES  
+            
+    glab release list                      
+    glab release list --per-page 50        
+    glab release list -R owner/repository  
+    glab release list -F json              
+         
+  FLAGS  
+         
+    -h --help      Show help for this command.
+    --jq           Filter JSON output with a jq expression.
+    -F --output    Format output as: text, json. (text)
+    -p --page      Page number. (1)
+    -P --per-page  Number of items to list per page. (30)
+    -R --repo      Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab release view --help
+
+  View information about a GitLab release.                                                                              
+                                                                                                                        
+  Without an explicit tag name argument, shows the latest release in the project.                                       
+                                                                                                                        
+         
+  USAGE  
+         
+    glab release view [<tag>] [--flags]               
+            
+  EXAMPLES  
+            
+    # View the latest release of a GitLab repository  
+    glab release view                                 
+                                                      
+    # View a release with specified tag name          
+    glab release view v1.0.1                          
+         
+  FLAGS  
+         
+    -h --help    Show help for this command.
+    --jq         Filter JSON output with a jq expression.
+    -F --output  Format output as: text, json. (text)
+    -R --repo    Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+    -w --web     Open the release in the browser.
+
+
+### glab repo list --help
+
+  By default, lists the projects you own. Use `--all` to list every                                                     
+  project on the instance, `--group` to scope to one group, or                                                          
+  `--user` to list another user's projects.                                                                             
+                                                                                                                        
+         
+  USAGE  
+         
+    glab repo list [--flags]  
+            
+  EXAMPLES  
+            
+    glab repo list            
+         
+  FLAGS  
+         
+    -a --all                List all projects on the instance. Removes the ownership filter. Results are still paginated. Use --page to navigate.
+    --archived              Limit by archived status. Use 'false' to exclude archived repositories. Used with the '--group' flag.
+    -g --group              Return repositories in only the given group.
+    -h --help               Show help for this command.
+    -G --include-subgroups  Include projects in subgroups of this group. Default is false. Used with the '--group' flag.
+    --jq                    Filter JSON output with a jq expression.
+    --member                List only projects of which you are a member.
+    -m --mine               List only projects you own. Default if no filters are provided.
+    -o --order              Return repositories ordered by id, name, path, created_at, updated_at, similarity, star_count, last_activity_at. (last_activity_at)
+    -F --output             Format output as: text, json. (text)
+    -p --page               Page number. (1)
+    -P --per-page           Number of items to list per page. (30)
+    -s --sort               Sort direction for --order field: asc or desc.
+    --starred               List only starred projects.
+    -u --user               List user projects.
+
+
+### glab repo view --help
+
+  Display the description and README of a project, or open it in the browser.                                           
+                                                                                                                        
+         
+  USAGE  
+         
+    glab repo view [repository] [--flags]                    
+            
+  EXAMPLES  
+            
+    # View project information for the current directory.    
+    # Must be a Git repository.                              
+    glab repo view                                           
+                                                             
+    # View project information of specified name.            
+    # glab repo view my-project                              
+    glab repo view user/repo                                 
+    glab repo view group/namespace/repo                      
+                                                             
+    # Specify repository by full [Git] URL.                  
+    glab repo view git@gitlab.com:user/repo.git              
+    glab repo view https://gitlab.company.org/user/repo      
+    glab repo view https://gitlab.company.org/user/repo.git  
+         
+  FLAGS  
+         
+    -b --branch  View a specific branch of the repository.
+    -h --help    Show help for this command.
+    --jq         Filter JSON output with a jq expression.
+    -F --output  Format output as: text, json. (text)
+    -w --web     Open a project in the browser.
+
+
+### glab label list --help
+
+  By default, labels are listed for the current repository. Use                                                         
+  `--group` to list labels for a group or subgroup, or                                                                  
+  `--repo` to target another project.                                                                                   
+                                                                                                                        
+  Use `--output json` to format the result as JSON for use with other tools.                                            
+                                                                                                                        
+         
+  USAGE  
+         
+    glab label list [--flags]                
+            
+  EXAMPLES  
+            
+    # List labels in the current repository  
+    glab label list                          
+                                             
+    # List labels in another project         
+    glab label list -R owner/repository      
+                                             
+    # List labels in a group                 
+    glab label list -g mygroup               
+                                             
+    # List labels as JSON                    
+    glab label list --output json            
+         
+  FLAGS  
+         
+    -g --group     List labels for a group.
+    -h --help      Show help for this command.
+    --jq           Filter JSON output with a jq expression.
+    -F --output    Format output as: text, json. (text)
+    -p --page      Page number. (1)
+    -P --per-page  Number of items to list per page. (30)
+    -R --repo      Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab search --help
+
+  Search a GitLab project for code and other resources. The                                                             
+  `semantic` subcommand runs an AI-powered semantic code search.                                                        
+                                                                                                                        
+  Use `--repo` to target a project other than the current one.                                                          
+                                                                                                                        
+  This feature is in beta and might not be ready for production use.                                                    
+  It might be unstable and breaking changes can occur outside of major releases.                                        
+  For more information, see                                                                                             
+  https://docs.gitlab.com/policy/development_stages_support/.                                                           
+                                                                                                                        
+         
+  USAGE  
+         
+    glab search <command> [command] [--flags]  
+            
+  COMMANDS  
+            
+    semantic [--flags]  Search project code using natural language.
+         
+  FLAGS  
+         
+    -h --help           Show help for this command.
+    -R --repo           Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab job --help
+
+  Inspect CI/CD jobs from a pipeline. Download the artifacts a job                                                      
+  produced with `job artifact`.                                                                                         
+                                                                                                                        
+  Use `--repo` to target a project other than the current one.                                                          
+                                                                                                                        
+         
+  USAGE  
+         
+    glab job <command> [command] [--flags]  
+            
+  COMMANDS  
+            
+    artifact <refName> <jobName> [--flags]  Download all artifacts from the most recent pipeline.
+         
+  FLAGS  
+         
+    -h --help                               Show help for this command.
+    -R --repo                               Select another repository. You can use either OWNER/REPO or GROUP/NAMESPACE/REPO. The full URL or Git URL is also accepted.
+
+
+### glab api --help
+
+  Makes an authenticated HTTP request to the GitLab API, and prints the response.                                       
+  Specify either a path to a GitLab API v4 endpoint, or `graphql` to access the                                         
+  GitLab GraphQL API.                                                                                                   
+                                                                                                                        
+  For more information, see:                                                                                            
+                                                                                                                        
+  - GitLab REST API documentation                                                                                       
+  - GitLab GraphQL documentation                                                                                        
+                                                                                                                        
+  If the current directory is a Git directory, this command uses the GitLab                                             
+  authenticated host in the current directory. Otherwise, `gitlab.com` is used.                                         
+  To override the GitLab hostname, use `--hostname`.                                                                    
+                                                                                                                        
+  When used in the endpoint argument, these placeholder values are replaced                                             
+  with values from the repository of the current directory:                                                             
+                                                                                                                        
+  - `:branch`                                                                                                           
+  - `:fullpath`                                                                                                         
+  - `:group`                                                                                                            
+  - `:id`                                                                                                               
+  - `:namespace`                                                                                                        
+  - `:repo`                                                                                                             
+  - `:user`                                                                                                             
+  - `:username`                                                                                                         
+                                                                                                                        
+  The default HTTP request method is `GET` when no parameters are added,                                                
+  and `POST` otherwise. To override the method, use `--method`.                                                         
+                                                                                                                        
+  Pass one or more `--raw-field` values in `key=value` format to add                                                    
+  JSON-encoded string parameters to the `POST` body.                                                                    
+                                                                                                                        
+  The `--field` flag behaves like `--raw-field` but converts values                                                     
+  based on their format:                                                                                                
+                                                                                                                        
+  - Literal values `true`, `false`, `null`, and integer numbers are converted to                                        
+    the matching JSON types.                                                                                            
+  - Placeholder values `:namespace`, `:repo`, and `:branch` are populated with values                                   
+    from the repository of the current directory.                                                                       
+  - If the value starts with `@`, the rest of the value is interpreted as a                                             
+    filename to read the value from. Pass `-` to read from standard input.                                              
+                                                                                                                        
+  Neither `--field` nor `--raw-field` parses JSON arrays or objects;                                                    
+  those values are sent as strings. To pass a JSON body literally, use `--input`.                                       
+                                                                                                                        
+  For GraphQL requests, all fields other than `query` and `operationName` are                                           
+  interpreted as GraphQL variables.                                                                                     
+                                                                                                                        
+  To send data as `multipart/form-data` instead of JSON, use `--form`. This is                                          
+  required for API endpoints that accept file uploads, such as wiki attachments.                                        
+  Pass one or more `--form` values in `key=value` format. To upload a file,                                             
+  prefix the value with `@` followed by the file path. Pass `-` to read from                                            
+  standard input. Do not combine `--form` with `--field`, `--raw-field`, or `--input`.                                  
+                                                                                                                        
+  To pass a raw request body, use `--input` with a file path. Pass `-` to                                               
+  read from standard input. In this mode, parameters specified with `--field`                                           
+  flags are serialized into URL query parameters.                                                                       
+                                                                                                                        
+  In `--paginate` mode, all pages of results are requested sequentially until                                           
+  no more pages of results remain. For GraphQL requests:                                                                
+                                                                                                                        
+  - The original query must accept an `$endCursor: String` variable.                                                    
+  - The query must fetch the `pageInfo{ hasNextPage, endCursor }` set of fields from a collection.                      
+                                                                                                                        
+  The `--output` flag controls the output format:                                                                       
+                                                                                                                        
+  - `json` (default): Pretty-printed JSON. Arrays are output as a single JSON array.                                    
+  - `ndjson`: Newline-delimited JSON, also known as JSON Lines. Each array element                                      
+    or object is output on a separate line. This format is more memory-efficient for                                    
+    large datasets and works well with tools like `jq`.                                                                 
+                                                                                                                        
+  For ndjson format specifications, see the                                                                             
+  ndjson spec and JSON Lines.                                                                                           
+                                                                                                                        
+         
+  USAGE  
+         
+    glab api <endpoint> [--flags]                                                                                     
+            
+  EXAMPLES  
+            
+    # List releases for the current project, expanding the :fullpath placeholder                                      
+    glab api projects/:fullpath/releases                                                                              
+                                                                                                                      
+    # List issues for a project by URL-encoded path                                                                   
+    glab api projects/gitlab-com%2Fwww-gitlab-com/issues                                                              
+                                                                                                                      
+    # Upload a file to a project wiki                                                                                 
+    glab api --method POST projects/:fullpath/wikis/attachments --form "file=@./image.png" --form "branch=main"       
+                                                                                                                      
+    # Debug the HTTP request and response, including headers and body.                                                
+    # Use --input (here, piped from stdin) for JSON arrays or objects;                                                
+    # --field only converts scalars (bool, int, null, placeholders, @file).                                           
+    echo '{"allowed_to_push":[{"user_id":1}]}' | GLAB_DEBUG_HTTP=1 glab api -X PATCH "projects/:fullpath/protected_…  
+                                                                                                                      
+    # Fetch all pages of issues                                                                                       
+    glab api issues --paginate                                                                                        
+                                                                                                                      
+    # Fetch all pages of issues as newline-delimited JSON                                                             
+    glab api issues --paginate --output ndjson                                                                        
+                                                                                                                      
+    # Pipe paginated output to jq to filter open issues                                                               
+    glab api issues --paginate --output ndjson | jq 'select(.state == "opened")'                                      
+                                                                                                                      
+    # Run a simple GraphQL query                                                                                      
+    glab api graphql -f query="query { currentUser { username } }"                                                    
+                                                                                                                      
+    # Run a multi-line GraphQL query for project metadata                                                             
+    glab api graphql -f query='                                                                                       
+    query {                                                                                                           
+    project(fullPath: "gitlab-org/gitlab-docs") {                                                                     
+    name                                                                                                              
+    forksCount                                                                                                        
+    statistics {                                                                                                      
+    wikiSize                                                                                                          
+    }                                                                                                                 
+    issuesEnabled                                                                                                     
+    boards {                                                                                                          
+    nodes {                                                                                                           
+    id                                                                                                                
+    name                                                                                                              
+    }                                                                                                                 
+    }                                                                                                                 
+    }                                                                                                                 
+    }                                                                                                                 
+    '                                                                                                                 
+                                                                                                                      
+    # Run a paginated GraphQL query using an endCursor variable                                                       
+    glab api graphql --paginate -f query='                                                                            
+    query($endCursor: String) {                                                                                       
+    project(fullPath: "gitlab-org/graphql-sandbox") {                                                                 
+    name                                                                                                              
+    issues(first: 2, after: $endCursor) {                                                                             
+    edges {                                                                                                           
+    node {                                                                                                            
+    title                                                                                                             
+    }                                                                                                                 
+    }                                                                                                                 
+    pageInfo {                                                                                                        
+    endCursor                                                                                                         
+    hasNextPage                                                                                                       
+    }                                                                                                                 
+    }                                                                                                                 
+    }                                                                                                                 
+    }'                                                                                                                
+         
+  FLAGS  
+         
+    -F --field      Add a parameter of inferred type. Using this flag changes the default HTTP method to POST.
+    --form          Add a multipart form field. To upload a file, prefix the value with @ followed by the file path. To read from standard input, use @- (at most once). Using this flag changes the default HTTP method to POST.
+    -H --header     Add an additional HTTP request header.
+    -h --help       Show help for this command.
+    --hostname      The GitLab hostname for the request. Defaults to gitlab.com, or the authenticated host in the current Git directory.
+    -i --include    Include HTTP response headers in the output.
+    --input         The file to use as the body for the HTTP request.
+    -X --method     The HTTP method for the request. (GET)
+    --output        Format output as: json, ndjson. (json)
+    --paginate      Make additional HTTP requests to fetch all pages of results.
+    -f --raw-field  Add a string parameter.
+    --silent        Do not print the response body.
+
+

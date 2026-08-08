@@ -1,0 +1,150 @@
+{
+  "schema": "glab-axi/official-glab-contract/v1",
+  "release": {
+    "version": "1.112.0",
+    "tag": "v1.112.0",
+    "tag_object": "a274f4c12f1ab92b155f09d2e0a9e106bcebb248",
+    "source_commit": "816e3a52411aba73d90237859fdc6ecbc86bd169",
+    "source_url": "https://gitlab.com/gitlab-org/cli/-/tree/v1.112.0",
+    "darwin_arm64_url": "https://gitlab.com/gitlab-org/cli/-/releases/v1.112.0/downloads/glab_1.112.0_darwin_arm64.tar.gz",
+    "darwin_arm64_sha256": "07f980f76cf11d32d946bb2f47d220ac5bc4bb5df136b0289df4325390034704",
+    "linux_amd64_url": "https://gitlab.com/gitlab-org/cli/-/releases/v1.112.0/downloads/glab_1.112.0_linux_amd64.tar.gz",
+    "linux_amd64_sha256": "f1c52907558b665f2032b615787d353cd06e54240b501a81f9489bfc8f6a8ebf",
+    "version_output": "glab 1.112.0 (816e3a52)",
+    "license": "MIT"
+  },
+  "evidence": {
+    "help_sha256": "6c3ce8f7a13d4986888a421a74e6d1afd4037874bcdad7ee6ca4c5b15fa60b9c",
+    "upstream_checksums_sha256": "1f5e5f804682f32119c7f86b8a838ef7319855e62fb01498e42cfd8764dd9097",
+    "auth_storage_source_sha256": "7ed4e4a28faf1367fb4e35fba25f59d24c8af0ae6328a900c71a66c873ac8e9e"
+  },
+  "authentication": {
+    "login_argv": ["auth", "login", "--hostname", "{host}"],
+    "status_argv": ["auth", "status", "--hostname", "{host}"],
+    "tty_required_by_glab_axi": true,
+    "forbidden_flags": ["--token", "--job-token", "--stdin", "--insecure-storage", "--api-protocol", "--git-protocol", "--web", "--device"],
+    "secure_default": "operating-system keyring when available",
+    "upstream_plaintext_fallback": true,
+    "fallback_warning": "The operating system keyring is unavailable. Storing credentials as plaintext in the configuration file.",
+    "glab_axi_policy": "preflight a non-secret secure-store probe and abort on the pinned fallback warning before token acquisition"
+  },
+  "operations": [
+    {
+      "name": "issue-list",
+      "kind": "read-json-page",
+      "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+    },
+    {
+      "name": "issue-view",
+      "kind": "read-json-object",
+      "argv": ["issue", "view", "{iid}", "--output", "json", "-R", "{repo}"]
+    },
+    {
+      "name": "mr-list",
+      "kind": "read-json-page",
+      "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+    },
+    {
+      "name": "mr-view",
+      "kind": "read-json-object",
+      "argv": ["mr", "view", "{iid}", "--output", "json", "-R", "{repo}"]
+    },
+    {
+      "name": "mr-diff",
+      "kind": "read-text",
+      "argv": ["mr", "diff", "{iid}", "--color", "never", "-R", "{repo}"]
+    },
+    {
+      "name": "mr-checks",
+      "kind": "read-json-object",
+      "argv": ["ci", "get", "--merge-request", "{iid}", "--output", "json", "-R", "{repo}"]
+    },
+    {
+      "name": "pipeline-list",
+      "kind": "read-json-page",
+      "argv": ["ci", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+    },
+    {
+      "name": "pipeline-view",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{id}"]
+    },
+    {
+      "name": "job-list",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{pipeline_id}/jobs?page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "job-view",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/jobs/{id}"]
+    },
+    {
+      "name": "job-trace",
+      "kind": "fixed-api-read-text",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/jobs/{id}/trace"]
+    },
+    {
+      "name": "release-list",
+      "kind": "read-json-page",
+      "argv": ["release", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+    },
+    {
+      "name": "release-view",
+      "kind": "read-json-object",
+      "argv": ["release", "view", "{tag}", "--output", "json", "-R", "{repo}"]
+    },
+    {
+      "name": "repo-list",
+      "kind": "read-json-page",
+      "argv": ["repo", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}"]
+    },
+    {
+      "name": "repo-view",
+      "kind": "read-json-object",
+      "argv": ["repo", "view", "{repo}", "--output", "json"]
+    },
+    {
+      "name": "label-list",
+      "kind": "read-json-page",
+      "argv": ["label", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+    },
+    {
+      "name": "search",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "{fixed_search_endpoint}"]
+    },
+    {
+      "name": "mr-ensure-project",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]
+    },
+    {
+      "name": "mr-ensure-list",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests?state=opened&source_branch={escaped_source}&target_branch={escaped_target}&page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "mr-ensure-create",
+      "kind": "fixed-api-write-json-object",
+      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests", "--input", "{private_json_file}"]
+    },
+    {
+      "name": "mr-ensure-update",
+      "kind": "fixed-api-write-json-object",
+      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}"]
+    }
+  ],
+  "permanent_denials": [
+    "public api passthrough",
+    "merge",
+    "approve",
+    "comment or note",
+    "close, reopen, or delete",
+    "repository mutation",
+    "release mutation",
+    "label mutation",
+    "pipeline trigger, retry, cancel, or delete",
+    "secret or variable access"
+  ]
+}

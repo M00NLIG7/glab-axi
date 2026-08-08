@@ -1,14 +1,12 @@
-package cli
+package v1cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"glab-axi/internal/app"
 	"glab-axi/internal/auth"
@@ -19,6 +17,7 @@ import (
 	"glab-axi/internal/limits"
 	"glab-axi/internal/output"
 	"glab-axi/internal/presentation"
+	"glab-axi/internal/privatefile"
 	runtimepkg "glab-axi/internal/runtime"
 )
 
@@ -297,42 +296,30 @@ func importToken(ctx context.Context, deps runtimepkg.Dependencies, parsed parse
 	if deps.Keyring == nil {
 		return v1.NewError(v1.CodeAuthentication, "no noninteractive OS keyring is available")
 	}
-	if err := config.Save(path, cfg); err != nil {
-		return err
+	service, account := auth.ServiceName(resolved), resolved.Name
+	previous, getErr := deps.Keyring.Get(ctx, service, account)
+	previousExists := getErr == nil
+	if getErr != nil && !errors.Is(getErr, auth.ErrKeyringNotFound) {
+		return v1.Wrap(v1.CodeAuthentication, "cannot prepare transactional GitLab credential import", getErr)
 	}
-	if err := deps.Keyring.Set(ctx, auth.ServiceName(resolved), resolved.Name, token); err != nil {
+	if err := deps.Keyring.Set(ctx, service, account, token); err != nil {
 		return v1.Wrap(v1.CodeAuthentication, "cannot store GitLab credential without interaction", err)
+	}
+	if err := config.Save(path, cfg); err != nil {
+		rollbackErr := deps.Keyring.Delete(ctx, service, account)
+		if previousExists {
+			rollbackErr = deps.Keyring.Set(ctx, service, account, previous)
+		}
+		if rollbackErr != nil {
+			return v1.Wrap(v1.CodeSafety, "credential import failed and secure-store rollback was incomplete", rollbackErr)
+		}
+		return err
 	}
 	return nil
 }
 
 func readPrivateFile(path string, max int, trimFinalNewline bool) (string, error) {
-	if !filepath.IsAbs(path) {
-		return "", v1.NewError(v1.CodeValidation, "input file path must be absolute")
-	}
-	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return "", v1.NewError(v1.CodeSafety, "input file must be a private regular file, not a symlink")
-	}
-	if info.Size() > int64(max+1) {
-		return "", v1.NewError(v1.CodeValidation, "input file exceeds the size limit")
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", v1.Wrap(v1.CodeUpstream, "cannot open input file", err)
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, int64(max+1)))
-	if err != nil {
-		return "", v1.Wrap(v1.CodeUpstream, "cannot read input file", err)
-	}
-	if trimFinalNewline {
-		data = []byte(strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r"))
-	}
-	if len(data) > max || !utf8.Valid(data) || strings.ContainsRune(string(data), '\x00') {
-		return "", v1.NewError(v1.CodeValidation, "input file violates the content limit")
-	}
-	return string(data), nil
+	return privatefile.Read(path, max, trimFinalNewline)
 }
 
 func positiveID(value, label string) (int64, error) {

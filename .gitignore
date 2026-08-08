@@ -1,4 +1,5 @@
 /dist/
+/.scratch/
 /coverage.out
 *.test
 .DS_Store
