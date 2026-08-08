@@ -1,69 +1,180 @@
 # glab-axi
 
-`glab-axi` is a bounded, native GitLab MR/CI client for agents. It calls a
-small allowlist of GitLab REST endpoints directly; it does not require or wrap
-the upstream `glab` CLI.
+`glab-axi` is a bounded GitLab experience for humans and agents. The v0.2
+rework combines two deliberately separate backends in one Go executable:
 
-The repository builds two executables:
+- a product-facing lane delegates a closed, version-tested allowlist of safe
+  reads and human login to **official `glab` 1.112.0 (`816e3a52`)**; and
+- the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
+  contract directly and remains fully standalone for no-mistakes custody.
 
-- `glab-axi`: the native command-first interface. It emits bounded TOON by
-  default and a versioned `glab-axi/v1` envelope with `--format json`.
-- `glab`: a separately built compatibility adapter for the exact command
-  contract used by no-mistakes v1.45.4. It is **not** the GitLab CLI.
+This is not `exec glab "$@"`. Unknown commands and prohibited mutations fail
+before executable discovery, credential resolution, child execution, or HTTP.
+Every delegated result is bounded and normalized into `glab-axi/ux-v1`; raw
+official-glab JSON and stderr never pass through.
 
-## Scope
+> **Activation status:** v0.2 is a release candidate. Do not replace an
+> installed provisional v0.1.0 until no-mistakes, genuine CI, human onboarding,
+> distribution, and separately approved read-only provider acceptance pass.
+
+## Product commands
 
 ```text
-glab-axi auth status --host HOST --repo GROUP/PROJECT
-glab-axi auth import --host HOST --api-base URL --web-base URL --token-stdin
-glab-axi mr ensure --host HOST --repo PROJECT --source BRANCH --target BRANCH \
-  --title-file /private/file --description-file /private/file
-glab-axi mr view IID --host HOST --repo PROJECT
-glab-axi ci status --mr IID --host HOST --repo PROJECT
-glab-axi ci jobs --pipeline-id ID --host HOST --repo PROJECT
-glab-axi ci trace JOB_ID --host HOST --repo PROJECT
+glab-axi                               # current-project dashboard
+
+glab-axi auth login [--hostname H]    # human TTY only
+glab-axi auth status [--hostname H]
+
+glab-axi issue list|view
+glab-axi mr list|view|checks|diff
+glab-axi mr ensure                     # only provider write
+glab-axi mr create-or-update           # same ensure semantics
+glab-axi pipeline list|view
+glab-axi job list|view|trace
+glab-axi release list|view
+glab-axi repo list|view
+glab-axi label list
+glab-axi search issues|mrs|repos|commits|code
+
+glab-axi setup hooks
+glab-axi update [--check]
 ```
 
-There are no merge, close, approve, delete, comment, repository-write,
-pipeline-mutation, browser-login, token-argument, extension, GraphQL, or generic
-API commands. Unsupported input exits before an HTTP request is made.
+Use current Git context or command-first `-R/--repo namespace/project` and
+`--hostname host`; space and equals forms are accepted. A `gitlab.com` remote
+may supply both defaults. Any self-managed remote must be paired with explicit
+`--hostname` or `GITLAB_HOST` authority so an untrusted remote cannot select
+where an environment credential is sent. `--limit` never raises hard limits. TOON is default; `--format json` selects the versioned JSON
+contract. Top-level, parent, and leaf help are local and do not probe auth or
+execute official `glab`. See the generated [command reference](docs/command-reference.md).
 
-## Build and test
+The permanent denial boundary includes generic API, merge, approve, comments or
+notes, close/reopen/delete, repository writes, release/label writes,
+secrets/variables, and pipeline/job mutation. GitHub-only concepts are not
+invented: GitLab uses MRs, pipelines, jobs, and repositories/projects.
 
-Requires Go 1.23 or newer. Builds are local; there is no install target.
+## Authentication
+
+Product login delegates only `glab auth login --hostname HOST` to checksum-
+pinned official `glab` 1.112.0 (`816e3a52`). It requires a real human TTY.
+Before execution, `glab-axi` probes the same OS keyring implementation with a
+random non-secret sentinel; it also aborts on the pinned upstream
+plaintext-fallback warning. Login strips ambient GitLab token/job-token
+variables so a human flow cannot silently persist a headless credential. There
+is no `--token`, `--stdin`, `--insecure-storage`, device, or browser flag on the
+`glab-axi auth login` surface. Official interactive text is relayed to the
+terminal on stderr so stdout remains one valid `glab-axi/ux-v1` envelope. An
+independently configured official-glab profile is an external human trust
+decision; `glab-axi` never parses, reads, exports, or copies its credentials.
+
+Approved `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, or `OAUTH_TOKEN` environment
+credentials remain available to official `glab` for headless product reads.
+The native v1 lane separately retains its ambiguity-checked environment/keyring
+resolver and stdin-only import. No lane falls back to the other credential
+store. See [authentication](docs/authentication.md).
+
+## Standalone native contract
+
+Existing no-mistakes forms and bytes remain native, including:
+
+```text
+glab-axi auth status --host H --repo P --format json
+glab-axi mr ensure ... --host H --repo P --format json
+glab-axi mr view IID --host H --repo P --format json
+glab-axi ci status|jobs|trace ... --host H --repo P --format json
+```
+
+The preferred explicit alias is:
+
+```text
+glab-axi --contract glab-axi/v1 <existing argv>
+```
+
+The old unnamespaced forms remain accepted. Contract routing happens before
+PATH lookup, so all v1 commands work with official `glab` absent. `--version`
+continues to emit the custody handshake:
+
+```text
+glab-axi 0.2.0 (contract glab-axi/v1)
+```
+
+The separately compiled `cmd/glab-compat` executable named `glab` exists only
+as a test artifact for installed no-mistakes v1.45.4. It is not built by the
+normal product target, packaged, installed, or placed on PATH.
+
+## Build and validation
+
+Requires Go 1.23 or newer. Tests use only local processes and TLS fake servers;
+they require no GitLab account and never contact a live GitLab API.
+
+```sh
+make test
+make race
+make vet
+make build                    # dist/glab-axi only
+make contract                 # pinned no-mistakes v1.45.4 fixture
+make fake                     # typed fake-GitLab protocol gate
+make compat                   # dist/test-only/glab, never distribute
+```
+
+The mandatory gate is:
 
 ```sh
 go test ./...
 go test -race ./...
 go vet ./...
-mkdir -p dist
-go build -trimpath -o dist/glab-axi ./cmd/glab-axi
-go build -trimpath -o dist/glab ./cmd/glab-compat
+make build
 ```
 
-The tests use only deterministic TLS fake GitLab servers. They do not require a
-GitLab account or credential and do not contact a live API.
+CI additionally downloads (without installing) the public upstream
+`glab_1.112.0_linux_amd64.tar.gz`, verifies its pinned SHA-256, and executes only
+its version/help contract. The authoritative local evidence and MIT license are
+under [`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
 
-## Authentication
+## Distribution and updates
 
-Tokens are accepted only from noninteractive environment sources or the OS
-keyring. Import accepts a token only through piped stdin and refuses a terminal.
-No credential value is written to config or output. Private hosts require an
-explicit full API base and web base. See [authentication](docs/authentication.md).
+The initial supported package channel is the repository's tagged GitHub
+Releases. A release is not valid until a maintainer configures the private
+`GLAB_AXI_UPDATE_SIGNING_KEY` secret and independently published
+`GLAB_AXI_UPDATE_PUBLIC_KEY` repository variable; release CI proves they match.
+It builds only `glab-axi` for Linux/Windows amd64 and macOS amd64/arm64. The
+legacy executable named `glab` is never an asset.
 
-## Compatibility
+Each release contains raw one-file executables, archives, build metadata,
+`checksums.txt`, its detached Ed25519 signature, the public key, and an
+Ed25519-signed update manifest. For a fresh install:
 
-The `glab` build accepts only the pinned no-mistakes v1.45.4 argv fixtures in
-[`contracts/no-mistakes/v1.45.4.json`](contracts/no-mistakes/v1.45.4.json).
-See [compatibility](docs/no-mistakes-compat.md).
+1. download one tagged archive plus `checksums.txt`, `checksums.txt.sig`, and
+   `glab-axi-update-public-key.txt` from that same release;
+2. compare the public key with the captain-pinned value obtained independently;
+3. verify the detached signature with an Ed25519-capable approved verifier,
+   then verify the archive's SHA-256 entry;
+4. extract `glab-axi` into a private user-owned executable directory on PATH;
+5. verify `glab-axi --version` and the recorded release hash before setup/auth.
+
+Do not treat a key downloaded only beside the artifact as its own trust root.
+Release packages carry exact third-party notices/licenses and the generated
+Agent Skill. No install script, release, or current installation is changed by
+building this repository.
+
+A release signing public key is injected into release binaries; development
+builds intentionally refuse self-update. `update --check` verifies the signed
+manifest and platform artifact metadata but never installs. Applying an update
+requires a real human TTY, verifies signature, size, SHA-256, and the candidate
+v1 handshake, then replaces a regular user-managed executable atomically with
+rollback. Package-managed/symlinked installs and Windows self-replacement are
+refused and must use the signed package channel.
+
+`setup hooks` installs the generated Agent Skill and bounded dashboard
+SessionStart hooks for Claude Code and Codex. It does not authenticate. Setup is
+transactional, preserves unrelated configuration, and refuses symlink targets.
 
 ## Design and security
 
 - [Architecture](docs/architecture.md)
 - [Authentication](docs/authentication.md)
-- [no-mistakes compatibility](docs/no-mistakes-compat.md)
 - [Security model](docs/security.md)
-
-This release is intentionally not wired into a shared no-mistakes daemon. A
-run-scoped native-client integration and separately authorized live validation
-remain external boundaries.
+- [no-mistakes compatibility](docs/no-mistakes-compat.md)
+- [Activation acceptance](docs/acceptance.md)
+- [`glab-axi/ux-v1` schema](schema/glab-axi-ux-v1.schema.json)
+- [`glab-axi/v1` schema](schema/glab-axi-v1.schema.json)
