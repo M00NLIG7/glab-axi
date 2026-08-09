@@ -5,9 +5,10 @@ The standalone `glab-axi` binary links the modules pinned in `go.mod`/`go.sum`:
 | Module | Version | License | Purpose |
 |---|---:|---|---|
 | `github.com/zalando/go-keyring` | v0.2.8 | MIT | Non-secret secure-store availability probe matching official glab |
+| `github.com/creack/pty` | v1.1.24 | MIT | Terminal-preserving monitored login output on macOS/Linux |
 | `github.com/danieljoos/wincred` | v1.2.3 | MIT | Windows Credential Manager backend (transitive) |
 | `github.com/godbus/dbus/v5` | v5.2.2 | BSD-2-Clause | Linux Secret Service transport (transitive) |
-| `golang.org/x/sys` | v0.27.0 | BSD-3-Clause | Platform system interfaces (transitive) |
+| `golang.org/x/sys` | v0.27.0 | BSD-3-Clause | Platform terminal, secure-store, and Windows ConPTY interfaces |
 | `golang.org/x/term` | v0.26.0 | BSD-3-Clause | Real-terminal detection for human-only operations |
 
 Exact license texts are distributed under `licenses/`.

@@ -13,13 +13,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"glab-axi/internal/auth"
 	"glab-axi/internal/contract/uxv1"
 	"glab-axi/internal/limits"
+
+	"golang.org/x/term"
 )
 
 const plaintextFallbackWarning = "The operating system keyring is unavailable. Storing credentials as plaintext in the configuration file."
@@ -122,6 +123,9 @@ func (c *Client) Login(ctx context.Context, host string) (string, error) {
 	if c.config.IsTerminal == nil || !c.config.IsTerminal() {
 		return "", uxv1.NewError(uxv1.CodeInteractiveRequired, "human authentication requires a real terminal")
 	}
+	if _, _, _, err := c.loginTerminalFiles(); err != nil {
+		return "", err
+	}
 	probe := c.config.SecureStoreProbe
 	if probe == nil {
 		probe = func(ctx context.Context) error { return auth.Probe(ctx, c.config.Keyring) }
@@ -137,6 +141,19 @@ func (c *Client) Login(ctx context.Context, host string) (string, error) {
 		return "", err
 	}
 	return version, nil
+}
+
+func (c *Client) loginTerminalFiles() (stdin, stdout, stderr *os.File, err error) {
+	stdin, stdinOK := c.config.Stdin.(*os.File)
+	stdout, stdoutOK := c.config.Stdout.(*os.File)
+	stderr, stderrOK := c.config.Stderr.(*os.File)
+	if !stdinOK || !stdoutOK || !stderrOK ||
+		!term.IsTerminal(int(stdin.Fd())) ||
+		!term.IsTerminal(int(stdout.Fd())) ||
+		!term.IsTerminal(int(stderr.Fd())) {
+		return nil, nil, nil, uxv1.NewError(uxv1.CodeInteractiveRequired, "human authentication requires three real terminal streams")
+	}
+	return stdin, stdout, stderr, nil
 }
 
 func (c *Client) ensureVersion(parent context.Context) (string, error) {
@@ -237,43 +254,6 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 	return stdout.buffer.Bytes(), nil
 }
 
-func (c *Client) runLogin(ctx context.Context, args []string, host string) error {
-	c.mu.Lock()
-	path := c.path
-	c.mu.Unlock()
-	childCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	cmd := exec.CommandContext(childCtx, path, args...)
-	cmd.Dir = c.config.Dir
-	cmd.Env = sanitizedEnv(c.config.Env, host, true)
-	cmd.Stdin = c.config.Stdin
-	// Keep the product stdout contract parseable even during a human flow:
-	// official interactive text is relayed to the terminal on stderr, while the
-	// caller emits the final ux-v1 envelope on stdout.
-	loginOutput := &lockedWriter{destination: c.config.Stderr}
-	cmd.Stdout = loginOutput
-	cmd.WaitDelay = 2 * time.Second
-	var fallback atomic.Bool
-	cmd.Stderr = &fallbackDetector{destination: loginOutput, cancel: cancel, found: &fallback}
-	if err := cmd.Start(); err != nil {
-		if ctx.Err() != nil {
-			return contextFailure(ctx, "official glab login")
-		}
-		return uxv1.Wrap(uxv1.CodeUpstream, "cannot start official glab login", err)
-	}
-	waitErr := cmd.Wait()
-	if fallback.Load() {
-		return uxv1.NewError(uxv1.CodeSafety, "official glab reported insecure credential storage; login was aborted")
-	}
-	if ctx.Err() != nil {
-		return contextFailure(ctx, "official glab login")
-	}
-	if waitErr != nil {
-		return uxv1.Wrap(uxv1.CodeAuthentication, "official glab login did not complete", waitErr)
-	}
-	return nil
-}
-
 func contextFailure(ctx context.Context, operation string) error {
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return uxv1.Wrap(uxv1.CodeCanceled, operation+" was canceled", ctx.Err())
@@ -367,46 +347,4 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=1")
 	}
 	return out
-}
-
-type lockedWriter struct {
-	mu          sync.Mutex
-	destination io.Writer
-}
-
-func (w *lockedWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.destination.Write(p)
-}
-
-type fallbackDetector struct {
-	destination io.Writer
-	cancel      context.CancelFunc
-	found       *atomic.Bool
-	window      string
-}
-
-func (d *fallbackDetector) Write(p []byte) (int, error) {
-	combined := d.window + string(p)
-	if strings.Contains(combined, plaintextFallbackWarning) {
-		d.found.Store(true)
-		d.cancel()
-	}
-	keep := len(plaintextFallbackWarning) - 1
-	if keep > len(combined) {
-		keep = len(combined)
-	}
-	d.window = combined[len(combined)-keep:]
-	if d.destination == nil {
-		return len(p), nil
-	}
-	written, err := d.destination.Write(p)
-	if err != nil {
-		return written, err
-	}
-	if written != len(p) {
-		return written, io.ErrShortWrite
-	}
-	return len(p), nil
 }

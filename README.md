@@ -62,10 +62,12 @@ random non-secret sentinel; it also aborts on the pinned upstream
 plaintext-fallback warning. Login strips ambient GitLab token/job-token
 variables so a human flow cannot silently persist a headless credential. There
 is no `--token`, `--stdin`, `--insecure-storage`, device, or browser flag on the
-`glab-axi auth login` surface. Official interactive text is relayed to the
-terminal on stderr so stdout remains one valid `glab-axi/ux-v1` envelope. An
-independently configured official-glab profile is an external human trust
-decision; `glab-axi` never parses, reads, exports, or copies its credentials.
+`glab-axi auth login` surface. A bounded PTY/ConPTY relay keeps all three child
+streams terminal-backed while monitoring the exact plaintext warning. Official
+interactive text is relayed to terminal stderr so stdout remains one valid
+`glab-axi/ux-v1` envelope. An independently configured official-glab profile is
+an external human trust decision; `glab-axi` never parses, reads, exports, or
+copies its credentials.
 
 Approved `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, or `OAUTH_TOKEN` environment
 credentials remain available to official `glab` for headless product reads.

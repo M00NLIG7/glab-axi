@@ -50,13 +50,41 @@ func TestParserAcceptsCommandFirstGlobalEqualsForms(t *testing.T) {
 func TestParserClassifiesPermanentSecurityBoundaries(t *testing.T) {
 	for _, args := range [][]string{
 		{"api", "projects"}, {"auth", "token"}, {"auth", "show-token"},
-		{"auth", "status", "--show-token"}, {"auth", "login", "--token", "sentinel"},
+		{"auth", "status", "--show-token"},
+		{"auth", "login", "--token", "sentinel"},
+		{"auth", "login", "--job-token", "sentinel"},
+		{"auth", "login", "--stdin"},
+		{"auth", "login", "--insecure-storage"},
+		{"auth", "login", "--web"},
+		{"auth", "login", "--device"},
 		{"mr", "merge", "1"}, {"mr", "comment", "1"}, {"issue", "close", "1"},
 		{"pipeline", "retry", "2"}, {"repo", "create"}, {"release", "upload"},
 		{"label", "delete"}, {"secret", "list"}, {"variable", "list"},
 	} {
 		if _, err := Parse(args); err == nil || string(uxCode(err)) != "security_boundary" {
 			t.Fatalf("%v error=%v", args, err)
+		}
+	}
+}
+
+func TestAuthLoginAcceptsOnlyOptionalHostname(t *testing.T) {
+	for _, args := range [][]string{
+		{"auth", "login"},
+		{"auth", "login", "--hostname", "gitlab.com"},
+		{"auth", "login", "--hostname=gitlab.example.invalid"},
+	} {
+		if result, err := Parse(args); err != nil || result.Command == nil {
+			t.Fatalf("valid login %v: result=%#v error=%v", args, result, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"auth", "login", "--format", "json"},
+		{"auth", "login", "--limit", "1"},
+		{"auth", "login", "-R", "group/project"},
+		{"auth", "login", "extra"},
+	} {
+		if _, err := Parse(args); err == nil {
+			t.Fatalf("login accepted wrapper bypass %v", args)
 		}
 	}
 }

@@ -25,17 +25,26 @@ Credential Manager, or Linux Secret Service, but its documented fallback is a
 plaintext config file when no keyring is available (and in CI). `glab-axi`
 refuses that fallback:
 
-1. all standard streams must pass an actual terminal ioctl/console check (a
-   character device such as `/dev/null` is not sufficient);
+1. all standard streams must be actual terminal files and pass a terminal
+   ioctl/console check (a character device such as `/dev/null` is not
+   sufficient);
 2. CI/GitLab-CI storage mode and ambient GitLab token/job-token variables are
    removed for the child, so login cannot persist a headless credential;
 3. a random, non-secret sentinel is written/deleted through the same
    cross-platform keyring library used by the pinned official release;
-4. stderr is monitored for the exact pinned plaintext-fallback warning; and
+4. the child's terminal output is monitored for the exact pinned
+   plaintext-fallback warning; and
 5. the child is canceled if either secure-store check fails.
 
-Official interactive stdout/stderr is relayed to the human terminal on stderr;
-stdout is reserved for the final parseable `glab-axi/ux-v1` envelope.
+Login uses a terminal-backed relay rather than `os/exec` writer pipes. On
+macOS/Linux the child inherits the human terminal for stdin and receives a PTY
+for stdout/stderr. On Windows it runs in ConPTY while a fixed-buffer input relay
+is active. Thus all three child descriptors remain terminals. Combined official
+stdout/stderr is validated and relayed immediately to the human terminal on
+stderr; stdout remains reserved for the final parseable `glab-axi/ux-v1`
+envelope. Monitoring retains only a fixed warning window, rejects malformed or
+more than 8 MiB of interactive output, suppresses output after the fallback
+warning, and never records terminal input.
 
 The sentinel uses a unique service/account and is not a credential. The probe
 does not list or read keyring entries. `glab-axi` never opens official glab's
