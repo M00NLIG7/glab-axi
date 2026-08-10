@@ -69,8 +69,7 @@ human prompt follows explicit caller/process cancellation rather than the
 bounded. Official interactive text is relayed to terminal stderr so stdout
 remains one valid `glab-axi/ux-v1` envelope. An independently configured
 official-glab profile is an external human trust decision; `glab-axi` never
-parses, reads, exports, or
-copies its credentials.
+parses, reads, exports, or copies its credentials.
 
 Approved `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, or `OAUTH_TOKEN` environment
 credentials remain available to official `glab` for headless product reads.
