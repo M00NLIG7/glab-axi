@@ -73,11 +73,7 @@ func startLoginTerminal(path string, args []string, dir string, environment []st
 		return nil, err
 	}
 	defer attributes.Delete()
-	if err := attributes.Update(
-		windows.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-		unsafe.Pointer(console),
-		unsafe.Sizeof(console),
-	); err != nil {
+	if err := updatePseudoConsoleAttribute(attributes, console); err != nil {
 		windows.ClosePseudoConsole(console)
 		_ = input.Close()
 		_ = output.Close()
@@ -201,6 +197,24 @@ func (s *windowsLoginTerminal) Close() error {
 		s.closeErr = s.output.Close()
 	})
 	return s.closeErr
+}
+
+var procUpdateProcThreadAttribute = windows.NewLazySystemDLL("kernel32.dll").NewProc("UpdateProcThreadAttribute")
+
+func updatePseudoConsoleAttribute(attributes *windows.ProcThreadAttributeListContainer, console windows.Handle) error {
+	ret, _, callErr := procUpdateProcThreadAttribute.Call(
+		uintptr(unsafe.Pointer(attributes.List())),
+		0,
+		windows.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+		uintptr(console),
+		unsafe.Sizeof(console),
+		0,
+		0,
+	)
+	if ret == 0 {
+		return callErr
+	}
+	return nil
 }
 
 func windowsConPTYAvailable() error {
