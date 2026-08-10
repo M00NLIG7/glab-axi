@@ -44,7 +44,10 @@ stdout/stderr is validated and relayed immediately to the human terminal on
 stderr; stdout remains reserved for the final parseable `glab-axi/ux-v1`
 envelope. Monitoring retains only a fixed warning window, rejects malformed or
 more than 8 MiB of interactive output, suppresses output after the fallback
-warning, and never records terminal input.
+warning, and never records terminal input. The human prompt is not subject to
+the 30-second noninteractive operation deadline: it runs until completion or
+explicit caller/process cancellation, while cancellation and relay shutdown
+remain bounded.
 
 The sentinel uses a unique service/account and is not a credential. The probe
 does not list or read keyring entries. `glab-axi` never opens official glab's

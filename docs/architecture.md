@@ -63,7 +63,7 @@ argv function. Each operation has one fixed builder in
    browsers, and prompts for data commands;
 5. preserves approved GitLab token environment sources for headless reads but
    strips them from human login;
-6. bounds stdout/stderr and operation time;
+6. bounds stdout/stderr and noninteractive operation time;
 7. rejects malformed, prefixed, trailing, oversized, or non-UTF-8 output; and
 8. maps child failures to controlled errors without rendering upstream stderr.
 
@@ -97,8 +97,10 @@ while a fixed-size window detects the exact pinned plaintext-fallback warning;
 malformed or more than 8 MiB of interactive output fails closed. Warning,
 monitor, cancellation, child-exit, and relay-drain states are reconciled before
 success, so a warning cannot race a zero exit. Input bytes are not logged or
-copied to product output. An unavailable secure store or warning cancels login,
-and no official credential/config file is opened by glab-axi.
+copied to product output. Login follows caller/process cancellation instead of
+the ordinary 30-second request deadline; its output and teardown bounds remain
+enforced. An unavailable secure store or warning cancels login, and no official
+credential/config file is opened by glab-axi.
 
 Product stdout remains one parseable envelope. Data commands always have stdin
 closed and prompts disabled. `auth status` does not expose `--show-token`; its
