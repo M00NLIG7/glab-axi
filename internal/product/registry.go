@@ -135,7 +135,7 @@ func TopHelp() string {
 		sort.Strings(leaves)
 		out.WriteString(fmt.Sprintf("  %-12s %s\n", name, strings.Join(leaves, ", ")))
 	}
-	out.WriteString("\nGlobal flags (after the command):\n")
+	out.WriteString("\nCommon flags (after the command; leaf help is authoritative):\n")
 	out.WriteString("  -R, --repo NAMESPACE/PROJECT   select a repository (space or equals form)\n")
 	out.WriteString("      --hostname HOST           select a GitLab host (or GITLAB_HOST)\n")
 	out.WriteString("      --limit N                 display at most N items (hard maximum 1000)\n")
@@ -227,7 +227,9 @@ func leafHelp(definition Definition) string {
 			out.WriteString(fmt.Sprintf("  %-28s %s\n", name, flag.Description))
 		}
 	}
-	if definition.RepoMode != RepoNone {
+	if strings.Join(definition.Path, " ") == "auth login" {
+		out.WriteString("\nTarget flag:\n      --hostname HOST\n")
+	} else if definition.RepoMode != RepoNone {
 		out.WriteString("\nTarget/output flags:\n  -R, --repo NAMESPACE/PROJECT\n      --hostname HOST\n      --limit N\n      --format toon|json\n")
 	} else {
 		out.WriteString("\nOutput flags:\n      --hostname HOST\n      --limit N\n      --format toon|json\n")

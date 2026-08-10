@@ -22,11 +22,14 @@ native HTTP transport.
 - permanent denied-command classification with zero child/request tests;
 - closed stdin plus prompt/pager/editor/browser/debug/update suppression for
   data commands;
-- real terminal/console check plus non-secret secure-store probe for human login;
-- ambient token/job-token removal and pinned plaintext-fallback warning cancellation;
+- three terminal-file checks plus a non-secret secure-store probe for human login;
+- PTY/ConPTY login delegation so child stdin/stdout/stderr remain terminals while
+  bounded output is relayed and monitored;
+- ambient token/job-token removal and exact pinned plaintext-fallback warning
+  cancellation, with warning state reconciled before success;
 - 5-second version check, 30/45-second operations, bounded stdout/stderr;
-- malformed, ANSI-prefixed, trailing, non-UTF-8, or oversized child output
-  rejected;
+- malformed, ANSI-prefixed, trailing, non-UTF-8, or oversized data-command
+  child output rejected;
 - controlled exit/error mapping without raw stderr or server body;
 - typed normalization and per-command JSON schemas;
 - HTTPS host and selected repository path validation on returned URLs;
@@ -96,7 +99,8 @@ redirects are rejected before forwarding credentials.
 | description | 128 KiB |
 | native JSON page | 2 MiB |
 | operation/output | 8 MiB |
-| official child stderr | 4 KiB (never rendered raw) |
+| interactive official login output | 8 MiB (relayed, not retained) |
+| official data-command child stderr | 4 KiB (never rendered raw) |
 | pagination | 10 pages / 1,000 items/jobs |
 | release download metadata | 100 entries |
 | trace tail | 256 KiB |
@@ -156,6 +160,10 @@ version, dashboard, or native contract execution.
 - Secure-store availability can change between probe and official storage. The
   pinned fallback-warning kill switch reduces but cannot eliminate OS-level
   races; human onboarding acceptance must inspect the resulting storage policy.
+- Windows interactive delegation requires the supported Windows ConPTY API. On
+  macOS/Linux, stdin remains the human terminal while child output uses a PTY;
+  on Windows, terminal input passes through one fixed, wiped relay buffer. A
+  platform that cannot establish that monitored terminal boundary fails closed.
 - Delegated fixed API calls inherit official-glab/profile TLS/proxy behavior.
   Native private-host controls are stronger and remain preferable for the
   no-mistakes contract.

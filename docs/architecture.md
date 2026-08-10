@@ -83,18 +83,27 @@ truncation metadata. Raw official documents never cross the product envelope.
 
 ## Authentication split
 
-`auth login` is the sole interactive delegated command. It checks all three
-standard streams with a real terminal/console test (not only character-device
-mode), removes ambient credential variables, writes/deletes a random non-secret sentinel via
-the same cross-platform keyring library pinned by official glab, clears CI
-storage mode, and watches stderr for the exact pinned plaintext-fallback
-warning. An unavailable secure store or warning cancels login before accepting
-a token. No official credential/config file is opened by glab-axi.
+`auth login` is the sole interactive delegated command. It requires all three
+configured streams to be terminal-backed files (not only character devices),
+removes ambient credential variables, writes/deletes a random non-secret
+sentinel via the same cross-platform keyring library pinned by official glab,
+and clears CI storage mode.
 
-Official login text is relayed to the human terminal on stderr so final product
-stdout remains one parseable envelope. Data commands always have stdin closed
-and prompts disabled. `auth status` does not expose `--show-token`; its child output is discarded and only a normalized
-boolean/host result crosses the boundary.
+The login child runs behind a terminal-preserving monitored boundary: direct
+human-terminal stdin plus PTY stdout/stderr on macOS/Linux, and ConPTY with a
+fixed-buffer input relay on Windows. All three child descriptors therefore pass
+real terminal checks. The combined terminal output is relayed to parent stderr
+while a fixed-size window detects the exact pinned plaintext-fallback warning;
+malformed or more than 8 MiB of interactive output fails closed. Warning,
+monitor, cancellation, child-exit, and relay-drain states are reconciled before
+success, so a warning cannot race a zero exit. Input bytes are not logged or
+copied to product output. An unavailable secure store or warning cancels login,
+and no official credential/config file is opened by glab-axi.
+
+Product stdout remains one parseable envelope. Data commands always have stdin
+closed and prompts disabled. `auth status` does not expose `--show-token`; its
+child output is discarded and only a normalized boolean/host result crosses
+the boundary.
 
 The native lane retains its own noninteractive environment/keyring model. Its
 stdin import is transactional: validation occurs first, keyring state is saved,

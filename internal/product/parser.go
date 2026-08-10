@@ -155,8 +155,10 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 	}
 	specs := map[string]flagSpec{
 		"--hostname": {canonical: "--hostname", value: true},
-		"--limit":    {canonical: "--limit", value: true},
-		"--format":   {canonical: "--format", value: true},
+	}
+	if strings.Join(definition.Path, " ") != "auth login" {
+		specs["--limit"] = flagSpec{canonical: "--limit", value: true}
+		specs["--format"] = flagSpec{canonical: "--format", value: true}
 	}
 	if definition.RepoMode != RepoNone {
 		specs["-R"] = flagSpec{canonical: "--repo", value: true}
