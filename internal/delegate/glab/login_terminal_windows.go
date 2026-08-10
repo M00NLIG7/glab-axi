@@ -201,6 +201,10 @@ func (s *windowsLoginTerminal) Close() error {
 
 var procUpdateProcThreadAttribute = windows.NewLazySystemDLL("kernel32.dll").NewProc("UpdateProcThreadAttribute")
 
+// updatePseudoConsoleAttribute calls UpdateProcThreadAttribute directly instead of
+// windows.ProcThreadAttributeListContainer.Update, because that helper's
+// unsafe.Pointer(console) conversion trips a go vet unsafeptr false positive
+// (console is a uintptr-backed handle, not a pointer into Go memory).
 func updatePseudoConsoleAttribute(attributes *windows.ProcThreadAttributeListContainer, console windows.Handle) error {
 	ret, _, callErr := procUpdateProcThreadAttribute.Call(
 		uintptr(unsafe.Pointer(attributes.List())),
