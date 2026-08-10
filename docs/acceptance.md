@@ -18,7 +18,8 @@ GitLab project (not Rune).
    without reading a credential or opening a browser.
 3. Install checksum-pinned official `glab` 1.112.0 through an official channel.
 4. In a real terminal, run `glab-axi auth login --hostname <test-host>` as the
-   human. Do not drive this through an agent.
+   human. Do not drive this through an agent. Confirm a prompt may remain open
+   beyond 30 seconds and that an explicit interrupt cancels it promptly.
 5. Confirm the OS secure store is used. If unavailable, the AXI must abort before
    token acquisition; no plaintext official config is permitted. Repeat with an
    ambient synthetic token sentinel and prove login strips it before the child.

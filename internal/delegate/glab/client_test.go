@@ -465,18 +465,84 @@ func TestLoginMapsChildFailureAndCancellationWithoutRawOutput(t *testing.T) {
 	}
 
 	cancelTerminals := newLoginTestTerminals(t)
+	ready := filepath.Join(t.TempDir(), "ready")
 	cancelClient := NewClient(ClientConfig{
-		Path:  script,
-		Env:   append(os.Environ(), "GLAB_AXI_FAKE_RECORD="+record, "GLAB_AXI_FAKE_MODE=login-wait"),
+		Path: script,
+		Env: append(os.Environ(),
+			"GLAB_AXI_FAKE_RECORD="+record,
+			"GLAB_AXI_FAKE_MODE=login-wait",
+			"GLAB_AXI_FAKE_READY="+ready,
+		),
 		Stdin: cancelTerminals.stdin.slave, Stdout: cancelTerminals.stdout.slave, Stderr: cancelTerminals.stderr.slave,
 		IsTerminal: func() bool { return true }, Keyring: &probeKeyring{},
 	})
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(150*time.Millisecond, cancel)
-	_, cancelErr := cancelClient.Login(ctx, "gitlab.com")
+	loginDone := make(chan error, 1)
+	go func() {
+		_, err := cancelClient.Login(ctx, "gitlab.com")
+		loginDone <- err
+	}()
+	waitForFakeGlabReady(t, ready, 5*time.Second)
+	started := time.Now()
+	cancel()
+	var cancelErr error
+	select {
+	case cancelErr = <-loginDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancellation did not terminate the delegated PTY child promptly")
+	}
 	cancelTerminals.close()
 	if cancelErr == nil || uxv1.AsError(cancelErr).Code != uxv1.CodeCanceled {
 		t.Fatalf("cancellation error=%v", cancelErr)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("cancellation took %s", elapsed)
+	}
+}
+
+func TestLoginOutputFailureTerminatesDelegatedPTYChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX script")
+	}
+	for _, test := range []struct {
+		mode    string
+		message string
+	}{
+		{mode: "login-overflow", message: "interactive output exceeded the safety limit"},
+		{mode: "login-malformed", message: "malformed interactive output"},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			script, record := fakeGlab(t)
+			ready := filepath.Join(t.TempDir(), "ready")
+			terminals := newLoginTestTerminals(t)
+			client := NewClient(ClientConfig{
+				Path: script,
+				Env: append(os.Environ(),
+					"GLAB_AXI_FAKE_RECORD="+record,
+					"GLAB_AXI_FAKE_MODE="+test.mode,
+					"GLAB_AXI_FAKE_READY="+ready,
+				),
+				Stdin: terminals.stdin.slave, Stdout: terminals.stdout.slave, Stderr: terminals.stderr.slave,
+				IsTerminal: func() bool { return true }, Keyring: &probeKeyring{},
+			})
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			started := time.Now()
+			_, loginErr := client.Login(ctx, "gitlab.com")
+			terminals.close()
+			if loginErr == nil || uxv1.AsError(loginErr).Code != uxv1.CodeUpstream || !strings.Contains(loginErr.Error(), test.message) {
+				t.Fatalf("login error=%v", loginErr)
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("output monitor failed to stop the child before the test deadline: %v", ctx.Err())
+			}
+			if _, err := os.Stat(ready); err != nil {
+				t.Fatalf("fake child did not reach its blocking prompt: %v", err)
+			}
+			if elapsed := time.Since(started); elapsed > 5*time.Second {
+				t.Fatalf("output failure took %s to terminate the child", elapsed)
+			}
+		})
 	}
 }
 
@@ -628,6 +694,22 @@ func loginErrString(err error) string {
 	return err.Error()
 }
 
+func waitForFakeGlabReady(t *testing.T, path string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("fake glab did not become ready: %s", path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func fakeGlab(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -691,6 +773,20 @@ if [ "${1:-}" = "auth" ] && [ "${2:-}" = "login" ]; then
     if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
       : > "${GLAB_AXI_FAKE_READY}"
     fi
+    IFS= read -r _ignored
+  fi
+  if [ "${GLAB_AXI_FAKE_MODE:-}" = "login-overflow" ]; then
+    if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
+      : > "${GLAB_AXI_FAKE_READY}"
+    fi
+    dd if=/dev/zero bs=1048576 count=9 2>/dev/null | tr '\000' x
+    IFS= read -r _ignored
+  fi
+  if [ "${GLAB_AXI_FAKE_MODE:-}" = "login-malformed" ]; then
+    if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
+      : > "${GLAB_AXI_FAKE_READY}"
+    fi
+    printf '\377'
     IFS= read -r _ignored
   fi
   exit 0

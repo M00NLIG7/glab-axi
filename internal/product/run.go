@@ -170,6 +170,17 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	}
 	meta.Host, meta.Repo = target.Host, target.Repo
 	client := deps.delegate()
+	if path == "auth login" {
+		// Human authorization follows only caller cancellation. The ordinary
+		// noninteractive operation deadline is too short for a human prompt.
+		version, err := client.Login(parent, target.Host)
+		meta.UpstreamVersion = version
+		if err != nil {
+			return commandOutput{meta: meta}, err
+		}
+		return commandOutput{data: map[string]any{"authenticated": true, "host": target.Host, "storage": "operating_system_keyring"}, meta: meta}, nil
+	}
+
 	timeout := limits.ShortOperation
 	if parsed.Definition.Write {
 		timeout = limits.WriteOperation
@@ -178,13 +189,6 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	defer cancel()
 
 	switch path {
-	case "auth login":
-		version, err := client.Login(ctx, target.Host)
-		meta.UpstreamVersion = version
-		if err != nil {
-			return commandOutput{meta: meta}, err
-		}
-		return commandOutput{data: map[string]any{"authenticated": true, "host": target.Host, "storage": "operating_system_keyring"}, meta: meta}, nil
 	case "auth status":
 		version, err := client.AuthStatus(ctx, target.Host)
 		meta.UpstreamVersion = version

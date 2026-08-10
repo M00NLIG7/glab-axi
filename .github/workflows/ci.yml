@@ -125,6 +125,19 @@ jobs:
           go build -trimpath -o "dist/test-only/glab${{ matrix.suffix }}" ./cmd/glab-compat
           go build -trimpath -o "dist/test-only/release-manifest${{ matrix.suffix }}" ./cmd/release-manifest
 
+      - name: Run Windows login terminal regressions
+        if: matrix.goos == 'windows'
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          go test ./internal/product -run '^TestProductLoginPreservesCallerLifetime$' -count=1
+          go test ./internal/delegate/glab \
+            -run '^(TestWindowsLoginTerminalModesAreRestored|TestWindowsConPTYLoginLifecycleAndSafety|TestLoginMonitorRejectsMalformedAndOversizedOutput)$' \
+            -count=1
+
   upstream-contract:
     name: Official glab v1.112.0 offline contract
     runs-on: ubuntu-24.04
