@@ -109,12 +109,15 @@ func testWindowsLoginTerminalModesAreRestored(t *testing.T) {
 
 func attachWindowsTestConsole() (func(), error) {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+	// CI shells may leave the process attached to a degenerate, non-interactive
+	// console inherited from the runner's own process tree. AllocConsole then
+	// fails with ERROR_ACCESS_DENIED and, if tolerated as-is, ConPTY children
+	// spawned against that ambient console never see a working terminal.
+	// Detach first so AllocConsole always creates a fresh, functional console.
+	_, _, _ = kernel32.NewProc("FreeConsole").Call()
 	allocated, _, callErr := kernel32.NewProc("AllocConsole").Call()
-	if allocated == 0 && !errors.Is(callErr, windows.ERROR_ACCESS_DENIED) {
-		return nil, fmt.Errorf("AllocConsole failed: %w", callErr)
-	}
 	if allocated == 0 {
-		return func() {}, nil
+		return nil, fmt.Errorf("AllocConsole failed: %w", callErr)
 	}
 	return func() {
 		_, _, _ = kernel32.NewProc("FreeConsole").Call()
