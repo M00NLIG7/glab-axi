@@ -127,16 +127,20 @@ jobs:
 
       - name: Run Windows login terminal regressions
         if: matrix.goos == 'windows'
-        shell: bash
+        # Git Bash (MinTTY) never attaches a real Win32 console to its child
+        # process tree, so AllocConsole/CreatePseudoConsole in these tests
+        # cannot host a working ConPTY there. pwsh runs with a genuine
+        # console-backed process tree, which these tests require.
+        shell: pwsh
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
         run: |
           go test ./internal/product -run '^TestProductLoginPreservesCallerLifetime$' -count=1
-          go test ./internal/delegate/glab \
-            -run '^(TestWindowsLoginTerminalModesAreRestored|TestWindowsConPTYLoginLifecycleAndSafety|TestLoginMonitorRejectsMalformedAndOversizedOutput)$' \
-            -count=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test ./internal/delegate/glab -run '^(TestWindowsLoginTerminalModesAreRestored|TestWindowsConPTYLoginLifecycleAndSafety|TestLoginMonitorRejectsMalformedAndOversizedOutput)$' -count=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   upstream-contract:
     name: Official glab v1.112.0 offline contract
