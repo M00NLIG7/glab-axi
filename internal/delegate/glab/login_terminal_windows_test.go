@@ -122,6 +122,18 @@ func attachWindowsTestConsole() (func(), error) {
 }
 
 func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
+	// CreatePseudoConsole must run from a process attached to a real Win32
+	// console: CI shells (e.g. GitHub Actions' bash steps) run with fully
+	// pipe-redirected stdio and no console anywhere in the process tree,
+	// which otherwise leaves the ConPTY-spawned child without a console
+	// GetConsoleMode recognizes. TestWindowsLoginTerminalModesAreRestored
+	// already relies on this same console for its own assertions.
+	detach, err := attachWindowsTestConsole()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer detach()
+
 	fakeGlab := buildWindowsLoginFake(t)
 
 	t.Run("child terminals and waiting prompt", func(t *testing.T) {
