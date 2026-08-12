@@ -227,6 +227,15 @@ func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
 		t.Run(test.mode+" output stops child", func(t *testing.T) {
 			ready := filepath.Join(t.TempDir(), "ready")
 			session := startWindowsLoginTestSession(t, fakeGlab, test.childMode, ready)
+			// Wait for the child to signal readiness before the relay starts:
+			// an injected malformed byte is served on the relay's very first
+			// Read, before it ever touches the real ConPTY pipe, so starting
+			// the relay first races session.Kill() (triggered by the
+			// malformed-output cancel) against the child's own startup writes
+			// (its stderr preamble and the ready file). Confirming readiness
+			// first makes the child's startup and the relay's kill happen in
+			// a fixed order.
+			waitForWindowsLoginFake(t, ready, 5*time.Second)
 			var source io.Reader = session
 			if len(test.inject) > 0 {
 				source = &injectedPrefixReader{prefix: test.inject, source: session}
@@ -237,7 +246,6 @@ func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
 				relayLoginOutput(source, &bytes.Buffer{}, test.max, func() { _ = session.Kill() }, state)
 				close(outputDone)
 			}()
-			waitForWindowsLoginFake(t, ready, 5*time.Second)
 			waitDone := make(chan error, 1)
 			go func() { waitDone <- session.Wait() }()
 			select {
