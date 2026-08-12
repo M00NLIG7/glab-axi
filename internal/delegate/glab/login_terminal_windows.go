@@ -113,7 +113,14 @@ func startLoginTerminal(path string, args []string, dir string, environment []st
 	}
 
 	startup := windows.StartupInfoEx{
-		StartupInfo:             windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfoEx{}))},
+		// STARTF_USESTDHANDLES with null std handles keeps the child from
+		// inheriting the caller's own (possibly redirected/piped, as under
+		// CI) standard handles instead of the pseudo console: without it,
+		// Windows silently falls back to the parent's handles even though
+		// PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE is set, and the child never
+		// sees a terminal. See
+		// https://github.com/microsoft/terminal/discussions/15814.
+		StartupInfo:             windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfoEx{})), Flags: windows.STARTF_USESTDHANDLES},
 		ProcThreadAttributeList: attributes.List(),
 	}
 	var processInfo windows.ProcessInformation
