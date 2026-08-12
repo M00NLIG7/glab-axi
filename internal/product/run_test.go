@@ -9,9 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"glab-axi/internal/contract/uxv1"
 	"glab-axi/internal/delegate/glab"
+	"glab-axi/internal/limits"
 	runtimepkg "glab-axi/internal/runtime"
 )
 
@@ -23,11 +25,15 @@ type fakeDelegate struct {
 	inputModes  []os.FileMode
 	inputErr    error
 	loginErr    error
+	loginFunc   func(context.Context, string) (string, error)
 	statusErr   error
 }
 
 func (f *fakeDelegate) Version(context.Context) (string, error) { return glab.SupportedVersion, nil }
-func (f *fakeDelegate) Login(context.Context, string) (string, error) {
+func (f *fakeDelegate) Login(ctx context.Context, host string) (string, error) {
+	if f.loginFunc != nil {
+		return f.loginFunc(ctx, host)
+	}
 	return glab.SupportedVersion, f.loginErr
 }
 func (f *fakeDelegate) AuthStatus(context.Context, string) (string, error) {
@@ -242,6 +248,27 @@ func TestHelpSurfacesExactPinnedOfficialGlabBuild(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("help %v did not surface the exact pinned upstream build %q: %s", args, want, stdout.String())
 		}
+	}
+}
+
+func TestProductLoginPreservesCallerLifetime(t *testing.T) {
+	callerDeadline := time.Now().Add(2 * limits.ShortOperation)
+	parent, cancel := context.WithDeadline(context.Background(), callerDeadline)
+	defer cancel()
+
+	delegate := &fakeDelegate{loginFunc: func(ctx context.Context, host string) (string, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok || !deadline.Equal(callerDeadline) {
+			t.Fatalf("login context deadline=%v present=%t; want caller deadline %v", deadline, ok, callerDeadline)
+		}
+		if host != "gitlab.example.invalid" {
+			t.Fatalf("login host=%q", host)
+		}
+		return glab.SupportedVersion, nil
+	}}
+	stdout, stderr, deps := productTestDeps(t, delegate)
+	if code := Run(parent, []string{"auth", "login", "--hostname", "gitlab.example.invalid"}, deps); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
 }
 

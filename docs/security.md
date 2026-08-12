@@ -27,7 +27,8 @@ native HTTP transport.
   bounded output is relayed and monitored;
 - ambient token/job-token removal and exact pinned plaintext-fallback warning
   cancellation, with warning state reconciled before success;
-- 5-second version check, 30/45-second operations, bounded stdout/stderr;
+- 5-second version check, 30/45-second noninteractive operations, bounded
+  stdout/stderr, and human login governed by caller/process cancellation;
 - malformed, ANSI-prefixed, trailing, non-UTF-8, or oversized data-command
   child output rejected;
 - controlled exit/error mapping without raw stderr or server body;
