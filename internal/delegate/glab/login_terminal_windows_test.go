@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -205,20 +206,35 @@ func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
 	})
 
 	for _, test := range []struct {
-		mode string
-		max  int
-		want error
+		mode      string
+		childMode string
+		max       int
+		want      error
+		inject    []byte
 	}{
-		{mode: "overflow", max: 64, want: errLoginOutputOverflow},
-		{mode: "malformed", max: 4096, want: errLoginOutputMalformed},
+		{mode: "overflow", childMode: "overflow", max: 64, want: errLoginOutputOverflow},
+		// Windows ConPTY re-serializes the child's raw stdout bytes as a VT
+		// text stream: conhost decodes every byte through a console
+		// codepage (replacing invalid UTF-8 with U+FFFD) or drops it (NUL as
+		// legacy padding) before it ever reaches our reader, so no byte the
+		// child can write survives the round trip as malformed UTF-8. Prove
+		// the malformed-output path instead by injecting the invalid byte
+		// directly into the relay's source stream while still requiring a
+		// real ConPTY-spawned child to be the thing session.Kill() tears
+		// down, matching the "cancellation terminates child promptly" case.
+		{mode: "malformed", childMode: "wait", max: 4096, want: errLoginOutputMalformed, inject: []byte{0xFF}},
 	} {
 		t.Run(test.mode+" output stops child", func(t *testing.T) {
 			ready := filepath.Join(t.TempDir(), "ready")
-			session := startWindowsLoginTestSession(t, fakeGlab, test.mode, ready)
+			session := startWindowsLoginTestSession(t, fakeGlab, test.childMode, ready)
+			var source io.Reader = session
+			if len(test.inject) > 0 {
+				source = &injectedPrefixReader{prefix: test.inject, source: session}
+			}
 			state := &loginOutputState{}
 			outputDone := make(chan struct{})
 			go func() {
-				relayLoginOutput(session, &bytes.Buffer{}, test.max, func() { _ = session.Kill() }, state)
+				relayLoginOutput(source, &bytes.Buffer{}, test.max, func() { _ = session.Kill() }, state)
 				close(outputDone)
 			}()
 			waitForWindowsLoginFake(t, ready, 5*time.Second)
@@ -236,6 +252,23 @@ func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
 			}
 		})
 	}
+}
+
+// injectedPrefixReader hands out a fixed prefix before falling through to
+// source, letting a test control the exact bytes a relay observes first
+// without needing the underlying transport (ConPTY) to preserve them.
+type injectedPrefixReader struct {
+	prefix []byte
+	source io.Reader
+}
+
+func (r *injectedPrefixReader) Read(data []byte) (int, error) {
+	if len(r.prefix) > 0 {
+		n := copy(data, r.prefix)
+		r.prefix = r.prefix[n:]
+		return n, nil
+	}
+	return r.source.Read(data)
 }
 
 func startWindowsLoginTestSession(t *testing.T, path, mode, ready string) loginTerminalSession {
@@ -325,13 +358,6 @@ func main() {
 		}
 	case "overflow":
 		_, _ = os.Stdout.Write(bytes.Repeat([]byte{'x'}, 65))
-		for { time.Sleep(time.Hour) }
-	case "malformed":
-		// 0xFF is never a valid UTF-8 lead byte. A NUL byte would also
-		// trigger the parser's malformed check, but Windows ConPTY
-		// re-serializes the child's output as a VT stream and drops NUL as
-		// a legacy padding character, so it never reaches the reader.
-		_, _ = os.Stdout.Write([]byte{0xFF})
 		for { time.Sleep(time.Hour) }
 	case "wait":
 		for { time.Sleep(time.Hour) }
