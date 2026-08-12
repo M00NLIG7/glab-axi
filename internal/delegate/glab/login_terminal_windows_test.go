@@ -122,6 +122,19 @@ func attachWindowsTestConsole() (func(), error) {
 }
 
 func TestWindowsConPTYLoginLifecycleAndSafety(t *testing.T) {
+	// CI test runners invoke this binary with no console attached to the
+	// process. CreatePseudoConsole falls back to that absent console instead
+	// of attaching the spawned child to the pseudo console it just created,
+	// so the fake child never sees a real console and term.IsTerminal is
+	// false for all three streams. Give the test process a console first,
+	// matching the workaround already used by
+	// TestWindowsLoginTerminalModesAreRestored.
+	detach, err := attachWindowsTestConsole()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer detach()
+
 	fakeGlab := buildWindowsLoginFake(t)
 
 	t.Run("child terminals and waiting prompt", func(t *testing.T) {
