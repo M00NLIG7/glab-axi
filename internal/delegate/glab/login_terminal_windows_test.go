@@ -327,7 +327,11 @@ func main() {
 		_, _ = os.Stdout.Write(bytes.Repeat([]byte{'x'}, 65))
 		for { time.Sleep(time.Hour) }
 	case "malformed":
-		_, _ = os.Stdout.Write([]byte{0})
+		// 0xFF is never a valid UTF-8 lead byte. A NUL byte would also
+		// trigger the parser's malformed check, but Windows ConPTY
+		// re-serializes the child's output as a VT stream and drops NUL as
+		// a legacy padding character, so it never reaches the reader.
+		_, _ = os.Stdout.Write([]byte{0xFF})
 		for { time.Sleep(time.Hour) }
 	case "wait":
 		for { time.Sleep(time.Hour) }
