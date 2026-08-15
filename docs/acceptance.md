@@ -51,10 +51,10 @@ GitLab project (not Rune).
 14. Revoke/remove disposable credentials through the official human cleanup
     path.
 
-Pass: a new human reaches authenticated, repository-scoped useful reads and
-idempotent MR ensure without manually discovering API bases on the default host,
-without an agent handling interactive credentials, and without plaintext
-fallback.
+Pass: a new human reaches authenticated, repository-scoped useful reads,
+idempotent MR ensure, and guarded squash merge without manually discovering API
+bases on the default host, without an agent handling interactive credentials,
+and without plaintext fallback.
 
 ## Safe read-only Rune MR/CI
 
