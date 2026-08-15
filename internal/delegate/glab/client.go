@@ -294,9 +294,11 @@ func classifyChildFailure(stderr []byte, cause error, write bool) error {
 		status, parseErr := strconv.Atoi(string(match[1]))
 		if parseErr == nil {
 			if write {
-				rejection, _ := uxv1.NewHTTPRejection(status)
-				rejection.Cause = cause
-				return rejection
+				if rejection, ok := uxv1.NewHTTPRejection(status); ok {
+					rejection.Cause = cause
+					return rejection
+				}
+				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 			}
 			switch status {
 			case 401:
