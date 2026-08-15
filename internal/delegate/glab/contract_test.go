@@ -35,8 +35,8 @@ func TestPinnedRequestBuildersEmitOnlyDeclaredArgv(t *testing.T) {
 		{Request{Operation: OpSearch, Host: "gitlab.com", Repo: "group/project", Scope: "issues", Query: "needs review", Page: 1, PerPage: 30}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/search?page=1&per_page=30&scope=issues&search=needs+review"}},
 		{Request{Operation: OpEnsureProject, Host: "gitlab.com", Repo: "group/project"}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject"}},
 		{Request{Operation: OpEnsureList, Host: "gitlab.com", Repo: "group/project", Source: "feature", Target: "main", Page: 1, PerPage: 100}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests?page=1&per_page=100&source_branch=feature&state=opened&target_branch=main"}},
-		{Request{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: input}, []string{"api", "--method", "POST", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests", "--input", input}},
-		{Request{Operation: OpEnsureUpdate, Host: "gitlab.com", Repo: "group/project", IID: 12, InputFile: input}, []string{"api", "--method", "PUT", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests/12", "--input", input}},
+		{Request{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: input}, []string{"api", "--method", "POST", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests", "--input", input, "--header", "Content-Type: application/json"}},
+		{Request{Operation: OpEnsureUpdate, Host: "gitlab.com", Repo: "group/project", IID: 12, InputFile: input}, []string{"api", "--method", "PUT", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests/12", "--input", input, "--header", "Content-Type: application/json"}},
 	}
 	for _, test := range requests {
 		invocation, err := build(test.request)

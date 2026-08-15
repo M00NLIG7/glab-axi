@@ -169,7 +169,7 @@ jobs:
             upstream-glab/glab.tar.gz | sha256sum --check --strict
           tar -xzf upstream-glab/glab.tar.gz -C upstream-glab
 
-      - name: Execute only version and help contract surfaces
+      - name: Execute version, help, and TLS mutation contract surfaces
         env:
           GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^TestPinnedUpstreamPublicContract$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS)$' -count=1

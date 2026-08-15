@@ -58,8 +58,9 @@ title/description on one exact open same-project source/target pair. It uses:
 - private mode-0600 JSON child input;
 - one POST or PUT maximum;
 - validation of mutation response; and
-- GET-only reconciliation after transport errors, malformed success, content
-  mismatch, or ambiguity.
+- GET-first reconciliation after every failed create. An exact requested MR
+  reconciles to success; a verified empty result preserves only a bounded class
+  for recognized HTTP rejections and leaves uncertain outcomes ambiguous.
 
 There is no blind mutation retry. Generic API, merge, approve, comment/note,
 close/reopen/delete, repository mutation, release/label mutation,

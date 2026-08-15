@@ -131,6 +131,115 @@ func TestMREnsureReconcilesAmbiguousCreateWithoutSecondMutation(t *testing.T) {
 	assertPrivateEnsurePayload(t, delegate, map[string]any{"source_branch": "feature", "target_branch": "main", "title": "wanted", "description": "body"})
 }
 
+func TestMREnsureReturnsClassifiedCreateRejectionAfterEmptyReconciliation(t *testing.T) {
+	for _, test := range []struct {
+		status   int
+		wantCode uxv1.Code
+		wantExit int
+	}{
+		{status: 400, wantCode: uxv1.CodeValidation, wantExit: 2},
+		{status: 403, wantCode: uxv1.CodeForbidden, wantExit: 4},
+		{status: 422, wantCode: uxv1.CodeValidation, wantExit: 2},
+	} {
+		t.Run(fmt.Sprint(test.status), func(t *testing.T) {
+			empty, _ := json.Marshal([]upstreamMR{})
+			project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+			rawChildOutput := fmt.Sprintf("provider-child-output-%d-sentinel", test.status)
+			createErr, ok := uxv1.NewHTTPRejection(test.status)
+			if !ok {
+				t.Fatal("test status is not classified")
+			}
+			// A delegate must never put child output in Message, but make the
+			// product boundary robust even against that unsafe implementation.
+			createErr.Message = rawChildOutput
+			createErr.Cause = errors.New(rawChildOutput)
+			delegate := &fakeDelegate{
+				responses: map[glab.Operation][]glab.Response{
+					glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+					glab.OpEnsureList: {
+						{Body: empty, UpstreamVersion: glab.SupportedVersion},
+						{Body: empty, UpstreamVersion: glab.SupportedVersion},
+						{Body: empty, UpstreamVersion: glab.SupportedVersion},
+					},
+				},
+				errors: map[glab.Operation][]error{glab.OpEnsureCreate: {createErr}},
+			}
+			stdout, stderr, deps := productTestDeps(t, delegate)
+			if code := Run(context.Background(), ensureArgs(t, "wanted", "body"), deps); code != test.wantExit {
+				t.Fatalf("exit=%d want=%d output=%s", code, test.wantExit, stdout.String())
+			}
+			var envelope uxv1.Envelope
+			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Error == nil || envelope.Error.Code != test.wantCode || envelope.Error.Code == uxv1.CodeAmbiguousCreate {
+				t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+			}
+			if strings.Contains(stdout.String(), rawChildOutput) || strings.Contains(stderr.String(), rawChildOutput) {
+				t.Fatalf("raw child output leaked: stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+			assertCreateFollowedByOneGET(t, delegate)
+		})
+	}
+}
+
+func TestMREnsureKeepsUncertainCreateFailuresAmbiguousAfterEmptyReconciliation(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		response glab.Response
+		err      error
+		sentinel string
+	}{
+		{
+			name:     "transport failure",
+			err:      uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", errors.New("transport-child-output-sentinel")),
+			sentinel: "transport-child-output-sentinel",
+		},
+		{
+			name:     "unverified child classification",
+			err:      uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", errors.New("unverified-child-output-sentinel")),
+			sentinel: "unverified-child-output-sentinel",
+		},
+		{
+			name:     "malformed successful output",
+			response: glab.Response{Body: []byte(`{"provider-malformed-success-sentinel":true}`), UpstreamVersion: glab.SupportedVersion},
+			sentinel: "provider-malformed-success-sentinel",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			empty, _ := json.Marshal([]upstreamMR{})
+			project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
+			delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+				glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
+				glab.OpEnsureList: {
+					{Body: empty, UpstreamVersion: glab.SupportedVersion},
+					{Body: empty, UpstreamVersion: glab.SupportedVersion},
+					{Body: empty, UpstreamVersion: glab.SupportedVersion},
+				},
+				glab.OpEnsureCreate: {test.response},
+			}}
+			if test.err != nil {
+				delegate.errors = map[glab.Operation][]error{glab.OpEnsureCreate: {test.err}}
+			}
+			stdout, stderr, deps := productTestDeps(t, delegate)
+			if code := Run(context.Background(), ensureArgs(t, "wanted", "body"), deps); code != 6 {
+				t.Fatalf("exit=%d output=%s", code, stdout.String())
+			}
+			var envelope uxv1.Envelope
+			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Error == nil || envelope.Error.Code != uxv1.CodeAmbiguousCreate {
+				t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+			}
+			if strings.Contains(stdout.String(), test.sentinel) || strings.Contains(stderr.String(), test.sentinel) {
+				t.Fatalf("raw child output leaked: stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+			assertCreateFollowedByOneGET(t, delegate)
+		})
+	}
+}
+
 func TestMREnsureReconcilesMalformedSuccessfulMutationResponse(t *testing.T) {
 	desired := ensureMR(10, "wanted", "body")
 	empty, _ := json.Marshal([]upstreamMR{})
@@ -225,6 +334,29 @@ func TestMREnsureUpdateUsesOnePrivateTypedPayload(t *testing.T) {
 		t.Fatalf("writes=%d output=%s", writes, stdout.String())
 	}
 	assertPrivateEnsurePayload(t, delegate, map[string]any{"title": "new", "description": "new body"})
+}
+
+func assertCreateFollowedByOneGET(t *testing.T, delegate *fakeDelegate) {
+	t.Helper()
+	creates := 0
+	createIndex := -1
+	for index, request := range delegate.requests {
+		switch request.Operation {
+		case glab.OpEnsureCreate:
+			creates++
+			createIndex = index
+		case glab.OpEnsureUpdate:
+			t.Fatalf("create path sent an update: requests=%#v", delegate.requests)
+		}
+	}
+	if creates != 1 || createIndex+1 >= len(delegate.requests) || delegate.requests[createIndex+1].Operation != glab.OpEnsureList {
+		t.Fatalf("create was not followed by exactly one GET reconciliation: requests=%#v", delegate.requests)
+	}
+	for _, request := range delegate.requests[createIndex+1:] {
+		if request.Operation == glab.OpEnsureCreate {
+			t.Fatalf("create path retried POST: requests=%#v", delegate.requests)
+		}
+	}
 }
 
 func ensureDelegate(t *testing.T, matches []upstreamMR) *fakeDelegate {

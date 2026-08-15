@@ -238,7 +238,7 @@ func build(request Request) (invocation, error) {
 			method = "PUT"
 			endpoint += "/" + strconv.FormatInt(request.IID, 10)
 		}
-		args := []string{"api", "--method", method, "--hostname", request.Host, endpoint, "--input", request.InputFile}
+		args := []string{"api", "--method", method, "--hostname", request.Host, endpoint, "--input", request.InputFile, "--header", "Content-Type: application/json"}
 		return invocation{args: args, host: request.Host, maxStdout: limits.MaxJSONPageBytes, write: true, outputKind: outputJSON}, nil
 	default:
 		return invocation{}, uxv1.NewError(uxv1.CodeUnsupported, "official-glab operation is not declared")

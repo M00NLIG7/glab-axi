@@ -151,6 +151,14 @@ func reconcileEnsure(ctx context.Context, client delegateClient, target Target, 
 		}
 		err = normalizeErr
 	}
+	if err == nil && len(matches) == 0 && code == uxv1.CodeAmbiguousCreate {
+		if classified := uxv1.AsError(cause); classified != nil {
+			if rejection, ok := uxv1.NewHTTPRejection(classified.StatusCode); ok {
+				rejection.Cause = cause
+				return commandOutput{meta: meta}, rejection
+			}
+		}
+	}
 	if err != nil {
 		cause = errors.Join(cause, err)
 	}
