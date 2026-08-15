@@ -210,6 +210,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 		return executeMRChecks(ctx, client, target, parsed, meta)
 	case "mr diff":
 		return executeMRDiff(ctx, client, target, parsed, meta)
+	case "mr merge":
+		return executeMRMerge(ctx, client, target, parsed, meta)
 	case "mr ensure", "mr create-or-update":
 		return executeMREnsure(ctx, client, target, parsed, meta)
 	case "pipeline list":

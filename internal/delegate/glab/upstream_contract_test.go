@@ -78,6 +78,7 @@ func TestPinnedUpstreamPublicContract(t *testing.T) {
 		{[]string{"mr", "list", "--help"}, []string{"--output", "--source-branch", "--target-branch"}},
 		{[]string{"mr", "view", "--help"}, []string{"--output", "--repo"}},
 		{[]string{"mr", "diff", "--help"}, []string{"--color", "--repo"}},
+		{[]string{"mr", "merge", "--help"}, []string{"--sha", "--squash", "--remove-source-branch", "--auto-merge"}},
 		{[]string{"ci", "list", "--help"}, []string{"--output", "--page", "--per-page"}},
 		{[]string{"ci", "get", "--help"}, []string{"--merge-request", "--pipeline-id", "--output"}},
 		{[]string{"release", "list", "--help"}, []string{"--output", "--page", "--per-page"}},
@@ -334,5 +335,136 @@ func TestPinnedOfficialGlabEnsureCreateTLS(t *testing.T) {
 	statusMu.Unlock()
 	if responses != len(statuses) || requests != len(statuses) {
 		t.Fatalf("TLS fake server requests=%d responses=%d want=%d", requests, responses, len(statuses))
+	}
+}
+
+// TestPinnedOfficialGlabMRMergeTLS proves that the exact fixed merge argv sends
+// one PUT with the four-key private payload for success and rejection paths.
+// It uses only a synthetic runtime token and an isolated local TLS endpoint.
+func TestPinnedOfficialGlabMRMergeTLS(t *testing.T) {
+	binary := os.Getenv("GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY")
+	if binary == "" {
+		t.Skip("official-glab package fixture not supplied")
+	}
+	binary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logicalHost := "gitlab.merge-contract.example"
+	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
+	statuses := []int{http.StatusOK, http.StatusMethodNotAllowed, http.StatusNotAcceptable, http.StatusConflict, http.StatusInternalServerError, http.StatusTemporaryRedirect}
+	records := make(chan capturedOfficialGlabMutation, len(statuses))
+	var statusMu sync.Mutex
+	statusIndex := 0
+	totalRequests := 0
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
+		records <- capturedOfficialGlabMutation{
+			method: r.Method, host: r.Host, requestURI: r.RequestURI,
+			contentType: r.Header.Get("Content-Type"), body: body, readErr: readErr,
+		}
+		statusMu.Lock()
+		totalRequests++
+		if statusIndex >= len(statuses) {
+			statusMu.Unlock()
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+			return
+		}
+		status := statuses[statusIndex]
+		statusIndex++
+		statusMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if status == http.StatusTemporaryRedirect {
+			w.Header().Set("Location", "https://"+logicalHost+"/api/v4/projects/group%2Fproject/merge_requests/42/redirected")
+		}
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, `{"status":%d,"sentinel":"merge-response-%d-sentinel"}`, status, status)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	server.StartTLS()
+	defer server.Close()
+	proxy := newTestTLSTunnelProxy(logicalHost+":443", server.Listener.Addr().String())
+	defer proxy.Close()
+
+	home := t.TempDir()
+	caBundle := filepath.Join(home, "fake-gitlab-ca.pem")
+	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expectedHead := "0123456789abcdef0123456789abcdef01234567"
+	payload := map[string]any{
+		"sha": expectedHead, "squash": true,
+		"should_remove_source_branch": false, "auto_merge": false,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(home, "merge-request.json")
+	if err := os.WriteFile(input, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	syntheticToken := strings.Join([]string{"synthetic", "merge", "contract", "token"}, "-")
+	controlledEnv := []string{
+		"HOME=" + home,
+		"GLAB_CONFIG_DIR=" + filepath.Join(home, "config"),
+		"GITLAB_TOKEN=" + syntheticToken,
+		"HTTPS_PROXY=" + proxy.URL,
+		"NO_PROXY=",
+		"SSL_CERT_FILE=" + caBundle,
+		"PATH=/usr/bin:/bin",
+	}
+	for _, status := range statuses {
+		client := NewClient(ClientConfig{Path: binary, Env: controlledEnv})
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		response, requestErr := client.Do(ctx, Request{
+			Operation: OpMRMerge, Host: logicalHost, Repo: "group/project", IID: 42, InputFile: input,
+		})
+		cancel()
+		switch status {
+		case http.StatusOK:
+			if requestErr != nil || !response.Write || response.UpstreamVersion != SupportedVersion {
+				t.Fatalf("200 response=%#v error=%v", response, requestErr)
+			}
+		case http.StatusMethodNotAllowed, http.StatusNotAcceptable, http.StatusConflict:
+			classified := uxv1.AsError(requestErr)
+			if classified.Code != uxv1.CodeConflict || classified.StatusCode != status || strings.Contains(classified.Error(), fmt.Sprintf("merge-response-%d-sentinel", status)) {
+				t.Fatalf("status %d classification=%#v raw=%v", status, classified, requestErr)
+			}
+		case http.StatusInternalServerError, http.StatusTemporaryRedirect:
+			classified := uxv1.AsError(requestErr)
+			if classified.Code != uxv1.CodeUpstream || classified.StatusCode != 0 {
+				t.Fatalf("status %d became a definite outcome: %#v raw=%v", status, classified, requestErr)
+			}
+		}
+
+		select {
+		case captured := <-records:
+			mediaType, _, mediaErr := mime.ParseMediaType(captured.contentType)
+			if captured.readErr != nil || captured.method != http.MethodPut || captured.host != logicalHost || captured.requestURI != "/api/v4/projects/group%2Fproject/merge_requests/42/merge" || mediaErr != nil || mediaType != "application/json" {
+				t.Fatalf("status %d request=%#v media_error=%v", status, captured, mediaErr)
+			}
+			var gotPayload map[string]any
+			if err := json.Unmarshal(captured.body, &gotPayload); err != nil || !reflect.DeepEqual(gotPayload, payload) {
+				t.Fatalf("status %d payload=%q decoded=%v error=%v", status, captured.body, gotPayload, err)
+			}
+			if strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
+				t.Fatalf("status %d exposed credential in URI/body", status)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("status %d did not reach the TLS fake server", status)
+		}
+	}
+
+	statusMu.Lock()
+	responses, requests := statusIndex, totalRequests
+	statusMu.Unlock()
+	if responses != len(statuses) || requests != len(statuses) {
+		t.Fatalf("merge TLS fake requests=%d responses=%d want=%d", requests, responses, len(statuses))
+	}
+	if info, err := os.Stat(input); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("merge private input mode=%v error=%v", info, err)
 	}
 }

@@ -3,8 +3,9 @@
 `glab-axi` is a bounded GitLab experience for humans and agents. The v0.2
 rework combines two deliberately separate backends in one Go executable:
 
-- a product-facing lane delegates a closed, version-tested allowlist of safe
-  reads and human login to **official `glab` 1.112.0 (`816e3a52`)**; and
+- a product-facing lane delegates a closed, version-tested allowlist of bounded
+  reads, two MR-only write contracts, and human login to **official `glab`
+  1.112.0 (`816e3a52`)**; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -27,8 +28,9 @@ glab-axi auth status [--hostname H]
 
 glab-axi issue list|view
 glab-axi mr list|view|checks|diff
-glab-axi mr ensure                     # only provider write
+glab-axi mr ensure                     # bounded create/update write
 glab-axi mr create-or-update           # same ensure semantics
+glab-axi mr merge IID ... --squash     # guarded exact-head write
 glab-axi pipeline list|view
 glab-axi job list|view|trace
 glab-axi release list|view
@@ -48,10 +50,22 @@ where an environment credential is sent. `--limit` never raises hard limits. TOO
 contract. Top-level, parent, and leaf help are local and do not probe auth or
 execute official `glab`. See the generated [command reference](docs/command-reference.md).
 
-The permanent denial boundary includes generic API, merge, approve, comments or
-notes, close/reopen/delete, repository writes, release/label writes,
-secrets/variables, and pipeline/job mutation. GitHub-only concepts are not
-invented: GitLab uses MRs, pipelines, jobs, and repositories/projects.
+Guarded merge requires an explicit host, nested project, canonical MR URL,
+reviewed lowercase head SHA, Firstmate authority class, and `--squash`. It
+requires provider-side successful-pipeline and resolved-discussion policies,
+revalidates the exact MR and all head-pipeline jobs/bridges, sends at most one
+fixed PUT with provider SHA enforcement, and reconciles uncertain outcomes with
+one GET. It never delegates `glab mr merge`, enables auto-merge, rebases, removes
+the source branch, or accepts a custom message. The pinned Firstmate contract is
+under [`contracts/firstmate`](contracts/firstmate/); Firstmate integration is a
+separate stage and is not implemented here. Agents must not self-assert
+`--authority` or bypass that lifecycle boundary.
+
+The permanent denial boundary includes generic API, unguarded/alternate merge,
+approve, comments or notes, close/reopen/delete, repository writes,
+release/label writes, secrets/variables, and pipeline/job mutation. GitHub-only
+concepts are not invented: GitLab uses MRs, pipelines, jobs, and
+repositories/projects.
 
 ## Authentication
 
@@ -72,7 +86,7 @@ official-glab profile is an external human trust decision; `glab-axi` never
 parses, reads, exports, or copies its credentials.
 
 Approved `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`, or `OAUTH_TOKEN` environment
-credentials remain available to official `glab` for headless product reads.
+credentials remain available to official `glab` for headless product operations.
 The native v1 lane separately retains its ambiguity-checked environment/keyring
 resolver and stdin-only import. No lane falls back to the other credential
 store. See [authentication](docs/authentication.md).
@@ -131,8 +145,9 @@ make build
 ```
 
 CI additionally downloads (without installing) the public upstream
-`glab_1.112.0_linux_amd64.tar.gz`, verifies its pinned SHA-256, and executes only
-its version/help contract. The authoritative local evidence and MIT license are
+`glab_1.112.0_linux_amd64.tar.gz`, verifies its pinned SHA-256, and executes its
+version/help contract plus isolated TLS fake-server ensure and guarded-merge
+mutation contracts. The authoritative local evidence and MIT license are
 under [`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
 
 ## Distribution and updates

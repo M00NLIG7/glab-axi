@@ -55,11 +55,11 @@ config, asks official glab to print a token, parses a credential source, or
 copies a value into its native store.
 
 A profile configured independently by a human with official `glab` is an
-external trust decision. Product reads use it as official glab normally would.
-`glab-axi auth status` delegates without `--show-token`, discards all child
+external trust decision. Product operations use it as official glab normally
+would. `glab-axi auth status` delegates without `--show-token`, discards all child
 text, and returns only normalized authentication state/host/backend metadata.
 
-### Headless product reads
+### Headless product operations
 
 Official glab v1.112.0 gives these approved environment values precedence over
 stored profiles:
@@ -68,10 +68,15 @@ stored profiles:
 - `GITLAB_ACCESS_TOKEN`
 - `OAUTH_TOKEN`
 
-They remain available to noninteractive delegated reads, but are stripped from
-`auth login`. Product data commands close stdin and disable prompts, pager,
-editor, browser, debug HTTP, CI auto-login, color, and update checks. Do not put credentials in argv, shell
-history, chat, fixtures, or logs.
+They remain available to noninteractive delegated operations, but are stripped
+from `auth login`. Product data commands close stdin and disable prompts, pager,
+editor, browser, debug HTTP, CI auto-login, color, and update checks. Do not put
+credentials in argv, shell history, chat, fixtures, or logs.
+
+Guarded `mr merge` uses this same opaque official-glab profile/environment lane.
+It never asks official glab to print a token, never reads its config, and never
+falls back to the native v1 keyring. Its fixed four-key request body contains no
+credential and is passed through a private mode-0600 file.
 
 ### OAuth/device and private-host limitations
 

@@ -195,13 +195,28 @@ func TestClientClassifiesEnsureCreateHTTPRejectionsWithPrivateInput(t *testing.T
 
 func TestMutationHTTPClassificationRequiresPinnedStatusFraming(t *testing.T) {
 	cause := errors.New("exit status 1")
-	unframed := classifyChildFailure([]byte(`{"message":"403 Forbidden provider text"}`), cause, true)
+	unframed := classifyChildFailure([]byte(`{"message":"403 Forbidden provider text"}`), cause, true, OpEnsureCreate)
 	if classified := uxv1.AsError(unframed); classified.StatusCode != 0 {
 		t.Fatalf("provider-controlled text became a definite rejection: %#v", classified)
 	}
-	framed := classifyChildFailure([]byte(`Post "https://gitlab.example.invalid/api/v4/projects/group%2Fproject/merge_requests": 403 Forbidden`), cause, true)
+	framed := classifyChildFailure([]byte(`Post "https://gitlab.example.invalid/api/v4/projects/group%2Fproject/merge_requests": 403 Forbidden`), cause, true, OpEnsureCreate)
 	if classified := uxv1.AsError(framed); classified.StatusCode != 403 || classified.Code != uxv1.CodeForbidden {
 		t.Fatalf("pinned child status framing was not classified: %#v", classified)
+	}
+}
+
+func TestMergeHTTPClassificationIsOperationSpecific(t *testing.T) {
+	cause := errors.New("exit status 1")
+	for _, status := range []int{405, 406} {
+		framed := []byte(fmt.Sprintf(`glab: %d rejected (HTTP %d): provider-sentinel`, status, status))
+		mergeErr := uxv1.AsError(classifyChildFailure(framed, cause, true, OpMRMerge))
+		if mergeErr.Code != uxv1.CodeConflict || mergeErr.StatusCode != status || strings.Contains(mergeErr.Error(), "provider-sentinel") {
+			t.Fatalf("merge status %d classification=%#v", status, mergeErr)
+		}
+		ensureErr := uxv1.AsError(classifyChildFailure(framed, cause, true, OpEnsureCreate))
+		if ensureErr.Code != uxv1.CodeUpstream || ensureErr.StatusCode != 0 {
+			t.Fatalf("ensure status %d was broadened by merge classification: %#v", status, ensureErr)
+		}
 	}
 }
 

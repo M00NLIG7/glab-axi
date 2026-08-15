@@ -23,9 +23,14 @@ never parses official `glab` config or credentials.
 `capabilities.json` is the implementation boundary. Public `glab-axi` input is
 never appended to an upstream argv. Each adapter constructs one listed argv,
 validates every substituted value, bounds child output, and normalizes it into
-a command-specific `glab-axi/ux-v1` schema.
+a command-specific `glab-axi/ux-v1` schema. The guarded merge entries pin four
+fixed reads and one fixed PUT; the PUT consumes only a private four-key JSON
+file, is invoked once, and is never delegated through interactive `glab mr
+merge` behavior.
 
 The Linux checksum in `capabilities.json` is also used by the offline upstream
-contract job in CI. Updating official `glab` requires a new versioned directory,
+contract job in CI. That job executes version/help plus isolated TLS fake-server
+ensure and guarded-merge requests with synthetic credentials; it never contacts
+a live GitLab API. Updating official `glab` requires a new versioned directory,
 fresh public-interface evidence, and adapter tests before changing the runtime
 pin.

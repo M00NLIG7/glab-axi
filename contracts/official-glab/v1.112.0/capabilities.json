@@ -134,11 +134,36 @@
       "name": "mr-ensure-update",
       "kind": "fixed-api-write-json-object",
       "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
+    },
+    {
+      "name": "mr-merge-project",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]
+    },
+    {
+      "name": "mr-merge-view",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}?with_merge_status_recheck=true"]
+    },
+    {
+      "name": "mr-merge-job-list",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{pipeline_id}/jobs?include_retried=false&page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "mr-merge-bridge-list",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{pipeline_id}/bridges?include_retried=false&page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "mr-merge",
+      "kind": "fixed-api-write-json-object-one-attempt",
+      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/merge", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
     }
   ],
   "permanent_denials": [
     "public api passthrough",
-    "merge",
+    "unguarded or alternate-strategy merge",
     "approve",
     "comment or note",
     "close, reopen, or delete",

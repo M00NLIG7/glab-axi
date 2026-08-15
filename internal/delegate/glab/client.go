@@ -30,7 +30,7 @@ var versionPattern = regexp.MustCompile(`^glab ([0-9]+\.[0-9]+\.[0-9]+) \(([0-9A
 
 // Only pinned wrapper framing can prove a status; an unframed provider body
 // may still influence the broad safe category below, but never StatusCode.
-var childHTTPRejectionPattern = regexp.MustCompile(`(?im)(?:\bhttp(?:\s+status)?(?:\s+code)?\s*[:=]?\s*|\bglab:\s*|\bapi\s+(?:request|call)\s+(?:failed|error)\s*:\s*|\b(?:get|post|put|patch|delete|head)\s+(?:"https://[^"\s]+"|https://[^\s]+):\s*)(400|401|403|404|409|422|429)\b`)
+var childHTTPRejectionPattern = regexp.MustCompile(`(?im)(?:\bhttp(?:\s+status)?(?:\s+code)?\s*[:=]?\s*|\bglab:\s*|\bapi\s+(?:request|call)\s+(?:failed|error)\s*:\s*|\b(?:get|post|put|patch|delete|head)\s+(?:"https://[^"\s]+"|https://[^\s]+):\s*)(400|401|403|404|405|406|409|422|429)\b`)
 
 type ClientConfig struct {
 	Path             string
@@ -91,12 +91,12 @@ func (c *Client) Do(ctx context.Context, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	body, err := c.runCapture(ctx, invocation.args, invocation.host, invocation.maxStdout, invocation.write, false)
+	body, err := c.runCapture(ctx, invocation.args, invocation.host, invocation.maxStdout, invocation.write, false, request.Operation)
 	if err != nil {
-		return Response{}, err
+		return Response{UpstreamVersion: version, Write: invocation.write}, err
 	}
 	if invocation.outputKind == outputJSON && !utf8.Valid(body) {
-		return Response{}, uxv1.NewError(uxv1.CodeUpstream, "official glab returned non-UTF-8 JSON")
+		return Response{UpstreamVersion: version, Write: invocation.write}, uxv1.NewError(uxv1.CodeUpstream, "official glab returned non-UTF-8 JSON")
 	}
 	return Response{Body: body, UpstreamVersion: version, Write: invocation.write}, nil
 }
@@ -109,7 +109,7 @@ func (c *Client) AuthStatus(ctx context.Context, host string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := c.runCapture(ctx, []string{"auth", "status", "--hostname", host}, host, limits.MaxErrorReadBytes, false, false); err != nil {
+	if _, err := c.runCapture(ctx, []string{"auth", "status", "--hostname", host}, host, limits.MaxErrorReadBytes, false, false, ""); err != nil {
 		if uxv1.AsError(err).Code == uxv1.CodeUpstream {
 			return "", uxv1.Wrap(uxv1.CodeAuthentication, "official glab is not authenticated for the selected host", err)
 		}
@@ -173,7 +173,7 @@ func (c *Client) ensureVersion(parent context.Context) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	body, err := c.runCapturePath(ctx, path, []string{"version"}, "", 4096, false, false)
+	body, err := c.runCapturePath(ctx, path, []string{"version"}, "", 4096, false, false, "")
 	if err != nil {
 		return "", uxv1.Wrap(uxv1.CodeDependencyUnsupported, "cannot verify official glab version", err)
 	}
@@ -216,17 +216,17 @@ func (c *Client) resolvePath() (string, error) {
 	return resolved, nil
 }
 
-func (c *Client) runCapture(ctx context.Context, args []string, host string, maxStdout int, write, login bool) ([]byte, error) {
+func (c *Client) runCapture(ctx context.Context, args []string, host string, maxStdout int, write, login bool, operation Operation) ([]byte, error) {
 	c.mu.Lock()
 	path := c.path
 	c.mu.Unlock()
 	if path == "" {
 		return nil, uxv1.NewError(uxv1.CodeDependencyMissing, "official glab path is unavailable")
 	}
-	return c.runCapturePath(ctx, path, args, host, maxStdout, write, login)
+	return c.runCapturePath(ctx, path, args, host, maxStdout, write, login, operation)
 }
 
-func (c *Client) runCapturePath(ctx context.Context, path string, args []string, host string, maxStdout int, write, login bool) ([]byte, error) {
+func (c *Client) runCapturePath(ctx context.Context, path string, args []string, host string, maxStdout int, write, login bool, operation Operation) ([]byte, error) {
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cmd := exec.CommandContext(childCtx, path, args...)
@@ -254,7 +254,7 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 		return nil, contextFailure(ctx, "official glab operation")
 	}
 	if waitErr != nil {
-		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write)
+		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write, operation)
 	}
 	return stdout.buffer.Bytes(), nil
 }
@@ -289,12 +289,12 @@ func (c *boundedCapture) Write(p []byte) (int, error) {
 	return original, nil
 }
 
-func classifyChildFailure(stderr []byte, cause error, write bool) error {
+func classifyChildFailure(stderr []byte, cause error, write bool, operation Operation) error {
 	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 2 {
 		status, parseErr := strconv.Atoi(string(match[1]))
 		if parseErr == nil {
 			if write {
-				if rejection, ok := uxv1.NewHTTPRejection(status); ok {
+				if rejection, ok := operationHTTPRejection(operation, status); ok {
 					rejection.Cause = cause
 					return rejection
 				}
@@ -328,6 +328,17 @@ func classifyChildFailure(stderr []byte, cause error, write bool) error {
 	default:
 		return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 	}
+}
+
+func operationHTTPRejection(operation Operation, status int) (*uxv1.Error, bool) {
+	if operation == OpMRMerge && (status == 405 || status == 406) {
+		return &uxv1.Error{
+			Code:       uxv1.CodeConflict,
+			Message:    fmt.Sprintf("GitLab refused to merge the merge request (HTTP %d)", status),
+			StatusCode: status,
+		}, true
+	}
+	return uxv1.NewHTTPRejection(status)
 }
 
 func sanitizedEnv(base []string, host string, login bool) []string {

@@ -58,11 +58,17 @@ jobs:
       - name: Verify generated help, schemas, and Agent Skill
         run: go test ./internal/product -run '^(TestGeneratedPublicAssetsMatchCommandRegistry|TestEveryCommandDeclaresAUniqueDataSchema)$' -count=1
 
-      - name: Verify pinned consumer contract
-        run: go test ./internal/compat -run '^TestNoMistakesV1454Contract$' -count=1
+      - name: Verify pinned consumer contracts
+        shell: bash
+        run: |
+          go test ./internal/compat -run '^TestNoMistakesV1454Contract$' -count=1
+          go test ./internal/product -run '^TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar$' -count=1
 
       - name: Verify GitLab protocol and security behavior
-        run: go test ./internal/gitlab -run '^TestFakeGitLab$' -count=1
+        shell: bash
+        run: |
+          go test ./internal/gitlab -run '^TestFakeGitLab$' -count=1
+          go test ./internal/product -run '^TestMRMerge' -count=1
 
       - name: Check package documentation
         shell: bash
@@ -172,4 +178,4 @@ jobs:
       - name: Execute version, help, and TLS mutation contract surfaces
         env:
           GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS)$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRMergeTLS)$' -count=1

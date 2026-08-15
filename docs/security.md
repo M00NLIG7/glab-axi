@@ -39,8 +39,9 @@ native HTTP transport.
 - fixed internal API routes only where official v1.112.0 lacks safe JSON
   commands; public `api` remains denied.
 
-Approved environment credentials pass directly to official glab for reads but
-are never placed in AXI argv/output; login removes them before child execution.
+Approved environment credentials pass directly to official glab for headless
+product operations but are never placed in AXI argv/output; login removes them
+before child execution.
 Only `gitlab.com` can be inferred as a host authority. Self-managed remotes need
 explicit `--hostname` or `GITLAB_HOST`, preventing an untrusted Git remote from
 selecting the destination for an environment credential. `GLAB_DEBUG_HTTP`, CI auto-login, update
@@ -49,22 +50,39 @@ profile or token source.
 
 ## Provider-write boundary
 
-The only product provider write is MR ensure/create-or-update. It permits only
-title/description on one exact open same-project source/target pair. It uses:
+The only product provider-write families are MR ensure/create-or-update and the
+pinned guarded immediate squash merge.
 
-- validated project identity;
-- all-page lookup and duplicate denial;
-- a second GET immediately before POST;
-- private mode-0600 JSON child input;
-- one POST or PUT maximum;
-- validation of mutation response; and
-- GET-first reconciliation after every failed create. An exact requested MR
-  reconciles to success; a verified empty result preserves only a bounded class
-  for recognized HTTP rejections and leaves uncertain outcomes ambiguous.
+MR ensure permits only title/description on one exact open same-project
+source/target pair. It uses validated project identity, all-page lookup,
+duplicate denial, a second GET before POST, private mode-0600 JSON, one POST or
+PUT maximum, response validation, and GET-first reconciliation after failed
+create. An exact requested MR reconciles to success; a verified empty result
+preserves only a bounded class for recognized HTTP rejections and leaves
+uncertain outcomes ambiguous.
 
-There is no blind mutation retry. Generic API, merge, approve, comment/note,
+Guarded merge requires explicit host/project/URL/IID/reviewed-head/authority and
+`--squash` at parse time. It additionally requires:
+
+- same-project identity and exact canonical returned URLs;
+- provider-side successful-pipeline and resolved-discussion enforcement;
+- open, non-draft, conflict-free, currently mergeable state with no existing
+  auto-merge or source-removal setting;
+- one exact successful head pipeline and every bounded page of current jobs and
+  trigger bridges, with unknown/incomplete state non-green;
+- an unconditional adjacent MR recheck;
+- one private four-key merge body with expected SHA, squash enabled, auto-merge
+  disabled, and source removal disabled;
+- one PUT maximum under a 15-second phase timeout, never a mutation retry;
+- strict merged identity, strategy, attribution, pipeline, and commit-SHA
+  validation; and
+- at most one bounded MR GET after an unvalidated outcome. Exact landed state
+  reconciles; a still-open MR preserves only a recognized framed rejection;
+  otherwise `ambiguous_merge` prevents a blind retry.
+
+Generic API, alternate/unguarded merge, approval, comment/note,
 close/reopen/delete, repository mutation, release/label mutation,
-secrets/variables, and pipeline/job trigger/retry/cancel/delete are denied
+secrets/variables, and pipeline/job trigger/retry/cancel/delete remain denied
 before child execution.
 
 ## Native v1 controls
@@ -103,7 +121,8 @@ redirects are rejected before forwarding credentials.
 | operation/output | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |
-| pagination | 10 pages / 1,000 items/jobs |
+| guarded merge phases | 20 s preflight / 15 s PUT / 10 s reconcile (45 s total) |
+| pagination | 10 pages / 1,000 items (merge jobs + bridges combined) |
 | release download metadata | 100 entries |
 | trace tail | 256 KiB |
 | product diff | 1 MiB |
@@ -123,7 +142,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate/ambiguous mutation |
+| 6 | conflict/duplicate/ambiguous create, update, or merge |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |
@@ -166,9 +185,10 @@ version, dashboard, or native contract execution.
   macOS/Linux, stdin remains the human terminal while child output uses a PTY;
   on Windows, terminal input passes through one fixed, wiped relay buffer. A
   platform that cannot establish that monitored terminal boundary fails closed.
-- Delegated fixed API calls inherit official-glab/profile TLS/proxy behavior.
-  Native private-host controls are stronger and remain preferable for the
-  no-mistakes contract.
+- Delegated fixed API calls, including guarded merge, inherit official-glab/
+  profile TLS/proxy and HTTP redirect behavior. Exact-version TLS contract tests
+  prove the expected one-request paths; native private-host transport controls
+  remain stronger.
 - Job traces/diffs/descriptions may contain application secrets unknown to
   generic redaction. Least privilege and GitLab masked variables remain
   required.

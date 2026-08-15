@@ -57,7 +57,7 @@ func TestParserClassifiesPermanentSecurityBoundaries(t *testing.T) {
 		{"auth", "login", "--insecure-storage"},
 		{"auth", "login", "--web"},
 		{"auth", "login", "--device"},
-		{"mr", "merge", "1"}, {"mr", "comment", "1"}, {"issue", "close", "1"},
+		{"mr", "approve", "1"}, {"mr", "comment", "1"}, {"issue", "close", "1"},
 		{"pipeline", "retry", "2"}, {"repo", "create"}, {"release", "upload"},
 		{"label", "delete"}, {"secret", "list"}, {"variable", "list"},
 	} {

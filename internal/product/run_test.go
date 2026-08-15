@@ -27,6 +27,7 @@ type fakeDelegate struct {
 	loginErr    error
 	loginFunc   func(context.Context, string) (string, error)
 	statusErr   error
+	doFunc      func(context.Context, glab.Request) (glab.Response, error, bool)
 }
 
 func (f *fakeDelegate) Version(context.Context) (string, error) { return glab.SupportedVersion, nil }
@@ -39,7 +40,7 @@ func (f *fakeDelegate) Login(ctx context.Context, host string) (string, error) {
 func (f *fakeDelegate) AuthStatus(context.Context, string) (string, error) {
 	return glab.SupportedVersion, f.statusErr
 }
-func (f *fakeDelegate) Do(_ context.Context, request glab.Request) (glab.Response, error) {
+func (f *fakeDelegate) Do(ctx context.Context, request glab.Request) (glab.Response, error) {
 	f.requests = append(f.requests, request)
 	if request.InputFile != "" {
 		body, err := os.ReadFile(request.InputFile)
@@ -52,6 +53,11 @@ func (f *fakeDelegate) Do(_ context.Context, request glab.Request) (glab.Respons
 			} else {
 				f.inputErr = statErr
 			}
+		}
+	}
+	if f.doFunc != nil {
+		if response, err, handled := f.doFunc(ctx, request); handled {
+			return response, err
 		}
 	}
 	responses := f.responses[request.Operation]
@@ -200,7 +206,7 @@ func TestProductTraceIsTailBoundedAndRedacted(t *testing.T) {
 
 func TestDeniedAndHelpPathsNeverConstructDelegateOrResolveCredentials(t *testing.T) {
 	for _, args := range [][]string{
-		{"mr", "merge", "1", "--format", "json"},
+		{"mr", "approve", "1", "--format", "json"},
 		{"api", "projects", "--format", "json"},
 		{"auth", "status", "--show-token"},
 		{"auth", "login", "--token", "synthetic"},

@@ -69,10 +69,11 @@ argv function. Each operation has one fixed builder in
 
 Most reads use official commands with documented JSON output. Operations for
 which v1.112.0 has no safe dedicated JSON command—job detail/trace, bounded
-search, and MR ensure—use internal fixed `glab api` routes. The public AXI has no
-`api` command, endpoint/method/header/body authority, or passthrough. Every
-fixed API argv is represented in the upstream capability fixture and exact-argv
-tests.
+search, MR ensure, and guarded MR merge—use internal fixed `glab api` routes.
+The public AXI has no `api` command, endpoint/method/header/body authority, or
+passthrough. Every fixed API argv is represented in the upstream capability
+fixture and exact-argv tests. Guarded merge callers cannot choose any route,
+method, query, header, or body field.
 
 List adapters request a one-item probe beyond the display limit, use at most 100
 items/page and 10 pages, and never claim completeness when a display/provider
@@ -113,7 +114,7 @@ config is atomically written, and a config failure restores the prior keyring
 entry. Private MR files are opened with no-follow semantics and validated from
 the descriptor to prevent path-swap reads.
 
-## MR ensure: only provider write
+## MR ensure: bounded create/update write
 
 Product `mr ensure` / `mr create-or-update` uses official authentication but
 preserves native ensure semantics:
@@ -132,7 +133,49 @@ preserves native ensure semantics:
    overflow, timeout, and malformed/unverifiable success remain ambiguous.
 
 Same-project IDs, exact branches, state, returned host/repository URL, and
-content are revalidated. All other provider mutations remain denied.
+content are revalidated.
+
+## Guarded MR merge: immediate squash write
+
+Product `mr merge` exists only for the pinned Firstmate consumer contract under
+`contracts/firstmate/`. Its parser requires an explicit host/repository,
+canonical MR URL, canonical positive IID, reviewed lowercase 40/64-hex head,
+authority enum, and `--squash` before target or delegate construction. Alternate
+strategies, auto-merge, rebase, source deletion, messages, aliases, and generic
+fields remain security denials. Nested namespaces and explicit host ports are
+supported; official profiles whose web base has an additional relative path are
+outside this first consumer contract and fail exact URL validation.
+
+The state machine uses the official profile without reading its credential:
+
+1. validate exact project identity and require provider-side successful-pipeline
+   and resolved-discussion policies;
+2. read the exact same-project MR with merge-status recheck and bind URL/IID/head;
+3. reject draft, conflict, unresolved, auto-merge, source-removal, unknown, or
+   nonmergeable states;
+4. require the provider-designated head pipeline at the expected SHA to be
+   `success`, then consume every bounded page of non-retried jobs and trigger
+   bridges with fail-closed status/identity checks;
+5. always re-read the MR adjacent to mutation and require the same pipeline;
+6. write a mode-0600 body containing only `sha`, `squash:true`,
+   `should_remove_source_branch:false`, and `auto_merge:false`;
+7. execute one fixed merge PUT under a 15-second phase budget, never retry it;
+8. validate exact merged identity, attribution, squash commit, strategy and
+   pipeline; and
+9. after any unvalidated mutation outcome, perform at most one bounded MR GET.
+
+An exact postcondition yields `merged`, `already_merged`, or
+`reconciled_merged`. A definite framed rejection is returned only after the MR
+is still open; transport, timeout, malformed output, cancellation after the PUT
+boundary, identity drift, or an unproved result returns `ambiguous_merge`
+(exit 6). The 45-second outer budget is partitioned into at most 20 seconds of
+preflight, 15 seconds for the mutation, and 10 seconds for reconciliation. No
+path issues a second PUT.
+
+`glab-axi` owns provider truth and one mutation. The pinned contract records
+that Firstmate owns task metadata, durable expected head, canonical URL, and
+captain/standing-yolo authority. This stage does not modify or integrate
+Firstmate. All other provider mutations remain denied.
 
 ## Native authority and CI semantics
 

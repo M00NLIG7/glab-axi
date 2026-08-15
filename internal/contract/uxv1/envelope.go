@@ -52,6 +52,8 @@ func helpFor(code Code) []string {
 		return []string{"verify the official-glab profile's project role without broadening glab-axi"}
 	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate:
 		return []string{"inspect exact matching merge requests before retrying"}
+	case CodeAmbiguousMerge:
+		return []string{"inspect the exact merge request URL and expected head before any retry"}
 	case CodeRateLimited:
 		return []string{"retry after the provider rate limit resets"}
 	case CodeSafety:
