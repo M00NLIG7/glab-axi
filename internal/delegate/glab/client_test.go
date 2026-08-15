@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -87,7 +88,7 @@ func TestClientPinsVersionSanitizesEnvironmentAndBoundsOutput(t *testing.T) {
 
 	overflow := NewClient(ClientConfig{Path: script, Env: append(os.Environ(), "GLAB_AXI_FAKE_RECORD="+record, "GLAB_AXI_FAKE_MODE=overflow")})
 	_, err = overflow.Do(context.Background(), Request{Operation: OpIssueView, Host: "gitlab.com", Repo: "group/project", IID: 7})
-	if err == nil || uxv1.AsError(err).Code != uxv1.CodeUpstream {
+	if err == nil || uxv1.AsError(err).Code != uxv1.CodeUpstream || uxv1.AsError(err).StatusCode != 0 {
 		t.Fatalf("overflow error=%v", err)
 	}
 }
@@ -105,7 +106,7 @@ func TestClientMapsTimeoutCancellationAndChildErrorsWithoutRawStderr(t *testing.
 	}
 	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer timeoutCancel()
-	if _, err := timeoutClient.Do(timeoutCtx, request); err == nil || uxv1.AsError(err).Code != uxv1.CodeUpstream {
+	if _, err := timeoutClient.Do(timeoutCtx, request); err == nil || uxv1.AsError(err).Code != uxv1.CodeUpstream || uxv1.AsError(err).StatusCode != 0 {
 		t.Fatalf("timeout error=%v", err)
 	}
 
@@ -113,15 +114,93 @@ func TestClientMapsTimeoutCancellationAndChildErrorsWithoutRawStderr(t *testing.
 	// cancellation rather than starting another dependency probe under load.
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := timeoutClient.Do(cancelCtx, request); err == nil || uxv1.AsError(err).Code != uxv1.CodeCanceled {
+	if _, err := timeoutClient.Do(cancelCtx, request); err == nil || uxv1.AsError(err).Code != uxv1.CodeCanceled || uxv1.AsError(err).StatusCode != 0 {
 		t.Fatalf("cancel error=%v", err)
 	}
 
 	childSecret := strings.Join([]string{"glpat", "child", "stderr", "sentinel"}, "-")
 	failureClient := NewClient(ClientConfig{Path: script, Env: append(os.Environ(), "GLAB_AXI_FAKE_RECORD="+record, "GLAB_AXI_FAKE_MODE=auth-failure", "GLAB_AXI_FAKE_STDERR_SENTINEL="+childSecret)})
 	_, err := failureClient.Do(context.Background(), request)
-	if err == nil || uxv1.AsError(err).Code != uxv1.CodeAuthentication || strings.Contains(err.Error(), childSecret) {
+	if err == nil || uxv1.AsError(err).Code != uxv1.CodeAuthentication || uxv1.AsError(err).StatusCode != 0 || strings.Contains(err.Error(), childSecret) {
 		t.Fatalf("child error=%v", err)
+	}
+}
+
+func TestClientClassifiesEnsureCreateHTTPRejectionsWithPrivateInput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX script")
+	}
+	for _, test := range []struct {
+		status   int
+		wantCode uxv1.Code
+	}{
+		{status: 400, wantCode: uxv1.CodeValidation},
+		{status: 401, wantCode: uxv1.CodeAuthentication},
+		{status: 403, wantCode: uxv1.CodeForbidden},
+		{status: 404, wantCode: uxv1.CodeNotFound},
+		{status: 409, wantCode: uxv1.CodeConflict},
+		{status: 422, wantCode: uxv1.CodeValidation},
+		{status: 429, wantCode: uxv1.CodeRateLimited},
+	} {
+		t.Run(fmt.Sprint(test.status), func(t *testing.T) {
+			script, record := fakeGlab(t)
+			payload := `{"description":"body","source_branch":"fm/test/slash","target_branch":"main","title":"wanted"}`
+			input := filepath.Join(t.TempDir(), "request.json")
+			if err := os.WriteFile(input, []byte(payload), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			rawChildOutput := fmt.Sprintf("provider-response-%d-sentinel", test.status)
+			client := NewClient(ClientConfig{
+				Path: script,
+				Env: append(os.Environ(),
+					"GLAB_AXI_FAKE_RECORD="+record,
+					"GLAB_AXI_FAKE_MODE=http-rejection",
+					fmt.Sprintf("GLAB_AXI_FAKE_HTTP_STATUS=%d", test.status),
+					"GLAB_AXI_FAKE_EXPECT_INPUT="+payload,
+					"GLAB_AXI_FAKE_STDERR_SENTINEL="+rawChildOutput,
+				),
+			})
+			_, err := client.Do(context.Background(), Request{
+				Operation: OpEnsureCreate,
+				Host:      "gitlab.example.invalid",
+				Repo:      "group/project",
+				InputFile: input,
+			})
+			classified := uxv1.AsError(err)
+			if classified == nil || classified.Code != test.wantCode || classified.StatusCode != test.status {
+				t.Fatalf("classified error=%#v raw=%v", classified, err)
+			}
+			if strings.Contains(err.Error(), rawChildOutput) {
+				t.Fatalf("raw child output leaked through error: %v", err)
+			}
+			data, readErr := os.ReadFile(record)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			recorded := string(data)
+			if !strings.Contains(recorded, "api --method POST --hostname gitlab.example.invalid projects/group%2Fproject/merge_requests --input "+input) {
+				t.Fatalf("ensure-create did not use the pinned private-input argv: %q", recorded)
+			}
+			if strings.Contains(recorded, payload) {
+				t.Fatalf("private payload reached child argv record: %q", recorded)
+			}
+			info, statErr := os.Stat(input)
+			if statErr != nil || info.Mode().Perm() != 0o600 {
+				t.Fatalf("private input mode=%v err=%v", info, statErr)
+			}
+		})
+	}
+}
+
+func TestMutationHTTPClassificationRequiresPinnedStatusFraming(t *testing.T) {
+	cause := errors.New("exit status 1")
+	unframed := classifyChildFailure([]byte(`{"message":"403 Forbidden provider text"}`), cause, true)
+	if classified := uxv1.AsError(unframed); classified.StatusCode != 0 {
+		t.Fatalf("provider-controlled text became a definite rejection: %#v", classified)
+	}
+	framed := classifyChildFailure([]byte(`Post "https://gitlab.example.invalid/api/v4/projects/group%2Fproject/merge_requests": 403 Forbidden`), cause, true)
+	if classified := uxv1.AsError(framed); classified.StatusCode != 403 || classified.Code != uxv1.CodeForbidden {
+		t.Fatalf("pinned child status framing was not classified: %#v", classified)
 	}
 }
 
@@ -800,7 +879,29 @@ if [ "${GLAB_AXI_FAKE_MODE:-}" = "sleep" ]; then
   exit 0
 fi
 if [ "${GLAB_AXI_FAKE_MODE:-}" = "auth-failure" ]; then
-  printf '401 token %s\n' "${GLAB_AXI_FAKE_STDERR_SENTINEL:-synthetic}" >&2
+  printf '401 Unauthorized (HTTP 401): %s\n' "${GLAB_AXI_FAKE_STDERR_SENTINEL:-synthetic}" >&2
+  exit 1
+fi
+if [ "${GLAB_AXI_FAKE_MODE:-}" = "http-rejection" ]; then
+  if [ "$#" -ne 8 ] || [ "${1:-}" != "api" ] || [ "${2:-}" != "--method" ] || [ "${3:-}" != "POST" ] || [ "${4:-}" != "--hostname" ] || [ "${7:-}" != "--input" ]; then
+    printf 'unexpected ensure-create argv\n' >&2
+    exit 94
+  fi
+  if [ "$(cat "$8")" != "${GLAB_AXI_FAKE_EXPECT_INPUT:-}" ]; then
+    printf 'private input mismatch\n' >&2
+    exit 94
+  fi
+  case "${GLAB_AXI_FAKE_HTTP_STATUS:-}" in
+    400) reason='Bad Request' ;;
+    401) reason='Unauthorized' ;;
+    403) reason='Forbidden' ;;
+    404) reason='Not Found' ;;
+    409) reason='Conflict' ;;
+    422) reason='Unprocessable Entity' ;;
+    429) reason='Too Many Requests' ;;
+    *) printf 'unsupported fake status\n' >&2; exit 94 ;;
+  esac
+  printf 'glab: %s %s (HTTP %s): %s\n' "${GLAB_AXI_FAKE_HTTP_STATUS}" "$reason" "${GLAB_AXI_FAKE_HTTP_STATUS}" "${GLAB_AXI_FAKE_STDERR_SENTINEL:-synthetic}" >&2
   exit 1
 fi
 if [ -n "${GLAB_AXI_FAKE_BODY:-}" ]; then

@@ -28,13 +28,14 @@ const (
 	CodeAmbiguousUpdate       Code = "ambiguous_update"
 )
 
-// Error is the stable product failure. Cause is retained only for control flow
-// and is never serialized.
+// Error is the stable product failure. Cause and StatusCode are retained only
+// for control flow and are never serialized.
 type Error struct {
-	Code      Code   `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable"`
-	Cause     error  `json:"-"`
+	Code       Code   `json:"code"`
+	Message    string `json:"message"`
+	Retryable  bool   `json:"retryable"`
+	StatusCode int    `json:"-"`
+	Cause      error  `json:"-"`
 }
 
 func (e *Error) Error() string {
@@ -54,6 +55,34 @@ func Wrap(code Code, message string, cause error) *Error {
 	return &Error{Code: code, Message: message, Cause: cause}
 }
 
+// NewHTTPRejection returns a bounded product error for HTTP statuses that
+// prove the provider returned a definite rejection. Provider response text is
+// deliberately excluded.
+func NewHTTPRejection(status int) (*Error, bool) {
+	var code Code
+	var message string
+	retryable := false
+	switch status {
+	case 400:
+		code, message = CodeValidation, "GitLab rejected the request (HTTP 400)"
+	case 401:
+		code, message = CodeAuthentication, "GitLab rejected authentication (HTTP 401)"
+	case 403:
+		code, message = CodeForbidden, "GitLab denied the operation (HTTP 403)"
+	case 404:
+		code, message = CodeNotFound, "GitLab resource was not found (HTTP 404)"
+	case 409:
+		code, message = CodeConflict, "GitLab reported a conflict (HTTP 409)"
+	case 422:
+		code, message = CodeValidation, "GitLab rejected the request (HTTP 422)"
+	case 429:
+		code, message, retryable = CodeRateLimited, "GitLab rate limit was reached (HTTP 429)", true
+	default:
+		return nil, false
+	}
+	return &Error{Code: code, Message: message, Retryable: retryable, StatusCode: status}, true
+}
+
 func AsError(err error) *Error {
 	if err == nil {
 		return nil
@@ -64,7 +93,7 @@ func AsError(err error) *Error {
 	}
 	var native *v1.Error
 	if errors.As(err, &native) {
-		return &Error{Code: fromNative(native.Code), Message: native.Message, Retryable: native.Retryable, Cause: err}
+		return &Error{Code: fromNative(native.Code), Message: native.Message, Retryable: native.Retryable, StatusCode: native.StatusCode, Cause: err}
 	}
 	return &Error{Code: CodeInternal, Message: "internal error", Cause: err}
 }

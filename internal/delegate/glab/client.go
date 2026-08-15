@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,10 @@ import (
 const plaintextFallbackWarning = "The operating system keyring is unavailable. Storing credentials as plaintext in the configuration file."
 
 var versionPattern = regexp.MustCompile(`^glab ([0-9]+\.[0-9]+\.[0-9]+) \(([0-9A-Za-z._+-]+)\)\n?$`)
+
+// Only pinned wrapper framing can prove a status; an unframed provider body
+// may still influence the broad safe category below, but never StatusCode.
+var childHTTPRejectionPattern = regexp.MustCompile(`(?im)(?:\bhttp(?:\s+status)?(?:\s+code)?\s*[:=]?\s*|\bglab:\s*|\bapi\s+(?:request|call)\s+(?:failed|error)\s*:\s*|\b(?:get|post|put|patch|delete|head)\s+(?:"https://[^"\s]+"|https://[^\s]+):\s*)(400|401|403|404|409|422|429)\b`)
 
 type ClientConfig struct {
 	Path             string
@@ -86,7 +91,7 @@ func (c *Client) Do(ctx context.Context, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	body, err := c.runCapture(ctx, invocation.args, invocation.host, invocation.maxStdout, false)
+	body, err := c.runCapture(ctx, invocation.args, invocation.host, invocation.maxStdout, invocation.write, false)
 	if err != nil {
 		return Response{}, err
 	}
@@ -104,7 +109,7 @@ func (c *Client) AuthStatus(ctx context.Context, host string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := c.runCapture(ctx, []string{"auth", "status", "--hostname", host}, host, limits.MaxErrorReadBytes, false); err != nil {
+	if _, err := c.runCapture(ctx, []string{"auth", "status", "--hostname", host}, host, limits.MaxErrorReadBytes, false, false); err != nil {
 		if uxv1.AsError(err).Code == uxv1.CodeUpstream {
 			return "", uxv1.Wrap(uxv1.CodeAuthentication, "official glab is not authenticated for the selected host", err)
 		}
@@ -168,7 +173,7 @@ func (c *Client) ensureVersion(parent context.Context) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	body, err := c.runCapturePath(ctx, path, []string{"version"}, "", 4096, false)
+	body, err := c.runCapturePath(ctx, path, []string{"version"}, "", 4096, false, false)
 	if err != nil {
 		return "", uxv1.Wrap(uxv1.CodeDependencyUnsupported, "cannot verify official glab version", err)
 	}
@@ -211,17 +216,17 @@ func (c *Client) resolvePath() (string, error) {
 	return resolved, nil
 }
 
-func (c *Client) runCapture(ctx context.Context, args []string, host string, maxStdout int, login bool) ([]byte, error) {
+func (c *Client) runCapture(ctx context.Context, args []string, host string, maxStdout int, write, login bool) ([]byte, error) {
 	c.mu.Lock()
 	path := c.path
 	c.mu.Unlock()
 	if path == "" {
 		return nil, uxv1.NewError(uxv1.CodeDependencyMissing, "official glab path is unavailable")
 	}
-	return c.runCapturePath(ctx, path, args, host, maxStdout, login)
+	return c.runCapturePath(ctx, path, args, host, maxStdout, write, login)
 }
 
-func (c *Client) runCapturePath(ctx context.Context, path string, args []string, host string, maxStdout int, login bool) ([]byte, error) {
+func (c *Client) runCapturePath(ctx context.Context, path string, args []string, host string, maxStdout int, write, login bool) ([]byte, error) {
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cmd := exec.CommandContext(childCtx, path, args...)
@@ -249,7 +254,7 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 		return nil, contextFailure(ctx, "official glab operation")
 	}
 	if waitErr != nil {
-		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr)
+		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write)
 	}
 	return stdout.buffer.Bytes(), nil
 }
@@ -284,7 +289,30 @@ func (c *boundedCapture) Write(p []byte) (int, error) {
 	return original, nil
 }
 
-func classifyChildFailure(stderr []byte, cause error) error {
+func classifyChildFailure(stderr []byte, cause error, write bool) error {
+	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 2 {
+		status, parseErr := strconv.Atoi(string(match[1]))
+		if parseErr == nil {
+			if write {
+				rejection, _ := uxv1.NewHTTPRejection(status)
+				rejection.Cause = cause
+				return rejection
+			}
+			switch status {
+			case 401:
+				return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)
+			case 403:
+				return uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", cause)
+			case 404:
+				return uxv1.Wrap(uxv1.CodeNotFound, "GitLab resource was not found", cause)
+			case 429:
+				return uxv1.Wrap(uxv1.CodeRateLimited, "GitLab rate limit was reached", cause)
+			default:
+				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
+			}
+		}
+	}
+
 	text := strings.ToLower(string(stderr))
 	switch {
 	case strings.Contains(text, "401"), strings.Contains(text, "authentication"), strings.Contains(text, "authenticate"):

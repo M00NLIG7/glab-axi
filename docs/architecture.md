@@ -126,8 +126,10 @@ preserves native ensure semantics:
 6. recheck immediately before create;
 7. place the fixed JSON body in a private mode-0600 temporary file;
 8. perform exactly one POST or PUT through the fixed adapter; and
-9. reconcile every transport, malformed-success, or content ambiguity with GET
-   only—never blind retry.
+9. reconcile every failed create with GET only—never blind retry. An exact
+   requested MR wins reconciliation; after a verified empty result, recognized
+   HTTP rejections retain only their bounded status category while transport,
+   overflow, timeout, and malformed/unverifiable success remain ambiguous.
 
 Same-project IDs, exact branches, state, returned host/repository URL, and
 content are revalidated. All other provider mutations remain denied.
