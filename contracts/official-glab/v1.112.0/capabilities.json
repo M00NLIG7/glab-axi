@@ -128,12 +128,12 @@
     {
       "name": "mr-ensure-create",
       "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests", "--input", "{private_json_file}"]
+      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
     },
     {
       "name": "mr-ensure-update",
       "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}"]
+      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
     }
   ],
   "permanent_denials": [

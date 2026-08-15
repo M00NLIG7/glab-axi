@@ -67,6 +67,7 @@ func TestClientPinsVersionSanitizesEnvironmentAndBoundsOutput(t *testing.T) {
 			"GLAB_DEBUG_HTTP=true",
 			"GLAB_CHECK_UPDATE=true",
 			"GLAB_ENABLE_CI_AUTOLOGIN=true",
+			"GLAB_SEND_TELEMETRY=true",
 			"PAGER=hostile-pager",
 			"GITLAB_TOKEN="+secret,
 		),
@@ -796,7 +797,7 @@ func fakeGlab(t *testing.T) (string, string) {
 	record := filepath.Join(dir, "record")
 	script := `#!/bin/sh
 set -eu
-if [ "${GLAB_CHECK_UPDATE:-}" != "false" ] || [ "${GLAB_DEBUG_HTTP:-}" != "false" ] || [ "${GLAB_ENABLE_CI_AUTOLOGIN:-}" != "false" ]; then
+if [ "${GLAB_CHECK_UPDATE:-}" != "false" ] || [ "${GLAB_DEBUG_HTTP:-}" != "false" ] || [ "${GLAB_ENABLE_CI_AUTOLOGIN:-}" != "false" ] || [ "${GLAB_SEND_TELEMETRY:-}" != "false" ]; then
   echo unsafe-environment >&2
   exit 90
 fi
@@ -883,7 +884,7 @@ if [ "${GLAB_AXI_FAKE_MODE:-}" = "auth-failure" ]; then
   exit 1
 fi
 if [ "${GLAB_AXI_FAKE_MODE:-}" = "http-rejection" ]; then
-  if [ "$#" -ne 8 ] || [ "${1:-}" != "api" ] || [ "${2:-}" != "--method" ] || [ "${3:-}" != "POST" ] || [ "${4:-}" != "--hostname" ] || [ "${7:-}" != "--input" ]; then
+  if [ "$#" -ne 10 ] || [ "${1:-}" != "api" ] || [ "${2:-}" != "--method" ] || [ "${3:-}" != "POST" ] || [ "${4:-}" != "--hostname" ] || [ "${7:-}" != "--input" ] || [ "${9:-}" != "--header" ] || [ "${10:-}" != "Content-Type: application/json" ]; then
     printf 'unexpected ensure-create argv\n' >&2
     exit 94
   fi
