@@ -34,21 +34,27 @@ GitLab project (not Rune).
    official-glab execution.
 9. In the disposable project only, run MR ensure twice. The second invocation
    must replay/update the exact MR and never create a duplicate.
-10. Run denied generic API, merge/comment/close, pipeline retry, repo create,
-    release create, and label delete commands while auditing child/network
-    execution; each exits 2 with no child/request.
-11. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
+10. Under a separate explicit merge authorization, create a synthetic green MR
+    in a project that enforces successful pipelines and resolved discussions.
+    Run guarded squash merge with exact URL/head/authority, then replay it.
+    Observe one PUT maximum and no source deletion/auto-merge. Repeat stale-head,
+    red/no CI, unresolved, conflict, malformed-response, and ambiguous transport
+    cases; every preflight denial has zero PUT and uncertainty never retries.
+11. Run denied generic API, alternate merge (`--rebase`), approve/comment/close,
+    pipeline retry, repo create, release create, and label delete while auditing
+    child/network execution; each exits 2 with no child/request.
+12. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
     completeness metadata, bounded trace/diff, setup idempotence, update check,
     and update refusal/rollback cases.
-12. Exercise the supported subset on macOS, Linux, and Windows. Document
+13. Exercise the supported subset on macOS, Linux, and Windows. Document
     official-login differences rather than hiding them.
-13. Revoke/remove disposable credentials through the official human cleanup
+14. Revoke/remove disposable credentials through the official human cleanup
     path.
 
-Pass: a new human reaches authenticated, repository-scoped useful reads and
-idempotent MR ensure without manually discovering API bases on the default host,
-without an agent handling interactive credentials, and without plaintext
-fallback.
+Pass: a new human reaches authenticated, repository-scoped useful reads,
+idempotent MR ensure, and guarded squash merge without manually discovering API
+bases on the default host, without an agent handling interactive credentials,
+and without plaintext fallback.
 
 ## Safe read-only Rune MR/CI
 

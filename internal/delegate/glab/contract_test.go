@@ -37,6 +37,11 @@ func TestPinnedRequestBuildersEmitOnlyDeclaredArgv(t *testing.T) {
 		{Request{Operation: OpEnsureList, Host: "gitlab.com", Repo: "group/project", Source: "feature", Target: "main", Page: 1, PerPage: 100}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests?page=1&per_page=100&source_branch=feature&state=opened&target_branch=main"}},
 		{Request{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: input}, []string{"api", "--method", "POST", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests", "--input", input, "--header", "Content-Type: application/json"}},
 		{Request{Operation: OpEnsureUpdate, Host: "gitlab.com", Repo: "group/project", IID: 12, InputFile: input}, []string{"api", "--method", "PUT", "--hostname", "gitlab.com", "projects/group%2Fproject/merge_requests/12", "--input", input, "--header", "Content-Type: application/json"}},
+		{Request{Operation: OpMergeProject, Host: "gitlab.com", Repo: "group/subgroup/project"}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject"}},
+		{Request{Operation: OpMergeMRView, Host: "gitlab.com", Repo: "group/subgroup/project", IID: 42}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/merge_requests/42?with_merge_status_recheck=true"}},
+		{Request{Operation: OpMergeJobList, Host: "gitlab.com", Repo: "group/subgroup/project", PipelineID: 77, Page: 2, PerPage: 100}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/pipelines/77/jobs?include_retried=false&page=2&per_page=100"}},
+		{Request{Operation: OpMergeBridgeList, Host: "gitlab.com", Repo: "group/subgroup/project", PipelineID: 77, Page: 1, PerPage: 100}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/pipelines/77/bridges?include_retried=false&page=1&per_page=100"}},
+		{Request{Operation: OpMRMerge, Host: "gitlab.com", Repo: "group/subgroup/project", IID: 42, InputFile: input}, []string{"api", "--method", "PUT", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/merge_requests/42/merge", "--input", input, "--header", "Content-Type: application/json"}},
 	}
 	for _, test := range requests {
 		invocation, err := build(test.request)
@@ -77,7 +82,7 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		}
 		declared[operation.Name] = true
 	}
-	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate} {
+	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
 		if !declared[string(operation)] {
 			t.Fatalf("operation %q has no pinned fixture", operation)
 		}
@@ -126,6 +131,10 @@ func TestRequestBuilderRejectsInjectionBeforeExecution(t *testing.T) {
 		{Operation: OpReleaseView, Host: "gitlab.com", Repo: "group/project", Tag: "--web"},
 		{Operation: OpSearch, Host: "gitlab.com", Repo: "group/project", Scope: "issues", Query: "", Page: 1, PerPage: 30},
 		{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: "relative.json"},
+		{Operation: OpMergeMRView, Host: "gitlab.com", Repo: "group/project", IID: 0},
+		{Operation: OpMergeJobList, Host: "gitlab.com", Repo: "group/project", PipelineID: 7, Page: 11, PerPage: 100},
+		{Operation: OpMergeBridgeList, Host: "gitlab.com", Repo: "group/project", PipelineID: -1, Page: 1, PerPage: 100},
+		{Operation: OpMRMerge, Host: "gitlab.com", Repo: "group/project", IID: 1, InputFile: "relative.json"},
 	} {
 		if _, err := build(request); err == nil {
 			t.Fatalf("unsafe request was accepted: %#v", request)

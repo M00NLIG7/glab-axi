@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/mr-merge.schema.json",
+  "title": "glab-axi/ux-v1 guarded mr-merge data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "merge"
+  ],
+  "properties": {
+    "merge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "iid",
+        "web_url",
+        "source_branch",
+        "target_branch",
+        "source_head_sha",
+        "squash_commit_sha",
+        "result_commit_sha",
+        "pipeline",
+        "authority"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "merged",
+            "already_merged",
+            "reconciled_merged"
+          ]
+        },
+        "iid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "web_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "source_branch": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "target_branch": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "source_head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "merge_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "squash_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "result_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "pipeline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "sha",
+            "status"
+          ],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+            },
+            "status": {
+              "const": "success"
+            }
+          }
+        },
+        "authority": {
+          "enum": [
+            "captain-explicit",
+            "standing-yolo-green"
+          ]
+        }
+      }
+    }
+  }
+}

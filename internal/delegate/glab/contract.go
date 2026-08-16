@@ -23,27 +23,32 @@ const (
 type Operation string
 
 const (
-	OpIssueList     Operation = "issue-list"
-	OpIssueView     Operation = "issue-view"
-	OpMRList        Operation = "mr-list"
-	OpMRView        Operation = "mr-view"
-	OpMRDiff        Operation = "mr-diff"
-	OpMRChecks      Operation = "mr-checks"
-	OpPipelineList  Operation = "pipeline-list"
-	OpPipelineView  Operation = "pipeline-view"
-	OpJobList       Operation = "job-list"
-	OpJobView       Operation = "job-view"
-	OpJobTrace      Operation = "job-trace"
-	OpReleaseList   Operation = "release-list"
-	OpReleaseView   Operation = "release-view"
-	OpRepoList      Operation = "repo-list"
-	OpRepoView      Operation = "repo-view"
-	OpLabelList     Operation = "label-list"
-	OpSearch        Operation = "search"
-	OpEnsureProject Operation = "mr-ensure-project"
-	OpEnsureList    Operation = "mr-ensure-list"
-	OpEnsureCreate  Operation = "mr-ensure-create"
-	OpEnsureUpdate  Operation = "mr-ensure-update"
+	OpIssueList       Operation = "issue-list"
+	OpIssueView       Operation = "issue-view"
+	OpMRList          Operation = "mr-list"
+	OpMRView          Operation = "mr-view"
+	OpMRDiff          Operation = "mr-diff"
+	OpMRChecks        Operation = "mr-checks"
+	OpPipelineList    Operation = "pipeline-list"
+	OpPipelineView    Operation = "pipeline-view"
+	OpJobList         Operation = "job-list"
+	OpJobView         Operation = "job-view"
+	OpJobTrace        Operation = "job-trace"
+	OpReleaseList     Operation = "release-list"
+	OpReleaseView     Operation = "release-view"
+	OpRepoList        Operation = "repo-list"
+	OpRepoView        Operation = "repo-view"
+	OpLabelList       Operation = "label-list"
+	OpSearch          Operation = "search"
+	OpEnsureProject   Operation = "mr-ensure-project"
+	OpEnsureList      Operation = "mr-ensure-list"
+	OpEnsureCreate    Operation = "mr-ensure-create"
+	OpEnsureUpdate    Operation = "mr-ensure-update"
+	OpMergeProject    Operation = "mr-merge-project"
+	OpMergeMRView     Operation = "mr-merge-view"
+	OpMergeJobList    Operation = "mr-merge-job-list"
+	OpMergeBridgeList Operation = "mr-merge-bridge-list"
+	OpMRMerge         Operation = "mr-merge"
 )
 
 type Request struct {
@@ -210,8 +215,27 @@ func build(request Request) (invocation, error) {
 			endpoint = "projects/" + escapedRepo + "/search?" + query
 		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureProject:
+	case OpEnsureProject, OpMergeProject:
 		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
+	case OpMergeMRView:
+		if request.IID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
+		}
+		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d?with_merge_status_recheck=true", escapedRepo, request.IID)
+		return jsonObject(append(apiPrefix(), endpoint)), nil
+	case OpMergeJobList, OpMergeBridgeList:
+		if request.PipelineID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "pipeline ID must be a positive integer")
+		}
+		if _, err := pageArgs(); err != nil {
+			return invocation{}, err
+		}
+		resource := "jobs"
+		if request.Operation == OpMergeBridgeList {
+			resource = "bridges"
+		}
+		endpoint := fmt.Sprintf("projects/%s/pipelines/%d/%s?include_retried=false&page=%d&per_page=%d", escapedRepo, request.PipelineID, resource, request.Page, request.PerPage)
+		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpEnsureList:
 		if _, err := pageArgs(); err != nil {
 			return invocation{}, err
@@ -225,18 +249,25 @@ func build(request Request) (invocation, error) {
 		query := url.Values{"state": {"opened"}, "source_branch": {request.Source}, "target_branch": {request.Target}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}.Encode()
 		endpoint := "projects/" + escapedRepo + "/merge_requests?" + query
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureCreate, OpEnsureUpdate:
+	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge:
 		if err := validatePrivateInputPath(request.InputFile); err != nil {
 			return invocation{}, err
 		}
 		method := "POST"
 		endpoint := "projects/" + escapedRepo + "/merge_requests"
-		if request.Operation == OpEnsureUpdate {
+		switch request.Operation {
+		case OpEnsureUpdate:
 			if request.IID < 1 {
 				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
 			}
 			method = "PUT"
 			endpoint += "/" + strconv.FormatInt(request.IID, 10)
+		case OpMRMerge:
+			if request.IID < 1 {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
+			}
+			method = "PUT"
+			endpoint += "/" + strconv.FormatInt(request.IID, 10) + "/merge"
 		}
 		args := []string{"api", "--method", method, "--hostname", request.Host, endpoint, "--input", request.InputFile, "--header", "Content-Type: application/json"}
 		return invocation{args: args, host: request.Host, maxStdout: limits.MaxJSONPageBytes, write: true, outputKind: outputJSON}, nil

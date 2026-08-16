@@ -9,17 +9,20 @@ import (
 )
 
 type Definition struct {
-	Path         []string
-	Summary      string
-	Usage        string
-	Examples     []string
-	RepoMode     RepoMode
-	Positionals  int
-	MaxPositions int
-	Flags        []FlagDefinition
-	Schema       string
-	Backend      string
-	Write        bool
+	Path                []string
+	Summary             string
+	Usage               string
+	Examples            []string
+	RepoMode            RepoMode
+	Positionals         int
+	MaxPositions        int
+	Flags               []FlagDefinition
+	Schema              string
+	Backend             string
+	Write               bool
+	NoLimit             bool
+	RequireExplicitHost bool
+	RequireExplicitRepo bool
 }
 
 type RepoMode int
@@ -35,6 +38,7 @@ type FlagDefinition struct {
 	Value       string
 	Description string
 	Boolean     bool
+	Required    bool
 }
 
 var definitions = []Definition{
@@ -47,6 +51,7 @@ var definitions = []Definition{
 	{Path: []string{"mr", "view"}, Summary: "View one merge request.", Usage: "glab-axi mr view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-view", Backend: "official-glab"},
 	{Path: []string{"mr", "checks"}, Summary: "View the head pipeline and jobs for one merge request.", Usage: "glab-axi mr checks <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-checks", Backend: "official-glab"},
 	{Path: []string{"mr", "diff"}, Summary: "View a bounded, color-free merge-request diff.", Usage: "glab-axi mr diff <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-diff", Backend: "official-glab"},
+	{Path: []string{"mr", "merge"}, Summary: "Immediately squash-merge one exact green merge request.", Usage: "glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: mergeFlags(), Schema: "mr-merge", Backend: "official-glab", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true},
 	{Path: []string{"mr", "ensure"}, Summary: "Create or update exactly one matching open merge request.", Usage: "glab-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
 	{Path: []string{"mr", "create-or-update"}, Summary: "Alias for bounded MR ensure semantics.", Usage: "glab-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
 	{Path: []string{"pipeline", "list"}, Summary: "List project pipelines.", Usage: "glab-axi pipeline list [global flags]", RepoMode: RepoRequired, Schema: "pipeline-list", Backend: "official-glab"},
@@ -66,6 +71,15 @@ var definitions = []Definition{
 	{Path: []string{"search", "code"}, Summary: "Search code blobs in one project.", Usage: "glab-axi search code <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
 	{Path: []string{"setup", "hooks"}, Summary: "Install or repair generated Agent Skill and session hooks.", Usage: "glab-axi setup hooks", RepoMode: RepoNone, Schema: "setup-hooks", Backend: "local"},
 	{Path: []string{"update"}, Summary: "Check for or install a signed glab-axi release.", Usage: "glab-axi update [--check]", RepoMode: RepoNone, Flags: []FlagDefinition{{Name: "--check", Description: "Check only; do not replace the executable.", Boolean: true}}, Schema: "update", Backend: "local"},
+}
+
+func mergeFlags() []FlagDefinition {
+	return []FlagDefinition{
+		{Name: "--expected-url", Value: "URL", Description: "Exact canonical merge-request URL.", Required: true},
+		{Name: "--expected-head", Value: "SHA", Description: "Reviewed lowercase 40- or 64-hex source head.", Required: true},
+		{Name: "--authority", Value: "CLASS", Description: "Firstmate authority: captain-explicit or standing-yolo-green.", Required: true},
+		{Name: "--squash", Description: "Require the sole supported immediate squash strategy.", Boolean: true, Required: true},
+	}
 }
 
 func ensureFlags() []FlagDefinition {
@@ -142,8 +156,8 @@ func TopHelp() string {
 	out.WriteString("      --format toon|json        output format (default toon)\n")
 	out.WriteString("  -h, --help                    show contextual help\n")
 	out.WriteString("  -v, -V, --version             show version (the long form preserves the v1 handshake)\n")
-	out.WriteString("\nBackends:\n  safe reads and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
-	out.WriteString("\nSecurity boundary:\n  no generic API, merge, approve, comment, close/reopen/delete, repository\n  mutation, release/label mutation, secrets/variables, or pipeline mutation.\n")
+	out.WriteString("\nBackends:\n  bounded product operations and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
+	out.WriteString("\nSecurity boundary:\n  only MR ensure and guarded immediate squash merge may write; no generic API,\n  approve, comment, close/reopen/delete, repository/release/label mutation,\n  secrets/variables, pipeline mutation, or alternate merge strategy.\n")
 	return out.String()
 }
 
@@ -187,15 +201,15 @@ func CommandReferenceMarkdown() string {
 			out.WriteString("Backend: `" + definition.Backend + "`. Schema: `schema/ux-v1/" + definition.Schema + ".schema.json`.\n\n")
 		}
 	}
-	out.WriteString("## Permanent denials\n\nGeneric API, merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.\n")
+	out.WriteString("## Permanent denials\n\nGeneric API, unguarded or alternate-strategy merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.\n")
 	return out.String()
 }
 
 // SkillMarkdown is generated from the same registry used by executable help.
-// It intentionally teaches only declared reads and the single MR ensure write.
+// It intentionally teaches only declared reads and the two pinned MR writes.
 func SkillMarkdown() string {
 	var out strings.Builder
-	out.WriteString("---\nname: glab-axi\ndescription: Use bounded GitLab reads and idempotent MR ensure without generic API or destructive authority.\n---\n\n")
+	out.WriteString("---\nname: glab-axi\ndescription: Use bounded GitLab reads, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.\n---\n\n")
 	out.WriteString("# glab-axi\n\nUse `glab-axi` rather than official `glab` directly when operating as an agent. Human authentication is the only interactive command.\n\n## Commands\n\n")
 	for _, definition := range definitions {
 		if len(definition.Path) == 0 || strings.Join(definition.Path, " ") == "auth login" || strings.Join(definition.Path, " ") == "setup hooks" || strings.Join(definition.Path, " ") == "update" {
@@ -203,7 +217,7 @@ func SkillMarkdown() string {
 		}
 		out.WriteString("- `" + definition.Usage + "` — " + definition.Summary + "\n")
 	}
-	out.WriteString("\n## Safety\n\n- Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous.\n- Do not attempt generic API, merge, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` is the only provider write and requires private title/description files.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
+	out.WriteString("\n## Safety\n\n- Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.\n- Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
 	return out.String()
 }
 
@@ -215,7 +229,7 @@ func leafHelp(definition Definition) string {
 		out.WriteString("Backend: pinned official glab 1.112.0 (816e3a52); output is bounded and normalized.\n")
 	}
 	if definition.Write {
-		out.WriteString("Write boundary: this is the only provider mutation in the initial parity release.\n")
+		out.WriteString("Write boundary: this is one of two pinned MR-only provider-write contracts.\n")
 	}
 	if len(definition.Flags) > 0 {
 		out.WriteString("\nCommand flags:\n")
@@ -230,7 +244,11 @@ func leafHelp(definition Definition) string {
 	if strings.Join(definition.Path, " ") == "auth login" {
 		out.WriteString("\nTarget flag:\n      --hostname HOST\n")
 	} else if definition.RepoMode != RepoNone {
-		out.WriteString("\nTarget/output flags:\n  -R, --repo NAMESPACE/PROJECT\n      --hostname HOST\n      --limit N\n      --format toon|json\n")
+		out.WriteString("\nTarget/output flags:\n  -R, --repo NAMESPACE/PROJECT\n      --hostname HOST\n")
+		if !definition.NoLimit {
+			out.WriteString("      --limit N\n")
+		}
+		out.WriteString("      --format toon|json\n")
 	} else {
 		out.WriteString("\nOutput flags:\n      --hostname HOST\n      --limit N\n      --format toon|json\n")
 	}

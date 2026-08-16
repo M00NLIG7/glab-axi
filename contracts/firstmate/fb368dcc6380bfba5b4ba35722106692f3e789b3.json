@@ -1,0 +1,125 @@
+{
+  "schema": "glab-axi/firstmate-consumer-contract/v1",
+  "source": {
+    "project": "Firstmate",
+    "commit": "fb368dcc6380bfba5b4ba35722106692f3e789b3",
+    "evidence": [
+      "bin/fm-pr-lib.sh",
+      "bin/fm-pr-check.sh",
+      "bin/fm-pr-merge.sh",
+      "tests/fm-pr-merge.test.sh"
+    ]
+  },
+  "provider": "gitlab",
+  "glab_axi": {
+    "minimum_version": "0.2.0",
+    "required_envelope": "glab-axi/ux-v1",
+    "required_backend": "official-glab",
+    "required_upstream_version": "1.112.0"
+  },
+  "planned_invocation": {
+    "argv": [
+      "mr",
+      "merge",
+      "{iid}",
+      "--repo",
+      "{nested_project}",
+      "--hostname",
+      "{host}",
+      "--expected-url",
+      "{canonical_mr_url}",
+      "--expected-head",
+      "{recorded_head_sha}",
+      "--authority",
+      "{captain-explicit|standing-yolo-green}",
+      "--squash",
+      "--format",
+      "json"
+    ],
+    "required_explicit_inputs": [
+      "iid",
+      "nested_project",
+      "host",
+      "canonical_mr_url",
+      "recorded_head_sha",
+      "authority",
+      "squash"
+    ],
+    "forbidden_flags": [
+      "--merge",
+      "--rebase",
+      "--method",
+      "--auto",
+      "--auto-merge",
+      "--delete-branch",
+      "--remove-source-branch",
+      "--message",
+      "--squash-message",
+      "--subject",
+      "--body",
+      "--body-file",
+      "--admin",
+      "--yes"
+    ]
+  },
+  "success_contract": {
+    "envelope_schema": "glab-axi/ux-v1",
+    "data_schema": "schema/ux-v1/mr-merge.schema.json",
+    "actions": [
+      "merged",
+      "already_merged",
+      "reconciled_merged"
+    ],
+    "required_json_pointers": [
+      "/schema",
+      "/ok",
+      "/meta/backend",
+      "/meta/host",
+      "/meta/repo",
+      "/meta/complete",
+      "/meta/upstream_version",
+      "/data/merge/action",
+      "/data/merge/iid",
+      "/data/merge/web_url",
+      "/data/merge/source_branch",
+      "/data/merge/target_branch",
+      "/data/merge/source_head_sha",
+      "/data/merge/squash_commit_sha",
+      "/data/merge/result_commit_sha",
+      "/data/merge/pipeline/id",
+      "/data/merge/pipeline/sha",
+      "/data/merge/pipeline/status",
+      "/data/merge/authority"
+    ]
+  },
+  "exit_contract": {
+    "success": 0,
+    "input_or_security_denial": 2,
+    "authentication": 3,
+    "forbidden": 4,
+    "not_found": 5,
+    "conflict_or_ambiguous_merge": 6,
+    "rate_limited": 7,
+    "dependency_or_upstream": 8,
+    "safety": 9,
+    "canceled_before_mutation": 130
+  },
+  "custody": {
+    "firstmate_owns": [
+      "task identity",
+      "captain or standing-yolo authority",
+      "canonical merge-request URL",
+      "durable expected head",
+      "lifecycle policy"
+    ],
+    "glab_axi_owns": [
+      "provider identity and policy validation",
+      "expected-head enforcement",
+      "complete green pipeline validation",
+      "one immediate squash PUT maximum",
+      "response validation",
+      "read-after-ambiguity reconciliation"
+    ],
+    "firstmate_integration_status": "not implemented by this contract stage"
+  }
+}

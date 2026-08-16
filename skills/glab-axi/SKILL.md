@@ -1,6 +1,6 @@
 ---
 name: glab-axi
-description: Use bounded GitLab reads and idempotent MR ensure without generic API or destructive authority.
+description: Use bounded GitLab reads, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.
 ---
 
 # glab-axi
@@ -16,6 +16,7 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi mr view <iid> [global flags]` — View one merge request.
 - `glab-axi mr checks <iid> [global flags]` — View the head pipeline and jobs for one merge request.
 - `glab-axi mr diff <iid> [global flags]` — View a bounded, color-free merge-request diff.
+- `glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` — Immediately squash-merge one exact green merge request.
 - `glab-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` — Create or update exactly one matching open merge request.
 - `glab-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` — Alias for bounded MR ensure semantics.
 - `glab-axi pipeline list [global flags]` — List project pipelines.
@@ -37,7 +38,8 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 ## Safety
 
 - Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.
-- Use `-R namespace/project --hostname host` when context is ambiguous.
-- Do not attempt generic API, merge, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.
-- `mr ensure` / `mr create-or-update` is the only provider write and requires private title/description files.
+- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.
+- Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.
+- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, reviewed head, authority class, provider-enforced green policy, and `--squash`.
+- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.
 - Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.

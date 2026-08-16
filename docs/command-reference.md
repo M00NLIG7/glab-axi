@@ -92,6 +92,16 @@ View a bounded, color-free merge-request diff.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-diff.schema.json`.
 
+## `mr merge`
+
+```text
+glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]
+```
+
+Immediately squash-merge one exact green merge request.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/mr-merge.schema.json`.
+
 ## `mr ensure`
 
 ```text
@@ -284,4 +294,4 @@ Backend: `local`. Schema: `schema/ux-v1/update.schema.json`.
 
 ## Permanent denials
 
-Generic API, merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.
+Generic API, unguarded or alternate-strategy merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.

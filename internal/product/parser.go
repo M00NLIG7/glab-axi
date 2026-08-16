@@ -35,7 +35,7 @@ var deniedNested = map[string]map[string]string{
 		"token": "credential display", "show-token": "credential display",
 	},
 	"mr": {
-		"merge": "merging", "approve": "approval", "comment": "commenting", "note": "commenting",
+		"approve": "approval", "comment": "commenting", "note": "commenting",
 		"close": "closing", "reopen": "reopening", "delete": "deletion",
 	},
 	"issue": {
@@ -147,7 +147,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		Values:     map[string]string{},
 		Booleans:   map[string]bool{},
 		Format:     output.TOON,
-		Limit:      30,
+	}
+	if !definition.NoLimit {
+		parsed.Limit = 30
 	}
 	type flagSpec struct {
 		canonical string
@@ -157,7 +159,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		"--hostname": {canonical: "--hostname", value: true},
 	}
 	if strings.Join(definition.Path, " ") != "auth login" {
-		specs["--limit"] = flagSpec{canonical: "--limit", value: true}
+		if !definition.NoLimit {
+			specs["--limit"] = flagSpec{canonical: "--limit", value: true}
+		}
 		specs["--format"] = flagSpec{canonical: "--format", value: true}
 	}
 	if definition.RepoMode != RepoNone {
@@ -232,6 +236,20 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		}
 		parsed.Limit = limit
 	}
+	if definition.RequireExplicitHost && parsed.Values["--hostname"] == "" {
+		return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: --hostname")
+	}
+	if definition.RequireExplicitRepo && parsed.Values["--repo"] == "" {
+		return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: --repo")
+	}
+	for _, flag := range definition.Flags {
+		if flag.Required && parsed.Values[flag.Name] == "" && !parsed.Booleans[flag.Name] {
+			return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag.Name)
+		}
+	}
+	if err := validateParsedCommand(parsed); err != nil {
+		return Parsed{}, err
+	}
 	return parsed, nil
 }
 
@@ -244,6 +262,14 @@ func deniedFlag(definition Definition, name string) string {
 		switch name {
 		case "--token", "-t", "--job-token", "-j", "--stdin", "--insecure-storage", "--device", "--web":
 			return "credential-bearing or policy-bypassing login flags"
+		}
+	}
+	if path == "mr merge" {
+		switch name {
+		case "--merge", "--rebase", "--method", "--auto", "--auto-merge", "--when-pipeline-succeeds",
+			"--delete-branch", "--remove-source-branch", "--message", "-m", "--squash-message",
+			"--subject", "--body", "--body-file", "--admin", "--yes", "-y", "-s":
+			return "unguarded or alternate merge behavior"
 		}
 	}
 	return ""
