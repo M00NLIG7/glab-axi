@@ -135,6 +135,90 @@ func TestMRMergeSuccessUsesOnePrivatePUTAndClosedOutput(t *testing.T) {
 	}
 }
 
+func TestMRMergeForceRemovalDefaultIsOverriddenByFixedFalsePayload(t *testing.T) {
+	open := mergeMRFixture("opened")
+	open.ForceRemoveSourceBranch = true
+	merged := mergeMRFixture("merged")
+	merged.ForceRemoveSourceBranch = true
+	delegate := mergeDelegate(open, open, mergeJobFixture("success", false), nil)
+	delegate.responses[glab.OpMRMerge] = []glab.Response{mergeResponse(merged)}
+
+	stdout, stderr, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), mergeArgs(), deps); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"action":"merged"`) {
+		t.Fatalf("force-only merge did not succeed: %s", stdout.String())
+	}
+	assertOneMergeMutation(t, delegate)
+	assertPrivateMergePayload(t, delegate)
+}
+
+func TestMRMergeForceRemovalDefaultAllowsExactReplayWithoutPUT(t *testing.T) {
+	merged := mergeMRFixture("merged")
+	merged.ForceRemoveSourceBranch = true
+	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+		glab.OpMergeProject:    {mergeResponse(mergeProjectFixture(true, true))},
+		glab.OpMergeMRView:     {mergeResponse(merged)},
+		glab.OpMergeJobList:    {mergeResponse([]upstreamJob{mergeJobFixture("success", false)})},
+		glab.OpMergeBridgeList: {mergeResponse([]upstreamJob{})},
+	}}
+
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), mergeArgs(), deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	if countOperation(delegate.requests, glab.OpMRMerge) != 0 || !strings.Contains(stdout.String(), `"action":"already_merged"`) {
+		t.Fatalf("requests=%#v output=%s", delegate.requests, stdout.String())
+	}
+}
+
+func TestMRMergeExplicitSourceRemovalPreflightNeverPUT(t *testing.T) {
+	open := mergeMRFixture("opened")
+	open.ShouldRemoveSourceBranch = true
+	delegate := mergeDelegateFirstRead(open)
+
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), mergeArgs(), deps); code != 9 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	var envelope uxv1.Envelope
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Error == nil || envelope.Error.Code != uxv1.CodeSafety || envelope.Error.Message != "source-branch removal is outside the guarded merge contract" {
+		t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+	}
+	if countOperation(delegate.requests, glab.OpMRMerge) != 0 {
+		t.Fatalf("explicit source-removal preflight issued PUT: %#v", delegate.requests)
+	}
+}
+
+func TestMRMergeExplicitSourceRemovalPostconditionIsNotAccepted(t *testing.T) {
+	open := mergeMRFixture("opened")
+	merged := mergeMRFixture("merged")
+	merged.ShouldRemoveSourceBranch = true
+	delegate := mergeDelegate(open, open, mergeJobFixture("success", false), nil)
+	delegate.responses[glab.OpMRMerge] = []glab.Response{mergeResponse(merged)}
+	delegate.responses[glab.OpMergeMRView] = append(delegate.responses[glab.OpMergeMRView], mergeResponse(merged))
+
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), mergeArgs(), deps); code != 6 {
+		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	}
+	var envelope uxv1.Envelope
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Error == nil || envelope.Error.Code != uxv1.CodeAmbiguousMerge {
+		t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+	}
+	if countOperation(delegate.requests, glab.OpMRMerge) != 1 || countOperation(delegate.requests, glab.OpMergeMRView) != 3 {
+		t.Fatalf("explicit source-removal postcondition request counts changed: %#v", delegate.requests)
+	}
+	assertPrivateMergePayload(t, delegate)
+}
+
 func TestMRMergeExactReplayReturnsAlreadyMergedWithoutPUT(t *testing.T) {
 	merged := mergeMRFixture("merged")
 	merged.MergeCommitSHA = ""

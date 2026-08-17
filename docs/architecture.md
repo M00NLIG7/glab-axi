@@ -151,8 +151,8 @@ The state machine uses the official profile without reading its credential:
 1. validate exact project identity and require provider-side successful-pipeline
    and resolved-discussion policies;
 2. read the exact same-project MR with merge-status recheck and bind URL/IID/head;
-3. reject draft, conflict, unresolved, auto-merge, source-removal, unknown, or
-   nonmergeable states;
+3. reject draft, conflict, unresolved, auto-merge, explicit per-merge
+   source-removal intent, unknown, or nonmergeable states;
 4. require the provider-designated head pipeline at the expected SHA to be
    `success`, then consume every bounded page of non-retried jobs and trigger
    bridges with fail-closed status/identity checks;
@@ -163,6 +163,12 @@ The state machine uses the official profile without reading its credential:
 8. validate exact merged identity, attribution, squash commit, strategy and
    pipeline; and
 9. after any unvalidated mutation outcome, perform at most one bounded MR GET.
+
+GitLab's `force_remove_source_branch` is a persisted/default preference, not
+immutable merge intent. It is accepted because the fixed body explicitly sends
+`should_remove_source_branch:false`, which overrides that preference;
+`should_remove_source_branch:true` remains a refusal both before mutation and
+in the merged postcondition.
 
 An exact postcondition yields `merged`, `already_merged`, or
 `reconciled_merged`. A definite framed rejection is returned only after the MR

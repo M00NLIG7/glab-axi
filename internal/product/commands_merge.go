@@ -339,7 +339,7 @@ func validateOpenMergeMR(record upstreamMR, expectedHead string) error {
 	if record.MergeWhenPipelineSucceeds {
 		return uxv1.NewError(uxv1.CodeConflict, "merge request already has auto-merge enabled")
 	}
-	if record.ShouldRemoveSourceBranch || record.ForceRemoveSourceBranch {
+	if record.ShouldRemoveSourceBranch {
 		return uxv1.NewError(uxv1.CodeSafety, "source-branch removal is outside the guarded merge contract")
 	}
 	return nil
@@ -494,7 +494,7 @@ func validateMergedPostcondition(record upstreamMR, target Target, projectID, ii
 	if record.MergeWhenPipelineSucceeds {
 		return uxv1.NewError(uxv1.CodeConflict, "merge completed through auto-merge instead of the immediate contract")
 	}
-	if record.ShouldRemoveSourceBranch || record.ForceRemoveSourceBranch {
+	if record.ShouldRemoveSourceBranch {
 		return uxv1.NewError(uxv1.CodeSafety, "merged response indicates source-branch removal")
 	}
 	if snapshot != nil {
