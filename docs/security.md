@@ -67,7 +67,9 @@ Guarded merge requires explicit host/project/URL/IID/reviewed-head/authority and
 - same-project identity and exact canonical returned URLs;
 - provider-side successful-pipeline and resolved-discussion enforcement;
 - open, non-draft, conflict-free, currently mergeable state with no existing
-  auto-merge or source-removal setting;
+  auto-merge or explicit per-merge source-removal intent; a persisted/default
+  `force_remove_source_branch` preference is allowed only because the fixed
+  merge body explicitly overrides it;
 - one exact successful head pipeline and every bounded page of current jobs and
   trigger bridges, with unknown/incomplete state non-green;
 - an unconditional adjacent MR recheck;
