@@ -22,13 +22,14 @@ const (
 )
 
 const (
-	ShortOperation          = 30 * time.Second
-	WriteOperation          = 45 * time.Second
-	MergePreflightOperation = 20 * time.Second
-	MergeMutationOperation  = 15 * time.Second
-	MergeReconcileOperation = 10 * time.Second
-	ConnectTimeout          = 5 * time.Second
-	TLSHandshake            = 5 * time.Second
-	HeaderTimeout           = 10 * time.Second
-	MaxRetryAfter           = 30 * time.Second
+	ShortOperation           = 30 * time.Second
+	WriteOperation           = 45 * time.Second
+	EnsureReconcileOperation = 10 * time.Second
+	MergePreflightOperation  = 20 * time.Second
+	MergeMutationOperation   = 15 * time.Second
+	MergeReconcileOperation  = 10 * time.Second
+	ConnectTimeout           = 5 * time.Second
+	TLSHandshake             = 5 * time.Second
+	HeaderTimeout            = 10 * time.Second
+	MaxRetryAfter            = 30 * time.Second
 )

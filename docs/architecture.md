@@ -127,13 +127,17 @@ preserves native ensure semantics:
 6. recheck immediately before create;
 7. place the fixed JSON body in a private mode-0600 temporary file;
 8. perform exactly one POST or PUT through the fixed adapter; and
-9. reconcile every failed create with GET only—never blind retry. An exact
-   requested MR wins reconciliation; after a verified empty result, recognized
-   HTTP rejections retain only their bounded status category while transport,
-   overflow, timeout, and malformed/unverifiable success remain ambiguous.
+9. after an unvalidated result, perform at most one bounded read-only
+   reconciliation—branch lookup after create or canonical exact-IID MR view
+   after update—never blind retry.
 
-Same-project IDs, exact branches, state, returned host/repository URL, and
-content are revalidated.
+An update reconciles only when the canonical MR retains the pre-write global
+ID, IID, project ownership/destination, URL, source/base branches, and head SHA
+and exactly matches the requested title/description. A create still reconciles
+through the bounded exact-branch lookup; after a verified empty result,
+recognized HTTP rejections retain only their bounded status category.
+Transport, overflow, timeout, incomplete identity, drift, and malformed or
+otherwise unverifiable results remain ambiguous.
 
 ## Guarded MR merge: immediate squash write
 

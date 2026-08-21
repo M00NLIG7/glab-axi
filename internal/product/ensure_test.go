@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"glab-axi/internal/contract/uxv1"
 	"glab-axi/internal/delegate/glab"
+	"glab-axi/internal/limits"
 )
 
 func TestMREnsureReplayAndDuplicateDenialMakeNoWrite(t *testing.T) {
@@ -33,6 +35,9 @@ func TestMREnsureReplayAndDuplicateDenialMakeNoWrite(t *testing.T) {
 			for _, request := range delegate.requests {
 				if request.Operation == glab.OpEnsureCreate || request.Operation == glab.OpEnsureUpdate {
 					t.Fatalf("%s performed write %#v", test.name, request)
+				}
+				if test.name == "replay" && request.Operation == glab.OpMRView {
+					t.Fatalf("exact no-op performed reconciliation read %#v", request)
 				}
 			}
 			if test.name == "replay" && !strings.Contains(stdout.String(), `"action":"unchanged"`) {
@@ -273,18 +278,21 @@ func TestMREnsureReconcilesMalformedSuccessfulMutationResponse(t *testing.T) {
 }
 
 func TestMREnsureReconcilesAmbiguousUpdateWithoutSecondMutation(t *testing.T) {
+	// The mutation applied, but the branch-list summary still reports the old
+	// content. Only the canonical exact-IID read can prove the postcondition.
 	existing := ensureMR(11, "old", "old body")
 	desired := ensureMR(11, "new", "new body")
 	initial, _ := json.Marshal([]upstreamMR{existing})
-	reconciled, _ := json.Marshal([]upstreamMR{desired})
+	canonical, _ := json.Marshal(desired)
 	project := []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`)
 	delegate := &fakeDelegate{
 		responses: map[glab.Operation][]glab.Response{
 			glab.OpEnsureProject: {{Body: project, UpstreamVersion: glab.SupportedVersion}},
 			glab.OpEnsureList: {
 				{Body: initial, UpstreamVersion: glab.SupportedVersion},
-				{Body: reconciled, UpstreamVersion: glab.SupportedVersion},
+				{Body: initial, UpstreamVersion: glab.SupportedVersion},
 			},
+			glab.OpMRView: {{Body: canonical, UpstreamVersion: glab.SupportedVersion}},
 		},
 		errors: map[glab.Operation][]error{glab.OpEnsureUpdate: {uxv1.NewError(uxv1.CodeUpstream, "synthetic ambiguous transport")}},
 	}
@@ -292,18 +300,92 @@ func TestMREnsureReconcilesAmbiguousUpdateWithoutSecondMutation(t *testing.T) {
 	if code := Run(context.Background(), ensureArgs(t, "new", "new body"), deps); code != 0 {
 		t.Fatalf("exit=%d output=%s", code, stdout.String())
 	}
-	writes := 0
-	for _, request := range delegate.requests {
-		if request.Operation == glab.OpEnsureUpdate {
-			writes++
-		}
-		if request.Operation == glab.OpEnsureCreate {
-			t.Fatal("update reconciliation sent a create")
-		}
+	var envelope struct {
+		OK   bool         `json:"ok"`
+		Data ensureResult `json:"data"`
+		Meta uxv1.Meta    `json:"meta"`
 	}
-	if writes != 1 || !strings.Contains(stdout.String(), `"action":"reconciled_update"`) {
-		t.Fatalf("writes=%d output=%s requests=%#v", writes, stdout.String(), delegate.requests)
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
 	}
+	if !envelope.OK || !envelope.Meta.Complete || envelope.Data.Action != "reconciled_update" || envelope.Data.MR.IID != desired.IID || envelope.Data.MR.Title != desired.Title || envelope.Data.MR.Description != desired.Description || envelope.Data.MR.HeadSHA != desired.SHA || envelope.Data.MR.WebURL != desired.WebURL {
+		t.Fatalf("reconciled success shape=%#v output=%s", envelope, stdout.String())
+	}
+	assertOneUpdateOneCanonicalRead(t, delegate, existing.IID)
+}
+
+func TestMREnsureAmbiguousUpdateFailsClosedWithoutExactCanonicalPostcondition(t *testing.T) {
+	existing := ensureMR(11, "old", "old body")
+	desired := ensureMR(11, "new", "new body")
+	changedHead := desired
+	changedHead.SHA = "1123456789012345678901234567890123456789"
+	wrongMR := desired
+	wrongMR.ID++
+	wrongMR.IID++
+	wrongMR.WebURL = "https://gitlab.com/group/project/-/merge_requests/12"
+	wrongURL := desired
+	wrongURL.WebURL = "https://gitlab.com/group/project/-/merge_requests/12"
+	changedBase := desired
+	changedBase.TargetBranch = "release"
+	wrongDestination := desired
+	wrongDestination.TargetProjectID++
+	incomplete := desired
+	incomplete.SHA = ""
+
+	for _, test := range []struct {
+		name      string
+		canonical upstreamMR
+		readErr   error
+	}{
+		{name: "divergent content", canonical: existing},
+		{name: "read failure", readErr: uxv1.NewError(uxv1.CodeUpstream, "synthetic canonical read failure")},
+		{name: "read timeout", readErr: context.DeadlineExceeded},
+		{name: "incomplete identity", canonical: incomplete},
+		{name: "different merge request", canonical: wrongMR},
+		{name: "different canonical URL", canonical: wrongURL},
+		{name: "stale head", canonical: changedHead},
+		{name: "changed base", canonical: changedBase},
+		{name: "different destination", canonical: wrongDestination},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			delegate := ambiguousUpdateDelegate(t, existing, test.canonical, test.readErr)
+			stdout, _, deps := productTestDeps(t, delegate)
+			if code := Run(context.Background(), ensureArgs(t, "new", "new body"), deps); code != 6 {
+				t.Fatalf("exit=%d output=%s", code, stdout.String())
+			}
+			var envelope uxv1.Envelope
+			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Error == nil || envelope.Error.Code != uxv1.CodeAmbiguousUpdate {
+				t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+			}
+			assertOneUpdateOneCanonicalRead(t, delegate, existing.IID)
+		})
+	}
+}
+
+func TestMREnsureAmbiguousUpdateCanonicalReadIsBounded(t *testing.T) {
+	existing := ensureMR(11, "old", "old body")
+	delegate := ambiguousUpdateDelegate(t, existing, upstreamMR{}, nil)
+	bounded := false
+	delegate.doFunc = func(ctx context.Context, request glab.Request) (glab.Response, error, bool) {
+		if request.Operation != glab.OpMRView {
+			return glab.Response{}, nil, false
+		}
+		deadline, ok := ctx.Deadline()
+		remaining := time.Until(deadline)
+		if !ok || remaining <= 0 || remaining > limits.EnsureReconcileOperation+time.Second {
+			t.Fatalf("canonical read deadline ok=%v remaining=%v", ok, remaining)
+		}
+		bounded = true
+		return glab.Response{UpstreamVersion: glab.SupportedVersion}, context.DeadlineExceeded, true
+	}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(context.Background(), ensureArgs(t, "new", "new body"), deps); code != 6 || !bounded || !strings.Contains(stdout.String(), `"code":"ambiguous_update"`) {
+		t.Fatalf("exit=%d bounded=%v output=%s", code, bounded, stdout.String())
+	}
+	assertOneUpdateOneCanonicalRead(t, delegate, existing.IID)
 }
 
 func TestMREnsureUpdateUsesOnePrivateTypedPayload(t *testing.T) {
@@ -356,6 +438,61 @@ func assertCreateFollowedByOneGET(t *testing.T, delegate *fakeDelegate) {
 		if request.Operation == glab.OpEnsureCreate {
 			t.Fatalf("create path retried POST: requests=%#v", delegate.requests)
 		}
+	}
+}
+
+func ambiguousUpdateDelegate(t *testing.T, existing, canonical upstreamMR, readErr error) *fakeDelegate {
+	t.Helper()
+	initial, err := json.Marshal([]upstreamMR{existing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalBody, err := json.Marshal(canonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := map[glab.Operation][]error{
+		glab.OpEnsureUpdate: {uxv1.NewError(uxv1.CodeUpstream, "synthetic ambiguous transport")},
+	}
+	if readErr != nil {
+		errs[glab.OpMRView] = []error{readErr}
+	}
+	return &fakeDelegate{
+		responses: map[glab.Operation][]glab.Response{
+			glab.OpEnsureProject: {{Body: []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`), UpstreamVersion: glab.SupportedVersion}},
+			glab.OpEnsureList:    {{Body: initial, UpstreamVersion: glab.SupportedVersion}},
+			glab.OpMRView:        {{Body: canonicalBody, UpstreamVersion: glab.SupportedVersion}},
+		},
+		errors: errs,
+	}
+}
+
+func assertOneUpdateOneCanonicalRead(t *testing.T, delegate *fakeDelegate, iid int64) {
+	t.Helper()
+	writes, reads, lists := 0, 0, 0
+	writeIndex, readIndex := -1, -1
+	for index, request := range delegate.requests {
+		switch request.Operation {
+		case glab.OpEnsureUpdate:
+			writes++
+			writeIndex = index
+			if request.IID != iid {
+				t.Fatalf("updated IID=%d want=%d", request.IID, iid)
+			}
+		case glab.OpMRView:
+			reads++
+			readIndex = index
+			if request.IID != iid {
+				t.Fatalf("canonical read IID=%d want=%d", request.IID, iid)
+			}
+		case glab.OpEnsureList:
+			lists++
+		case glab.OpEnsureCreate:
+			t.Fatalf("update reconciliation sent create: requests=%#v", delegate.requests)
+		}
+	}
+	if writes != 1 || reads != 1 || lists != 1 || readIndex != writeIndex+1 {
+		t.Fatalf("writes=%d canonical_reads=%d lists=%d write_index=%d read_index=%d requests=%#v", writes, reads, lists, writeIndex, readIndex, delegate.requests)
 	}
 }
 

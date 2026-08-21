@@ -56,10 +56,13 @@ pinned guarded immediate squash merge.
 MR ensure permits only title/description on one exact open same-project
 source/target pair. It uses validated project identity, all-page lookup,
 duplicate denial, a second GET before POST, private mode-0600 JSON, one POST or
-PUT maximum, response validation, and GET-first reconciliation after failed
-create. An exact requested MR reconciles to success; a verified empty result
-preserves only a bounded class for recognized HTTP rejections and leaves
-uncertain outcomes ambiguous.
+PUT maximum, response validation, and at most one bounded read-only
+reconciliation after an unvalidated write. Create reconciliation repeats the
+exact-branch lookup. Update reconciliation reads the canonical exact IID and
+requires the pre-write MR/project IDs, URL, branches, and head plus the exact
+requested content. A verified create absence preserves only a bounded class for
+recognized HTTP rejections; read failure, timeout, incomplete state, drift, or
+any other uncertain result remains ambiguous.
 
 Guarded merge requires explicit host/project/URL/IID/reviewed-head/authority and
 `--squash` at parse time. It additionally requires:
