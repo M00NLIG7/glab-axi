@@ -136,7 +136,39 @@ func ensureExisting(ctx context.Context, client delegateClient, target Target, p
 			writeErr = errors.New("updated merge request did not preserve requested content")
 		}
 	}
-	return reconcileEnsure(ctx, client, target, projectID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousUpdate, "reconciled_update", writeErr)
+	return reconcileEnsureUpdate(ctx, client, target, projectID, record, source, targetBranch, title, description, meta, writeErr)
+}
+
+func reconcileEnsureUpdate(ctx context.Context, client delegateClient, target Target, projectID int64, expected upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, cause error) (commandOutput, error) {
+	reconcileCtx, cancel := context.WithTimeout(ctx, limits.EnsureReconcileOperation)
+	defer cancel()
+	response, readErr := client.Do(reconcileCtx, glab.Request{Operation: glab.OpMRView, Host: target.Host, Repo: target.Repo, IID: expected.IID})
+	if response.UpstreamVersion != "" {
+		meta.UpstreamVersion = response.UpstreamVersion
+	}
+	if readErr == nil {
+		canonical, record, validateErr := decodeAndValidateEnsureMR(response.Body, target, projectID, source, targetBranch)
+		if validateErr == nil {
+			validateErr = validateEnsureUpdateIdentity(record, expected)
+		}
+		if validateErr == nil && canonical.Title == title && canonical.Description == description {
+			return commandOutput{data: ensureResult{MR: canonical, Action: "reconciled_update"}, meta: meta}, nil
+		}
+		if validateErr != nil {
+			readErr = validateErr
+		} else {
+			readErr = errors.New("canonical merge request does not have the requested updated content")
+		}
+	}
+	message := "merge request write outcome is ambiguous; reconciliation did not prove the requested state"
+	return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeAmbiguousUpdate, message, errors.Join(cause, readErr))
+}
+
+func validateEnsureUpdateIdentity(actual, expected upstreamMR) error {
+	if actual.ID != expected.ID || actual.IID != expected.IID || actual.WebURL != expected.WebURL || !validMergeSHA(expected.SHA) || actual.SHA != expected.SHA {
+		return uxv1.NewError(uxv1.CodeSafety, "canonical merge request identity changed during update reconciliation")
+	}
+	return nil
 }
 
 func reconcileEnsure(ctx context.Context, client delegateClient, target Target, projectID int64, source, targetBranch, title, description string, meta uxv1.Meta, code uxv1.Code, action string, cause error) (commandOutput, error) {
