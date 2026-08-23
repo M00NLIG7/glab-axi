@@ -74,7 +74,7 @@ func Install(home, command, skill string) (Result, error) {
 		}
 		written = append(written, item)
 	}
-	return Result{Status: "installed", Integrations: []string{"Claude Code", "Codex"}, Skill: "gl-axi"}, nil
+	return Result{Status: "installed", Integrations: []string{"Claude Code", "Codex"}, Skill: "glab-axi"}, nil
 }
 
 func updateHookJSON(current []byte, command string) ([]byte, error) {

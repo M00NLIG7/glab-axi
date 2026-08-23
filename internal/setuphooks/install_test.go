@@ -29,7 +29,7 @@ func TestInstallPreservesConfigAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "installed" || result.Skill != "gl-axi" || len(result.Integrations) != 2 {
+	if result.Status != "installed" || result.Skill != "glab-axi" || len(result.Integrations) != 2 {
 		t.Fatalf("result=%#v", result)
 	}
 	first, err := snapshot(home)
@@ -74,7 +74,7 @@ func TestInstallAcceptsCanonicalCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err != nil || result.Skill != "gl-axi" || !strings.Contains(string(settings), `"command": "gl-axi"`) {
+	if err != nil || result.Skill != "glab-axi" || !strings.Contains(string(settings), `"command": "gl-axi"`) {
 		t.Fatalf("result=%#v settings=%s err=%v", result, settings, err)
 	}
 }
