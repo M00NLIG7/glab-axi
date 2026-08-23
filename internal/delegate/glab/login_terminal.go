@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/limits"
 
 	"golang.org/x/term"
 )

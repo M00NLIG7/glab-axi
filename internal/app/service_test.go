@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"glab-axi/internal/limits"
+	"gl-axi/internal/limits"
 )
 
 func TestMergeRequestInputLimitsBoundary(t *testing.T) {

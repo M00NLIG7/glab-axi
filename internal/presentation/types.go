@@ -3,8 +3,8 @@
 package presentation
 
 import (
-	"glab-axi/internal/app"
-	"glab-axi/internal/gitlab"
+	"gl-axi/internal/app"
+	"gl-axi/internal/gitlab"
 )
 
 type Pipeline struct {

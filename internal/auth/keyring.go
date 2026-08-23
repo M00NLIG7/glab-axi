@@ -22,7 +22,7 @@ type Keyring interface {
 
 // Probe verifies that a keyring can complete a noninteractive write/delete
 // cycle without reading or modifying a credential. The random account avoids
-// collisions with both glab-axi and official-glab entries.
+// collisions with both gl-axi credentials and official-glab entries.
 func Probe(ctx context.Context, keyring Keyring) error {
 	if keyring == nil {
 		return ErrKeyringUnavailable
@@ -32,7 +32,7 @@ func Probe(ctx context.Context, keyring Keyring) error {
 		return err
 	}
 	account := hex.EncodeToString(nonce[:])
-	const service = "glab-axi/secure-store-probe"
+	const service = "gl-axi/secure-store-probe"
 	if err := keyring.Set(ctx, service, account, "1"); err != nil {
 		return err
 	}

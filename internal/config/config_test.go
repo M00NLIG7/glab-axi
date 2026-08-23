@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	v1 "glab-axi/internal/contract/v1"
+	v1 "gl-axi/internal/contract/v1"
 )
 
 func TestConfigRoundTripContainsAuthorityOnly(t *testing.T) {
@@ -36,6 +36,45 @@ func TestConfigRoundTripContainsAuthorityOnly(t *testing.T) {
 	info, _ := os.Stat(path)
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode=%o", info.Mode().Perm())
+	}
+}
+
+func TestConfigPathSupportsCanonicalAndCompatibilityEnvironment(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		canonical string
+		legacy    string
+		want      string
+		wantExit  int
+	}{
+		{name: "canonical", canonical: filepath.Join(t.TempDir(), "canonical.json"), want: "canonical"},
+		{name: "compatibility", legacy: filepath.Join(t.TempDir(), "legacy.json"), want: "legacy"},
+		{name: "matching aliases", canonical: filepath.Join(t.TempDir(), "shared.json"), want: "shared"},
+		{name: "disagreeing aliases", canonical: filepath.Join(t.TempDir(), "one.json"), legacy: filepath.Join(t.TempDir(), "two.json"), wantExit: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("GL_AXI_CONFIG_DIR", "")
+			t.Setenv("GLAB_AXI_CONFIG_DIR", "")
+			if test.want == "shared" {
+				test.legacy = test.canonical
+			}
+			t.Setenv("GL_AXI_CONFIG", test.canonical)
+			t.Setenv("GLAB_AXI_CONFIG", test.legacy)
+			path, err := Path()
+			if test.wantExit != 0 {
+				if v1.ExitCode(err) != test.wantExit {
+					t.Fatalf("path=%q error=%v", path, err)
+				}
+				return
+			}
+			want := test.canonical
+			if want == "" {
+				want = test.legacy
+			}
+			if err != nil || path != filepath.Clean(want) {
+				t.Fatalf("path=%q want=%q error=%v", path, want, err)
+			}
+		})
 	}
 }
 

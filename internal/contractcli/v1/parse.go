@@ -3,7 +3,7 @@ package v1cli
 import (
 	"strings"
 
-	"glab-axi/internal/contract/v1"
+	"gl-axi/internal/contract/v1"
 )
 
 type flagSpec map[string]bool // true means the flag consumes a value

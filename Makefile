@@ -11,6 +11,7 @@ vet:
 
 build:
 	mkdir -p dist
+	go build -trimpath -o dist/gl-axi ./cmd/gl-axi
 	go build -trimpath -o dist/glab-axi ./cmd/glab-axi
 
 # The legacy executable named glab is a contract-test artifact only. It is

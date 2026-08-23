@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/delegate/glab"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/delegate/glab"
 )
 
 type firstmateConsumerContract struct {

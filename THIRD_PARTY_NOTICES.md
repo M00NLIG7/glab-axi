@@ -1,6 +1,6 @@
 # Third-party notices
 
-The standalone `glab-axi` binary links the modules pinned in `go.mod`/`go.sum`:
+The standalone `gl-axi` binary and its `glab-axi` compatibility alias link the modules pinned in `go.mod`/`go.sum`:
 
 | Module | Version | License | Purpose |
 |---|---:|---|---|

@@ -37,19 +37,19 @@ func Failure(err error, meta Meta) Envelope {
 func helpFor(code Code) []string {
 	switch code {
 	case CodeValidation, CodeUnsupported:
-		return []string{"run glab-axi --help or the command's --help page"}
+		return []string{"run gl-axi --help or the command's --help page"}
 	case CodeSecurityBoundary:
 		return []string{"use official glab directly as a human if this operation is authorized"}
 	case CodeInteractiveRequired:
-		return []string{"ask a human to run glab-axi auth login in a real terminal"}
+		return []string{"ask a human to run gl-axi auth login in a real terminal"}
 	case CodeDependencyMissing:
 		return []string{"install official glab 1.112.0 through an official GitLab CLI channel"}
 	case CodeDependencyUnsupported:
 		return []string{"install the pinned official glab 1.112.0 release"}
 	case CodeAuthentication:
-		return []string{"ask a human to run glab-axi auth login, or use an approved GitLab token environment variable"}
+		return []string{"ask a human to run gl-axi auth login, or use an approved GitLab token environment variable"}
 	case CodeForbidden:
-		return []string{"verify the official-glab profile's project role without broadening glab-axi"}
+		return []string{"verify the official-glab profile's project role without broadening gl-axi"}
 	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate:
 		return []string{"inspect exact matching merge requests before retrying"}
 	case CodeAmbiguousMerge:

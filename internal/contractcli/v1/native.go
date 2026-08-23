@@ -8,31 +8,31 @@ import (
 	"strconv"
 	"strings"
 
-	"glab-axi/internal/app"
-	"glab-axi/internal/auth"
-	"glab-axi/internal/buildinfo"
-	"glab-axi/internal/config"
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/gitlab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/output"
-	"glab-axi/internal/presentation"
-	"glab-axi/internal/privatefile"
-	runtimepkg "glab-axi/internal/runtime"
+	"gl-axi/internal/app"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/buildinfo"
+	"gl-axi/internal/config"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/gitlab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/output"
+	"gl-axi/internal/presentation"
+	"gl-axi/internal/privatefile"
+	runtimepkg "gl-axi/internal/runtime"
 )
 
 const Version = buildinfo.Version
 
-const nativeHelp = `glab-axi - bounded native GitLab MR/CI client
+const nativeHelp = `gl-axi - bounded native GitLab MR/CI client
 
 Usage:
-  glab-axi auth status --host HOST --repo GROUP/PROJECT [--format toon|json]
-  glab-axi auth import --host HOST --api-base URL --web-base URL --token-stdin [--format toon|json]
-  glab-axi mr ensure --host HOST --repo PROJECT --source BRANCH --target BRANCH --title-file FILE --description-file FILE [--format toon|json]
-  glab-axi mr view IID --host HOST --repo PROJECT [--format toon|json]
-  glab-axi ci status --mr IID --host HOST --repo PROJECT [--format toon|json]
-  glab-axi ci jobs --pipeline-id ID --host HOST --repo PROJECT [--format toon|json]
-  glab-axi ci trace JOB_ID --host HOST --repo PROJECT [--format toon|json]
+  gl-axi auth status --host HOST --repo GROUP/PROJECT [--format toon|json]
+  gl-axi auth import --host HOST --api-base URL --web-base URL --token-stdin [--format toon|json]
+  gl-axi mr ensure --host HOST --repo PROJECT --source BRANCH --target BRANCH --title-file FILE --description-file FILE [--format toon|json]
+  gl-axi mr view IID --host HOST --repo PROJECT [--format toon|json]
+  gl-axi ci status --mr IID --host HOST --repo PROJECT [--format toon|json]
+  gl-axi ci jobs --pipeline-id ID --host HOST --repo PROJECT [--format toon|json]
+  gl-axi ci trace JOB_ID --host HOST --repo PROJECT [--format toon|json]
 
 Credentials are accepted only from documented environment variables or the
 no-UI OS keyring. Token argv flags, interactive login, generic API access,
@@ -45,25 +45,36 @@ type commandResult struct {
 }
 
 func RunNative(ctx context.Context, args []string, deps runtimepkg.Dependencies) int {
+	return RunNativeAs(ctx, args, deps, "gl-axi")
+}
+
+func RunNativeAs(ctx context.Context, args []string, deps runtimepkg.Dependencies, programName string) int {
+	if programName != "gl-axi" && programName != "glab-axi" {
+		programName = "gl-axi"
+	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "help") {
-		_, _ = io.WriteString(deps.Stdout, nativeHelp)
+		help := nativeHelp
+		if programName == "glab-axi" {
+			help = strings.ReplaceAll(nativeHelp, "gl-axi", "glab-axi")
+		}
+		_, _ = io.WriteString(deps.Stdout, help)
 		return 0
 	}
 	if len(args) == 1 && args[0] == "--version" {
-		_, _ = fmt.Fprintf(deps.Stdout, "glab-axi %s (contract %s)\n", Version, v1.Schema)
+		_, _ = fmt.Fprintf(deps.Stdout, "%s %s (contract %s)\n", programName, Version, v1.Schema)
 		return 0
 	}
 	format := formatHint(args)
 	result, err := dispatchNative(ctx, args, deps)
 	if err != nil {
 		if writeErr := output.Write(deps.Stdout, format, v1.Failure(err)); writeErr != nil {
-			_, _ = io.WriteString(deps.Stderr, "glab-axi: output failure\n")
+			_, _ = fmt.Fprintf(deps.Stderr, "%s: output failure\n", programName)
 			return 8
 		}
 		return v1.ExitCode(err)
 	}
 	if err := output.Write(deps.Stdout, result.format, v1.Success(result.data, false)); err != nil {
-		_, _ = io.WriteString(deps.Stderr, "glab-axi: output failure\n")
+		_, _ = fmt.Fprintf(deps.Stderr, "%s: output failure\n", programName)
 		return 8
 	}
 	return 0

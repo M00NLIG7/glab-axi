@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	v1 "glab-axi/internal/contract/v1"
+	v1 "gl-axi/internal/contract/v1"
 )
 
 func TestAuthoritySupportsRelativeInstallAndEncodesProject(t *testing.T) {

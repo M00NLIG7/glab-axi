@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"glab-axi/internal/limits"
+	"gl-axi/internal/limits"
 )
 
 func TestResponseBodyLimitBoundary(t *testing.T) {

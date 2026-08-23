@@ -45,7 +45,8 @@ func TestGeneratedPublicAssetsMatchCommandRegistry(t *testing.T) {
 		path string
 		want string
 	}{
-		{filepath.Join("..", "..", "skills", "glab-axi", "SKILL.md"), SkillMarkdown()},
+		{filepath.Join("..", "..", "skills", "gl-axi", "SKILL.md"), SkillMarkdown()},
+		{filepath.Join("..", "..", "skills", "glab-axi", "SKILL.md"), LegacySkillMarkdown()},
 		{filepath.Join("..", "..", "docs", "command-reference.md"), CommandReferenceMarkdown()},
 	}
 	for _, contract := range contracts {

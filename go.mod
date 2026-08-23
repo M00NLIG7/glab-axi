@@ -1,4 +1,4 @@
-module glab-axi
+module gl-axi
 
 go 1.23
 

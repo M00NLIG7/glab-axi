@@ -26,7 +26,7 @@ func TestSignedCheckAndHumanConfirmedAtomicInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact := []byte("#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then printf 'glab-axi 0.3.0 (contract glab-axi/v1)\\n'; exit 0; fi\nexit 2\n")
+	artifact := []byte("#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then printf 'gl-axi 0.3.0 (contract glab-axi/v1)\\n'; exit 0; fi\nexit 2\n")
 	hash := sha256.Sum256(artifact)
 	var manifestBytes []byte
 	var artifactRequests atomic.Int32
@@ -48,7 +48,7 @@ func TestSignedCheckAndHumanConfirmedAtomicInstall(t *testing.T) {
 		Artifacts: []Artifact{{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, URL: server.URL + "/artifact", SHA256: hex.EncodeToString(hash[:]), Size: int64(len(artifact))}},
 	}
 	manifestBytes = signManifest(t, manifest, private)
-	target := filepath.Join(t.TempDir(), "glab-axi")
+	target := filepath.Join(t.TempDir(), "gl-axi")
 	if err := os.WriteFile(target, []byte("old-binary"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -77,8 +77,52 @@ func TestSignedCheckAndHumanConfirmedAtomicInstall(t *testing.T) {
 	if err != nil || string(after) != string(artifact) {
 		t.Fatalf("installed bytes mismatch: %v", err)
 	}
-	if _, err := os.Stat(target + ".glab-axi-backup"); !os.IsNotExist(err) {
+	if _, err := os.Stat(target + ".gl-axi-backup"); !os.IsNotExist(err) {
 		t.Fatalf("backup remained: %v", err)
+	}
+}
+
+func TestLegacyAliasCandidateHandshakeRemainsSupported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX script")
+	}
+	path := filepath.Join(t.TempDir(), "glab-axi")
+	artifact := []byte("#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then printf 'glab-axi 0.3.0 (contract glab-axi/v1)\\n'; exit 0; fi\nexit 2\n")
+	if err := os.WriteFile(path, artifact, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCandidate(context.Background(), path, "glab-axi", "0.3.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCandidate(context.Background(), path, "gl-axi", "0.3.0"); err == nil {
+		t.Fatal("legacy alias satisfied the canonical handshake")
+	}
+}
+
+func TestManifestSchemaIsBoundToExecutableIdentity(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifestBytes []byte
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(manifestBytes) }))
+	defer server.Close()
+	artifact := Artifact{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, URL: server.URL + "/artifact", SHA256: strings.Repeat("0", 64), Size: 1}
+	config := Config{
+		CurrentVersion: "0.3.0", ProductName: "glab-axi", ManifestURL: server.URL,
+		PublicKey: base64.StdEncoding.EncodeToString(public), HTTPClient: server.Client(), TestOrigin: server.URL,
+	}
+	manifestBytes = signManifest(t, Manifest{Schema: LegacyManifestSchema, Version: "0.3.0", Artifacts: []Artifact{artifact}}, private)
+	if _, err := Run(context.Background(), true, config); err != nil {
+		t.Fatalf("legacy manifest rejected: %v", err)
+	}
+	manifestBytes = signManifest(t, Manifest{Schema: ManifestSchema, Version: "0.3.0", Artifacts: []Artifact{artifact}}, private)
+	if _, err := Run(context.Background(), true, config); err == nil {
+		t.Fatal("canonical manifest was accepted for the compatibility executable")
+	}
+	config.ProductName = "gl-axi"
+	if _, err := Run(context.Background(), true, config); err != nil {
+		t.Fatalf("canonical manifest rejected: %v", err)
 	}
 }
 
@@ -99,7 +143,7 @@ func TestUpdateRejectsSignatureAndChecksumBeforeReplacement(t *testing.T) {
 		_, _ = w.Write(artifact)
 	}))
 	defer server.Close()
-	target := filepath.Join(t.TempDir(), "glab-axi")
+	target := filepath.Join(t.TempDir(), "gl-axi")
 	if err := os.WriteFile(target, []byte("old"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -154,11 +198,13 @@ func TestApplyRequiresTTYBeforeArtifactDownload(t *testing.T) {
 
 func TestManagedExecutablePathDetection(t *testing.T) {
 	for _, path := range []string{
+		"/usr/local/bin/gl-axi",
+		"/opt/homebrew/Cellar/gl-axi/0.2.0/bin/gl-axi",
+		"/home/linuxbrew/.linuxbrew/Cellar/gl-axi/0.2.0/bin/gl-axi",
+		"/nix/store/abc-gl-axi/bin/gl-axi",
+		"/home/user/.local/share/mise/installs/gl-axi/0.2.0/bin/gl-axi",
 		"/usr/local/bin/glab-axi",
 		"/opt/homebrew/Cellar/glab-axi/0.2.0/bin/glab-axi",
-		"/home/linuxbrew/.linuxbrew/Cellar/glab-axi/0.2.0/bin/glab-axi",
-		"/nix/store/abc-glab-axi/bin/glab-axi",
-		"/home/user/.local/share/mise/installs/glab-axi/0.2.0/bin/glab-axi",
 	} {
 		if !managedExecutablePath(path) {
 			t.Fatalf("managed path was accepted: %s", path)

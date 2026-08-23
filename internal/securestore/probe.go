@@ -20,7 +20,7 @@ func Probe(ctx context.Context) error {
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
 	}
-	service := "glab-axi:__official_glab_keyring_probe__"
+	service := "gl-axi:__official_glab_keyring_probe__"
 	account := hex.EncodeToString(nonce[:])
 	if err := keyring.Set(service, account, "1"); err != nil {
 		return fmt.Errorf("secure keyring probe write: %w", err)

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"glab-axi/internal/limits"
+	"gl-axi/internal/limits"
 )
 
 func TestRedactorRemovesExactHeadersURLsAndPatterns(t *testing.T) {

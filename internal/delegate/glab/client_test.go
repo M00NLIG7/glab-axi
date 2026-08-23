@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"glab-axi/internal/auth"
-	"glab-axi/internal/commandctx"
-	"glab-axi/internal/contract/uxv1"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/commandctx"
+	"gl-axi/internal/contract/uxv1"
 
 	"github.com/creack/pty"
 	"golang.org/x/term"
@@ -448,6 +448,8 @@ func TestLoginStripsAmbientCredentialsWhileReadsRetainApprovedTokens(t *testing.
 		"GLAB_AXI_FAKE_RECORD="+record,
 		"GLAB_AXI_FAKE_REQUIRE_LOGIN_ENV_CLEAN=1",
 		"GLAB_AXI_FAKE_MODE=login-failure",
+		"GL_AXI_TOKEN="+secret,
+		"GLAB_AXI_TOKEN="+secret,
 		"GITLAB_TOKEN="+secret,
 		"GITLAB_ACCESS_TOKEN="+secret,
 		"OAUTH_TOKEN="+secret,
@@ -474,10 +476,10 @@ func TestLoginStripsAmbientCredentialsWhileReadsRetainApprovedTokens(t *testing.
 		t.Fatal("login credential reached child argv, terminal output, or wrapper error")
 	}
 
-	readEnv := sanitizedEnv([]string{"GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "gitlab.com", false)
-	loginEnv := sanitizedEnv([]string{"GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "gitlab.com", true)
-	versionEnv := sanitizedEnv([]string{"GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "", false)
-	if !envContains(readEnv, "GITLAB_TOKEN", secret) || envContains(loginEnv, "GITLAB_TOKEN", secret) || envContains(versionEnv, "GITLAB_TOKEN", secret) {
+	readEnv := sanitizedEnv([]string{"GL_AXI_TOKEN=" + secret, "GLAB_AXI_TOKEN=" + secret, "GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "gitlab.com", false)
+	loginEnv := sanitizedEnv([]string{"GL_AXI_TOKEN=" + secret, "GLAB_AXI_TOKEN=" + secret, "GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "gitlab.com", true)
+	versionEnv := sanitizedEnv([]string{"GL_AXI_TOKEN=" + secret, "GLAB_AXI_TOKEN=" + secret, "GITLAB_TOKEN=" + secret, "glab_debug_http=true"}, "", false)
+	if !envContains(readEnv, "GL_AXI_TOKEN", secret) || !envContains(readEnv, "GLAB_AXI_TOKEN", secret) || !envContains(readEnv, "GITLAB_TOKEN", secret) || envContains(loginEnv, "GL_AXI_TOKEN", secret) || envContains(loginEnv, "GLAB_AXI_TOKEN", secret) || envContains(loginEnv, "GITLAB_TOKEN", secret) || envContains(versionEnv, "GL_AXI_TOKEN", secret) || envContains(versionEnv, "GLAB_AXI_TOKEN", secret) || envContains(versionEnv, "GITLAB_TOKEN", secret) {
 		t.Fatal("credential environment lane separation changed")
 	}
 	for _, item := range append(append(readEnv, loginEnv...), versionEnv...) {
@@ -818,8 +820,8 @@ if [ "${GLAB_CHECK_UPDATE:-}" != "false" ] || [ "${GLAB_DEBUG_HTTP:-}" != "false
 fi
 printf '%s\n' "$*" >> "${GLAB_AXI_FAKE_RECORD}"
 if [ "${GLAB_AXI_FAKE_REQUIRE_LOGIN_ENV_CLEAN:-}" = "1" ] && [ "${1:-}" = "auth" ] && [ "${2:-}" = "login" ]; then
-  if [ -n "${GITLAB_TOKEN:-}" ] || [ -n "${GITLAB_ACCESS_TOKEN:-}" ] || [ -n "${OAUTH_TOKEN:-}" ] || [ -n "${CI_JOB_TOKEN:-}" ]; then
-    printf 'ambient credential reached login dependency child: %s%s%s%s\n' "${GITLAB_TOKEN:-}" "${GITLAB_ACCESS_TOKEN:-}" "${OAUTH_TOKEN:-}" "${CI_JOB_TOKEN:-}" >&2
+  if [ -n "${GL_AXI_TOKEN:-}" ] || [ -n "${GLAB_AXI_TOKEN:-}" ] || [ -n "${GITLAB_TOKEN:-}" ] || [ -n "${GITLAB_ACCESS_TOKEN:-}" ] || [ -n "${OAUTH_TOKEN:-}" ] || [ -n "${CI_JOB_TOKEN:-}" ]; then
+    printf 'ambient credential reached login dependency child: %s%s%s%s%s%s\n' "${GL_AXI_TOKEN:-}" "${GLAB_AXI_TOKEN:-}" "${GITLAB_TOKEN:-}" "${GITLAB_ACCESS_TOKEN:-}" "${OAUTH_TOKEN:-}" "${CI_JOB_TOKEN:-}" >&2
     exit 91
   fi
   if [ "${CI:-}" != "false" ] || [ "${GITLAB_CI:-}" != "false" ]; then

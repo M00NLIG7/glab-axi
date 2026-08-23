@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"glab-axi/internal/auth"
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/gitremote"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/gitremote"
+	"gl-axi/internal/safeurl"
 )
 
 type Target struct {

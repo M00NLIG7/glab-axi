@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/delegate/glab"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/delegate/glab"
 )
 
 func fetchList[T any](ctx context.Context, client delegateClient, request glab.Request, limit int, normalize func([]byte) ([]T, bool, error)) ([]T, listState, error) {

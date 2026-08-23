@@ -8,11 +8,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"glab-axi/internal/config"
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/gitlab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/config"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/gitlab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
 )
 
 type Service struct {

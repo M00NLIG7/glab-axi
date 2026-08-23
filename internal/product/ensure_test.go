@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/delegate/glab"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
 )
 
 func TestMREnsureReplayAndDuplicateDenialMakeNoWrite(t *testing.T) {

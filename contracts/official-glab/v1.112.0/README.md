@@ -20,8 +20,10 @@ empty temporary home and config, update checks disabled, and color disabled.
 establish keyring probing and the documented plaintext fallback. The adapter
 never parses official `glab` config or credentials.
 
-`capabilities.json` is the implementation boundary. Public `glab-axi` input is
-never appended to an upstream argv. Each adapter constructs one listed argv,
+`capabilities.json` is the implementation boundary. Its `mr-view` entry also
+pins the response normalization: the official client's `diff_refs.head_sha`
+becomes canonical `sha` only when valid, and two supplied values must match.
+Public `gl-axi` input is never appended to an upstream argv. Each adapter constructs one listed argv,
 validates every substituted value, bounds child output, and normalizes it into
 a command-specific `glab-axi/ux-v1` schema. The guarded merge entries pin four
 fixed reads and one fixed PUT; the PUT consumes only a private four-key JSON

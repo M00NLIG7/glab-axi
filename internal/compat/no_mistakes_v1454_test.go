@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"glab-axi/internal/testgitlab"
+	"gl-axi/internal/testgitlab"
 )
 
 type contractFile struct {

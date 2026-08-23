@@ -13,9 +13,9 @@ import (
 	"sync"
 	"testing"
 
-	"glab-axi/internal/auth"
-	runtimepkg "glab-axi/internal/runtime"
-	"glab-axi/internal/testgitlab"
+	"gl-axi/internal/auth"
+	runtimepkg "gl-axi/internal/runtime"
+	"gl-axi/internal/testgitlab"
 )
 
 type memoryKeyring struct {

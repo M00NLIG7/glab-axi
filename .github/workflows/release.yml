@@ -39,11 +39,11 @@ jobs:
       - name: Validate tag, tests, and signing key
         shell: bash
         env:
-          UPDATE_SIGNING_KEY: ${{ secrets.GLAB_AXI_UPDATE_SIGNING_KEY }}
-          UPDATE_PUBLIC_KEY: ${{ vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
+          UPDATE_SIGNING_KEY: ${{ secrets.GL_AXI_UPDATE_SIGNING_KEY || secrets.GLAB_AXI_UPDATE_SIGNING_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.GL_AXI_UPDATE_PUBLIC_KEY || vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
-          expected="v$(go run ./cmd/glab-axi --version | awk '{print $2}')"
+          expected="v$(go run ./cmd/gl-axi --version | awk '{print $2}')"
           test "${GITHUB_REF_NAME}" = "${expected}"
           release_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"
           main_commit="$(git rev-parse 'origin/main^{commit}')"
@@ -110,48 +110,54 @@ jobs:
           cache: false
           architecture: x64
 
-      - name: Build and verify standalone release executable
+      - name: Build and verify canonical executable and compatibility alias
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
-          UPDATE_PUBLIC_KEY: ${{ vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.GL_AXI_UPDATE_PUBLIC_KEY || vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           test -n "${UPDATE_PUBLIC_KEY}"
           goos="$(go env GOOS)"
           goarch="$(go env GOARCH)"
-          asset="glab-axi_${version}_${goos}_${goarch}${{ matrix.suffix }}"
+          canonical_asset="gl-axi_${version}_${goos}_${goarch}${{ matrix.suffix }}"
+          legacy_asset="glab-axi_${version}_${goos}_${goarch}${{ matrix.suffix }}"
           mkdir -p release/package
-          go build -trimpath -ldflags "-s -w -X glab-axi/internal/buildinfo.UpdatePublicKey=${UPDATE_PUBLIC_KEY}" -o "release/${asset}" ./cmd/glab-axi
+          go build -trimpath -ldflags "-s -w -X gl-axi/internal/buildinfo.UpdatePublicKey=${UPDATE_PUBLIC_KEY}" -o "release/${canonical_asset}" ./cmd/gl-axi
+          go build -trimpath -ldflags "-s -w -X gl-axi/internal/buildinfo.UpdatePublicKey=${UPDATE_PUBLIC_KEY}" -o "release/${legacy_asset}" ./cmd/glab-axi
           if [[ "${goos}" == "$(go env GOHOSTOS)" && "${goarch}" == "$(go env GOHOSTARCH)" ]]; then
-            test "$("release/${asset}" --version)" = "glab-axi ${version} (contract glab-axi/v1)"
+            test "$("release/${canonical_asset}" --version)" = "gl-axi ${version} (contract glab-axi/v1)"
+            test "$("release/${legacy_asset}" --version)" = "glab-axi ${version} (contract glab-axi/v1)"
           fi
-          test "$(wc -c < "release/${asset}")" -le 134217728
-          go version -m "release/${asset}" | tee "release/${asset}.buildinfo"
-          grep -q $'build\tvcs.revision=' "release/${asset}.buildinfo"
-          grep -q $'build\tvcs.modified=false' "release/${asset}.buildinfo"
-          cp "release/${asset}" "release/package/glab-axi${{ matrix.suffix }}"
+          for asset in "${canonical_asset}" "${legacy_asset}"; do
+            test "$(wc -c < "release/${asset}")" -le 134217728
+            go version -m "release/${asset}" | tee "release/${asset}.buildinfo"
+            grep -q $'build\tvcs.revision=' "release/${asset}.buildinfo"
+            grep -q $'build\tvcs.modified=false' "release/${asset}.buildinfo"
+          done
+          cp "release/${canonical_asset}" "release/package/gl-axi${{ matrix.suffix }}"
+          cp "release/${legacy_asset}" "release/package/glab-axi${{ matrix.suffix }}"
           printf '%s\n' "${UPDATE_PUBLIC_KEY}" > release/package/UPDATE_SIGNING_PUBLIC_KEY
           cp LICENSE README.md THIRD_PARTY_NOTICES.md release/package/
-          cp -R contracts docs licenses schema release/package/
-          mkdir -p release/package/skills/glab-axi
-          cp skills/glab-axi/SKILL.md release/package/skills/glab-axi/
+          cp -R contracts docs licenses schema skills release/package/
           if [[ '${{ matrix.package }}' == 'zip' ]]; then
-            (cd release/package && tar -a -cf "../glab-axi_${version}_${goos}_${goarch}.zip" .)
+            (cd release/package && tar -a -cf "../gl-axi_${version}_${goos}_${goarch}.zip" .)
+            cp "release/gl-axi_${version}_${goos}_${goarch}.zip" "release/glab-axi_${version}_${goos}_${goarch}.zip"
           else
-            (cd release/package && tar -czf "../glab-axi_${version}_${goos}_${goarch}.tar.gz" .)
+            (cd release/package && tar -czf "../gl-axi_${version}_${goos}_${goarch}.tar.gz" .)
+            cp "release/gl-axi_${version}_${goos}_${goarch}.tar.gz" "release/glab-axi_${version}_${goos}_${goarch}.tar.gz"
           fi
 
-      - name: Upload only product release assets to draft
+      - name: Upload canonical and compatibility release assets to draft
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release upload "${GITHUB_REF_NAME}" release/glab-axi_* --repo "${GITHUB_REPOSITORY}" --clobber
+          gh release upload "${GITHUB_REF_NAME}" release/gl-axi_* release/glab-axi_* --repo "${GITHUB_REPOSITORY}" --clobber
 
   finalize:
     name: Sign manifest and publish
@@ -175,58 +181,65 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          UPDATE_PUBLIC_KEY: ${{ vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.GL_AXI_UPDATE_PUBLIC_KEY || vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           test -n "${UPDATE_PUBLIC_KEY}"
           mkdir -p release
           gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --dir release
-          printf '%s\n' "${UPDATE_PUBLIC_KEY}" > release/glab-axi-update-public-key.txt
-          (cd release && sha256sum glab-axi_* glab-axi-update-public-key.txt > checksums.txt)
+          printf '%s\n' "${UPDATE_PUBLIC_KEY}" > release/gl-axi-update-public-key.txt
+          cp release/gl-axi-update-public-key.txt release/glab-axi-update-public-key.txt
+          (cd release && sha256sum gl-axi_* glab-axi_* gl-axi-update-public-key.txt glab-axi-update-public-key.txt > checksums.txt)
 
       - name: Build and sign update manifest
         shell: bash
         env:
-          UPDATE_SIGNING_KEY: ${{ secrets.GLAB_AXI_UPDATE_SIGNING_KEY }}
-          UPDATE_PUBLIC_KEY: ${{ vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
+          UPDATE_SIGNING_KEY: ${{ secrets.GL_AXI_UPDATE_SIGNING_KEY || secrets.GLAB_AXI_UPDATE_SIGNING_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.GL_AXI_UPDATE_PUBLIC_KEY || vars.GLAB_AXI_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           derived="$(printf '%s' "${UPDATE_SIGNING_KEY}" | go run ./cmd/release-manifest public-key)"
           test "${derived}" = "${UPDATE_PUBLIC_KEY}"
           published_at="$(git show -s --format=%cI "${GITHUB_SHA}^{commit}")"
-          python3 - "${version}" "${GITHUB_REPOSITORY}" "${published_at}" > release/unsigned-manifest.json <<'PY'
+          python3 - "${version}" "${GITHUB_REPOSITORY}" "${published_at}" <<'PY'
           import hashlib, json, pathlib, sys
           version, repository, published_at = sys.argv[1:]
-          artifacts = []
-          prefix = f"glab-axi_{version}_"
-          for path in sorted(pathlib.Path("release").glob(prefix + "*")):
-              name = path.name
-              if name.endswith((".tar.gz", ".zip", ".buildinfo")):
-                  continue
-              platform = name[len(prefix):]
-              if platform.endswith(".exe"):
-                  platform = platform[:-4]
-              goos, goarch = platform.split("_", 1)
-              data = path.read_bytes()
-              artifacts.append({
-                  "goos": goos,
-                  "goarch": goarch,
-                  "url": f"https://github.com/{repository}/releases/download/v{version}/{name}",
-                  "sha256": hashlib.sha256(data).hexdigest(),
-                  "size": len(data),
-              })
-          if not artifacts:
-              raise SystemExit("no raw release executables found")
-          print(json.dumps({
-              "schema": "glab-axi/update-manifest/v1",
-              "version": version,
-              "published_at": published_at,
-              "artifacts": artifacts,
-              "signature": "",
-          }, indent=2))
+          for product, schema in (
+              ("gl-axi", "gl-axi/update-manifest/v1"),
+              ("glab-axi", "glab-axi/update-manifest/v1"),
+          ):
+              artifacts = []
+              prefix = f"{product}_{version}_"
+              for path in sorted(pathlib.Path("release").glob(prefix + "*")):
+                  name = path.name
+                  if name.endswith((".tar.gz", ".zip", ".buildinfo")):
+                      continue
+                  platform = name[len(prefix):]
+                  if platform.endswith(".exe"):
+                      platform = platform[:-4]
+                  goos, goarch = platform.split("_", 1)
+                  data = path.read_bytes()
+                  artifacts.append({
+                      "goos": goos,
+                      "goarch": goarch,
+                      "url": f"https://github.com/{repository}/releases/download/v{version}/{name}",
+                      "sha256": hashlib.sha256(data).hexdigest(),
+                      "size": len(data),
+                  })
+              if not artifacts:
+                  raise SystemExit(f"no raw {product} release executables found")
+              manifest = {
+                  "schema": schema,
+                  "version": version,
+                  "published_at": published_at,
+                  "artifacts": artifacts,
+                  "signature": "",
+              }
+              pathlib.Path(f"release/unsigned-{product}-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
           PY
-          printf '%s' "${UPDATE_SIGNING_KEY}" | go run ./cmd/release-manifest sign --input release/unsigned-manifest.json > release/glab-axi-update-v1.json
+          printf '%s' "${UPDATE_SIGNING_KEY}" | go run ./cmd/release-manifest sign --input release/unsigned-gl-axi-manifest.json > release/gl-axi-update-v1.json
+          printf '%s' "${UPDATE_SIGNING_KEY}" | go run ./cmd/release-manifest sign --input release/unsigned-glab-axi-manifest.json > release/glab-axi-update-v1.json
           printf '%s' "${UPDATE_SIGNING_KEY}" | go run ./cmd/release-manifest sign-file --input release/checksums.txt > release/checksums.txt.sig
 
       - name: Upload signed metadata and publish release
@@ -235,5 +248,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release upload "${GITHUB_REF_NAME}" release/checksums.txt release/checksums.txt.sig release/glab-axi-update-public-key.txt release/glab-axi-update-v1.json --repo "${GITHUB_REPOSITORY}" --clobber
+          gh release upload "${GITHUB_REF_NAME}" release/checksums.txt release/checksums.txt.sig release/gl-axi-update-public-key.txt release/gl-axi-update-v1.json release/glab-axi-update-public-key.txt release/glab-axi-update-v1.json --repo "${GITHUB_REPOSITORY}" --clobber
           gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false

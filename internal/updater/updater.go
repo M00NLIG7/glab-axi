@@ -25,13 +25,14 @@ import (
 	"strings"
 	"time"
 
-	"glab-axi/internal/contract/uxv1"
+	"gl-axi/internal/contract/uxv1"
 )
 
 const (
-	ManifestSchema  = "glab-axi/update-manifest/v1"
-	maxManifestSize = 1 << 20
-	maxArtifactSize = 128 << 20
+	ManifestSchema       = "gl-axi/update-manifest/v1"
+	LegacyManifestSchema = "glab-axi/update-manifest/v1"
+	maxManifestSize      = 1 << 20
+	maxArtifactSize      = 128 << 20
 )
 
 type Manifest struct {
@@ -59,6 +60,8 @@ type Result struct {
 
 type Config struct {
 	CurrentVersion string
+	ProductName    string
+	ManifestSchema string
 	ManifestURL    string
 	PublicKey      string
 	HTTPClient     *http.Client
@@ -98,7 +101,7 @@ func Run(ctx context.Context, checkOnly bool, config Config) (Result, error) {
 	if config.IsTerminal == nil || !config.IsTerminal() {
 		return Result{}, uxv1.NewError(uxv1.CodeInteractiveRequired, "installing an update requires a human terminal; use update --check from agents")
 	}
-	confirmed, err := confirm(config.Stdin, config.Stderr, manifest.Version)
+	confirmed, err := confirm(config.Stdin, config.Stderr, config.ProductName, manifest.Version)
 	if err != nil {
 		return Result{}, err
 	}
@@ -113,6 +116,15 @@ func Run(ctx context.Context, checkOnly bool, config Config) (Result, error) {
 }
 
 func applyDefaults(config *Config) {
+	if config.ProductName != "gl-axi" && config.ProductName != "glab-axi" {
+		config.ProductName = "gl-axi"
+	}
+	if config.ManifestSchema == "" {
+		config.ManifestSchema = ManifestSchema
+		if config.ProductName == "glab-axi" {
+			config.ManifestSchema = LegacyManifestSchema
+		}
+	}
 	if config.HTTPClient == nil {
 		client := &http.Client{Timeout: 45 * time.Second}
 		client.CheckRedirect = safeRedirect
@@ -170,7 +182,7 @@ func loadManifest(ctx context.Context, config Config) (Manifest, error) {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Manifest{}, uxv1.NewError(uxv1.CodeUpstream, "signed update manifest contains trailing data")
 	}
-	if manifest.Schema != ManifestSchema || len(manifest.Artifacts) == 0 || len(manifest.Artifacts) > 12 {
+	if manifest.Schema != config.ManifestSchema || len(manifest.Artifacts) == 0 || len(manifest.Artifacts) > 12 {
 		return Manifest{}, uxv1.NewError(uxv1.CodeSafety, "signed update manifest has an unsupported schema")
 	}
 	if _, err := parseVersion(manifest.Version); err != nil {
@@ -234,7 +246,7 @@ func install(ctx context.Context, config Config, version string, artifact Artifa
 		return uxv1.NewError(uxv1.CodeSafety, "self-update refuses symlinked or managed executable paths; use the package channel")
 	}
 	dir := filepath.Dir(target)
-	temp, err := os.CreateTemp(dir, ".glab-axi-update-*")
+	temp, err := os.CreateTemp(dir, "."+config.ProductName+"-update-*")
 	if err != nil {
 		return uxv1.Wrap(uxv1.CodeUpstream, "cannot create update candidate", err)
 	}
@@ -269,14 +281,14 @@ func install(ctx context.Context, config Config, version string, artifact Artifa
 	if err := temp.Chmod(mode); err != nil || temp.Sync() != nil || temp.Close() != nil {
 		return uxv1.NewError(uxv1.CodeUpstream, "cannot finalize update candidate")
 	}
-	if err := verifyCandidate(ctx, tempPath, version); err != nil {
+	if err := verifyCandidate(ctx, tempPath, config.ProductName, version); err != nil {
 		return err
 	}
 	currentInfo, err := os.Lstat(target)
 	if err != nil || !os.SameFile(linkInfo, currentInfo) {
 		return uxv1.NewError(uxv1.CodeSafety, "installed executable changed during update")
 	}
-	backup := target + ".glab-axi-backup"
+	backup := target + "." + config.ProductName + "-backup"
 	if _, err := os.Lstat(backup); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return uxv1.NewError(uxv1.CodeSafety, "update backup path already exists")
 	}
@@ -318,7 +330,7 @@ func managedExecutablePath(path string) bool {
 	return false
 }
 
-func verifyCandidate(ctx context.Context, path, version string) error {
+func verifyCandidate(ctx context.Context, path, productName, version string) error {
 	verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(verifyCtx, path, "--version")
@@ -329,15 +341,15 @@ func verifyCandidate(ctx context.Context, path, version string) error {
 	if err := cmd.Run(); err != nil || stdout.Len() > 4096 {
 		return uxv1.NewError(uxv1.CodeSafety, "update candidate failed its standalone version handshake")
 	}
-	want := fmt.Sprintf("glab-axi %s (contract glab-axi/v1)\n", version)
+	want := fmt.Sprintf("%s %s (contract glab-axi/v1)\n", productName, version)
 	if stdout.String() != want {
 		return uxv1.NewError(uxv1.CodeSafety, "update candidate returned the wrong version or contract handshake")
 	}
 	return nil
 }
 
-func confirm(input io.Reader, output io.Writer, version string) (bool, error) {
-	_, _ = fmt.Fprintf(output, "Install signed glab-axi %s now? [y/N] ", version)
+func confirm(input io.Reader, output io.Writer, productName, version string) (bool, error) {
+	_, _ = fmt.Fprintf(output, "Install signed %s %s now? [y/N] ", productName, version)
 	reader := bufio.NewReader(io.LimitReader(input, 32))
 	line, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

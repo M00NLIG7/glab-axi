@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"glab-axi/internal/config"
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/config"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
 )
 
 type fakeKeyring struct{ value string }
@@ -26,6 +26,30 @@ func TestResolverRejectsDisagreeingEnvironmentTokens(t *testing.T) {
 	_, err := resolver.Resolve(context.Background(), resolvedHost(t))
 	if v1.ExitCode(err) != 3 {
 		t.Fatalf("exit=%d, want authentication failure", v1.ExitCode(err))
+	}
+}
+
+func TestResolverCanonicalAndCompatibilityTokenNames(t *testing.T) {
+	value := runtimeCredential("canonical")
+	for _, values := range []map[string]string{
+		{"GL_AXI_TOKEN": value},
+		{"GLAB_AXI_TOKEN": value},
+		{"GL_AXI_TOKEN": value, "GLAB_AXI_TOKEN": value},
+	} {
+		resolver := Resolver{Lookup: func(name string) (string, bool) { candidate, ok := values[name]; return candidate, ok }}
+		credential, err := resolver.Resolve(context.Background(), resolvedHost(t))
+		if err != nil || credential.Value != value || credential.Kind != PrivateToken {
+			t.Fatalf("values=%v credential=%+v err=%v", values, credential, err)
+		}
+	}
+
+	values := map[string]string{"GL_AXI_TOKEN": runtimeCredential("one"), "GLAB_AXI_TOKEN": runtimeCredential("two")}
+	resolver := Resolver{Lookup: func(name string) (string, bool) { candidate, ok := values[name]; return candidate, ok }}
+	if _, err := resolver.Resolve(context.Background(), resolvedHost(t)); v1.ExitCode(err) != 3 {
+		t.Fatalf("disagreeing aliases error=%v", err)
+	}
+	if service := ServiceName(resolvedHost(t)); !strings.HasPrefix(service, "glab-axi/") {
+		t.Fatalf("keyring namespace migrated unexpectedly: %q", service)
 	}
 }
 

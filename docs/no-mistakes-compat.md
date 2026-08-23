@@ -6,9 +6,16 @@ official-glab backend.
 ## Direct run-private `glab-axi/v1` consumer
 
 The accepted current no-mistakes integration selects one absolute
-`--gitlab-client` path, copies that single `glab-axi` executable into a private
-mode-0500 run directory, records SHA-256, verifies it before each call, and
-requires this exact handshake shape:
+`--gitlab-client` path, copies that single executable into a private mode-0500
+run directory, records SHA-256, and verifies it before each call. New caller
+configuration should select `gl-axi` and require:
+
+```text
+gl-axi <version> (contract glab-axi/v1)
+```
+
+Existing configuration selecting the `glab-axi` compatibility executable keeps
+its exact prior handshake, with no removal date:
 
 ```text
 glab-axi <version> (contract glab-axi/v1)
@@ -22,10 +29,11 @@ client failure as fatal, and removes custody at terminal cleanup.
 
 The v0.2 router preserves these migration properties:
 
-- old unnamespaced argv still routes native;
+- old unnamespaced argv still routes native under either executable name;
 - `--contract glab-axi/v1` is an additional explicit alias, not a required
   migration;
-- v1 output/error fields and handshake shape are unchanged;
+- v1 output/error fields remain unchanged, and each executable has a tested,
+  name-specific handshake;
 - official `glab` is never discovered or executed;
 - one executable remains sufficient and below the 128 MiB limit;
 - no prompt, ANSI, banner, product update notice, or delegated stderr appears;
@@ -33,8 +41,8 @@ The v0.2 router preserves these migration properties:
 - data schemas are pinned under `schema/v1/`.
 
 A no-mistakes parser/argv cleanup must add a new versioned consumer fixture
-before requiring the explicit alias. Old forms remain for at least one full
-installed-consumer upgrade window.
+before requiring the explicit contract flag or canonical executable name. The
+`glab-axi` executable and old argv forms remain supported with no removal date.
 
 ## Installed no-mistakes v1.45.4 compatibility artifact
 

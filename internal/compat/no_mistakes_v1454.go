@@ -11,13 +11,13 @@ import (
 	"regexp"
 	"strings"
 
-	"glab-axi/internal/app"
-	"glab-axi/internal/buildinfo"
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/presentation"
-	"glab-axi/internal/redact"
-	runtimepkg "glab-axi/internal/runtime"
+	"gl-axi/internal/app"
+	"gl-axi/internal/buildinfo"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/presentation"
+	"gl-axi/internal/redact"
+	runtimepkg "gl-axi/internal/runtime"
 )
 
 const Version = buildinfo.Version

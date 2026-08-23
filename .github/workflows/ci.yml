@@ -119,7 +119,7 @@ jobs:
           cache: false
           architecture: x64
 
-      - name: Build standalone product and test-only compatibility artifact
+      - name: Build canonical product, compatibility alias, and test artifacts
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
@@ -127,9 +127,14 @@ jobs:
           CGO_ENABLED: ${{ matrix.cgo }}
         run: |
           mkdir -p dist/test-only
+          go build -trimpath -o "dist/gl-axi${{ matrix.suffix }}" ./cmd/gl-axi
           go build -trimpath -o "dist/glab-axi${{ matrix.suffix }}" ./cmd/glab-axi
           go build -trimpath -o "dist/test-only/glab${{ matrix.suffix }}" ./cmd/glab-compat
           go build -trimpath -o "dist/test-only/release-manifest${{ matrix.suffix }}" ./cmd/release-manifest
+          if [[ "${GOOS}" == "$(go env GOHOSTOS)" && "${GOARCH}" == "$(go env GOHOSTARCH)" ]]; then
+            test "$("dist/gl-axi${{ matrix.suffix }}" --version)" = "gl-axi 0.2.0 (contract glab-axi/v1)"
+            test "$("dist/glab-axi${{ matrix.suffix }}" --version)" = "glab-axi 0.2.0 (contract glab-axi/v1)"
+          fi
 
       - name: Run Windows login terminal regressions
         if: matrix.goos == 'windows'
@@ -175,7 +180,7 @@ jobs:
             upstream-glab/glab.tar.gz | sha256sum --check --strict
           tar -xzf upstream-glab/glab.tar.gz -C upstream-glab
 
-      - name: Execute version, help, and TLS mutation contract surfaces
+      - name: Execute version, help, and TLS read/write contract surfaces
         env:
-          GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRMergeTLS)$' -count=1
+          GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRMergeTLS)$' -count=1

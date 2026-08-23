@@ -12,12 +12,13 @@ GitLab project (not Rune).
 
 1. Obtain the signed release through the documented channel; compare its public
    key to the independently captain-pinned value, then verify the detached
-   checksum signature, checksum, version, and one-file artifact.
+   checksum signature, checksum, and package. Confirm canonical `gl-axi` and
+   compatibility `glab-axi` binaries have their respective tested handshakes.
 2. Before auth, run top/parent/leaf help and dashboard. Missing context,
    official-glab dependency, and auth must produce actionable controlled errors
    without reading a credential or opening a browser.
 3. Install checksum-pinned official `glab` 1.112.0 through an official channel.
-4. In a real terminal, run `glab-axi auth login --hostname <test-host>` as the
+4. In a real terminal, run `gl-axi auth login --hostname <test-host>` as the
    human. Do not drive this through an agent. Confirm a prompt may remain open
    beyond 30 seconds and that an explicit interrupt cancels it promptly.
 5. Confirm the OS secure store is used. If unavailable, the AXI must abort before
@@ -33,7 +34,11 @@ GitLab project (not Rune).
    checkout without explicit hostname/environment authority must fail before
    official-glab execution.
 9. In the disposable project only, run MR ensure twice. The second invocation
-   must replay/update the exact MR and never create a duplicate.
+   must replay/update the exact MR and never create a duplicate. Exercise an
+   applied-but-ambiguous update whose exact official view carries the head in
+   `diff_refs.head_sha`; it reconciles only when project, IID, branches, URL,
+   head, title, and body match, while dual-head mismatch or malformed identity
+   remains `ambiguous_update`.
 10. Under a separate explicit merge authorization, create a synthetic green MR
     in a project that enforces successful pipelines and resolved discussions.
     Run guarded squash merge with exact URL/head/authority, then replay it.
@@ -44,8 +49,9 @@ GitLab project (not Rune).
     pipeline retry, repo create, release create, and label delete while auditing
     child/network execution; each exits 2 with no child/request.
 12. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
-    completeness metadata, bounded trace/diff, setup idempotence, update check,
-    and update refusal/rollback cases.
+    completeness metadata, bounded trace/diff, canonical setup idempotence,
+    compatibility-hook preservation, both signed update manifests, and update
+    refusal/rollback cases.
 13. Exercise the supported subset on macOS, Linux, and Windows. Document
     official-login differences rather than hiding them.
 14. Revoke/remove disposable credentials through the official human cleanup
@@ -76,9 +82,9 @@ Preconditions:
 Allowed native commands:
 
 ```text
-glab-axi auth status --host H --repo P --format json
-glab-axi mr view IID --host H --repo P --format json
-glab-axi ci status --mr IID --host H --repo P --format json
+gl-axi auth status --host H --repo P --format json
+gl-axi mr view IID --host H --repo P --format json
+gl-axi ci status --mr IID --host H --repo P --format json
 # ci jobs only for the returned pipeline ID if needed
 # ci trace only for a pre-cleared synthetic/non-secret job
 ```

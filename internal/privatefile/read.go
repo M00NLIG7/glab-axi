@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	v1 "glab-axi/internal/contract/v1"
+	v1 "gl-axi/internal/contract/v1"
 )
 
 // Read returns one bounded UTF-8 private-file value. On platforms with Unix

@@ -24,12 +24,12 @@ func TestInstallPreservesConfigAndIsIdempotent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codex, "config.toml"), []byte("model = \"safe\"\n\n[features]\nhooks = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	const skill = "---\nname: glab-axi\n---\nUse bounded reads.\n"
+	const skill = "---\nname: gl-axi\n---\nUse bounded reads.\n"
 	result, err := Install(home, "glab-axi", skill)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "installed" || len(result.Integrations) != 2 {
+	if result.Status != "installed" || result.Skill != "gl-axi" || len(result.Integrations) != 2 {
 		t.Fatalf("result=%#v", result)
 	}
 	first, err := snapshot(home)
@@ -59,11 +59,23 @@ func TestInstallPreservesConfigAndIsIdempotent(t *testing.T) {
 	if err != nil || !strings.Contains(string(config), `model = "safe"`) || !strings.Contains(string(config), "hooks = true") || strings.Contains(string(config), "hooks = false") {
 		t.Fatalf("Codex config=%q err=%v", config, err)
 	}
-	for _, path := range []string{filepath.Join(home, ".agents", "skills", "glab-axi", "SKILL.md"), filepath.Join(home, ".claude", "skills", "glab-axi", "SKILL.md")} {
+	for _, path := range []string{filepath.Join(home, ".agents", "skills", "gl-axi", "SKILL.md"), filepath.Join(home, ".claude", "skills", "gl-axi", "SKILL.md")} {
 		data, err := os.ReadFile(path)
 		if err != nil || string(data) != skill {
 			t.Fatalf("skill %s=%q err=%v", path, data, err)
 		}
+	}
+}
+
+func TestInstallAcceptsCanonicalCommand(t *testing.T) {
+	home := t.TempDir()
+	result, err := Install(home, "gl-axi", "canonical skill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil || result.Skill != "gl-axi" || !strings.Contains(string(settings), `"command": "gl-axi"`) {
+		t.Fatalf("result=%#v settings=%s err=%v", result, settings, err)
 	}
 }
 
@@ -116,8 +128,8 @@ func snapshot(home string) (string, error) {
 		filepath.Join(".claude", "settings.json"),
 		filepath.Join(".codex", "hooks.json"),
 		filepath.Join(".codex", "config.toml"),
-		filepath.Join(".agents", "skills", "glab-axi", "SKILL.md"),
-		filepath.Join(".claude", "skills", "glab-axi", "SKILL.md"),
+		filepath.Join(".agents", "skills", "gl-axi", "SKILL.md"),
+		filepath.Join(".claude", "skills", "gl-axi", "SKILL.md"),
 	} {
 		data, err := os.ReadFile(filepath.Join(home, relative))
 		if err != nil {

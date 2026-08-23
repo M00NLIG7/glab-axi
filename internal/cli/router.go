@@ -6,19 +6,27 @@ package cli
 import (
 	"context"
 
-	v1cli "glab-axi/internal/contractcli/v1"
-	"glab-axi/internal/product"
+	v1cli "gl-axi/internal/contractcli/v1"
+	"gl-axi/internal/product"
 )
 
 func Run(ctx context.Context, args []string, deps product.Dependencies) int {
+	return RunAs(ctx, args, deps, "gl-axi")
+}
+
+func RunAs(ctx context.Context, args []string, deps product.Dependencies, programName string) int {
+	if programName != "glab-axi" {
+		programName = "gl-axi"
+	}
+	deps.ProgramName = programName
 	if contractArgs, ok := explicitV1(args); ok {
-		return v1cli.RunNative(ctx, contractArgs, deps.Runtime)
+		return v1cli.RunNativeAs(ctx, contractArgs, deps.Runtime, programName)
 	}
 	if isVersionAlias(args) {
-		return v1cli.RunNative(ctx, []string{"--version"}, deps.Runtime)
+		return v1cli.RunNativeAs(ctx, []string{"--version"}, deps.Runtime, programName)
 	}
 	if isLegacyV1(args) {
-		return v1cli.RunNative(ctx, args, deps.Runtime)
+		return v1cli.RunNativeAs(ctx, args, deps.Runtime, programName)
 	}
 	return product.Run(ctx, args, deps)
 }

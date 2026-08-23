@@ -10,15 +10,15 @@ import (
 	"strconv"
 	"strings"
 
-	"glab-axi/internal/buildinfo"
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/delegate/glab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/output"
-	runtimepkg "glab-axi/internal/runtime"
-	"glab-axi/internal/securestore"
-	"glab-axi/internal/setuphooks"
-	"glab-axi/internal/updater"
+	"gl-axi/internal/buildinfo"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/output"
+	runtimepkg "gl-axi/internal/runtime"
+	"gl-axi/internal/securestore"
+	"gl-axi/internal/setuphooks"
+	"gl-axi/internal/updater"
 
 	"golang.org/x/term"
 )
@@ -32,6 +32,7 @@ type delegateClient interface {
 
 type Dependencies struct {
 	Runtime         runtimepkg.Dependencies
+	ProgramName     string
 	Env             []string
 	GlabPath        string
 	IsHumanTerminal func() bool
@@ -41,7 +42,14 @@ type Dependencies struct {
 }
 
 func Defaults(runtimeDeps runtimepkg.Dependencies) Dependencies {
-	deps := Dependencies{Runtime: runtimeDeps, Env: os.Environ()}
+	return DefaultsFor(runtimeDeps, buildinfo.CanonicalName)
+}
+
+func DefaultsFor(runtimeDeps runtimepkg.Dependencies, programName string) Dependencies {
+	if programName != buildinfo.CanonicalName && programName != buildinfo.LegacyName {
+		programName = buildinfo.CanonicalName
+	}
+	deps := Dependencies{Runtime: runtimeDeps, ProgramName: programName, Env: os.Environ()}
 	deps.IsHumanTerminal = allStandardStreamsAreTerminals
 	deps.SetupHooks = func(context.Context) (any, error) {
 		home, err := os.UserHomeDir()
@@ -51,9 +59,17 @@ func Defaults(runtimeDeps runtimepkg.Dependencies) Dependencies {
 		return setuphooks.Install(home, portableInstalledCommand(), SkillMarkdown())
 	}
 	deps.Update = func(ctx context.Context, checkOnly bool) (any, uxv1.Meta, error) {
+		manifestURL := buildinfo.UpdateManifestURL
+		manifestSchema := updater.ManifestSchema
+		if programName == buildinfo.LegacyName {
+			manifestURL = buildinfo.LegacyUpdateManifestURL
+			manifestSchema = updater.LegacyManifestSchema
+		}
 		result, err := updater.Run(ctx, checkOnly, updater.Config{
 			CurrentVersion: buildinfo.Version,
-			ManifestURL:    buildinfo.UpdateManifestURL,
+			ProductName:    programName,
+			ManifestSchema: manifestSchema,
+			ManifestURL:    manifestURL,
 			PublicKey:      buildinfo.UpdatePublicKey,
 			IsTerminal:     deps.IsHumanTerminal,
 			Stdin:          runtimeDeps.Stdin,
@@ -73,7 +89,7 @@ func portableInstalledCommand() string {
 	if err != nil {
 		return ""
 	}
-	for _, name := range []string{"glab-axi", "glab-axi.exe"} {
+	for _, name := range []string{"gl-axi", "gl-axi.exe", "glab-axi", "glab-axi.exe"} {
 		candidate, err := exec.LookPath(name)
 		if err != nil {
 			continue
@@ -118,10 +134,14 @@ type commandOutput struct {
 func Run(ctx context.Context, args []string, deps Dependencies) int {
 	parsedResult, err := Parse(args)
 	if err != nil {
-		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productFormatHint(args), err, uxv1.Meta{Complete: false})
+		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), productFormatHint(args), err, uxv1.Meta{Complete: false})
 	}
 	if parsedResult.Help != "" {
-		_, _ = io.WriteString(deps.Runtime.Stdout, parsedResult.Help)
+		help := parsedResult.Help
+		if productProgramName(deps) == buildinfo.LegacyName {
+			help = strings.ReplaceAll(help, buildinfo.CanonicalName, buildinfo.LegacyName)
+		}
+		_, _ = io.WriteString(deps.Runtime.Stdout, help)
 		return 0
 	}
 	parsed := *parsedResult.Command
@@ -129,18 +149,29 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	if err != nil {
 		meta := result.meta
 		meta.Complete = false
-		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, parsed.Format, err, meta)
+		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), parsed.Format, err, meta)
 	}
 	if err := output.WriteValue(deps.Runtime.Stdout, parsed.Format, uxv1.Success(result.data, result.meta)); err != nil {
-		_, _ = io.WriteString(deps.Runtime.Stderr, "glab-axi: output failure\n")
+		_, _ = fmt.Fprintf(deps.Runtime.Stderr, "%s: output failure\n", productProgramName(deps))
 		return 8
 	}
 	return 0
 }
 
-func writeFailure(stdout, stderr io.Writer, format output.Format, err error, meta uxv1.Meta) int {
-	if writeErr := output.WriteValue(stdout, format, uxv1.Failure(err, meta)); writeErr != nil {
-		_, _ = io.WriteString(stderr, "glab-axi: output failure\n")
+func writeFailure(stdout, stderr io.Writer, programName string, format output.Format, err error, meta uxv1.Meta) int {
+	failure := uxv1.Failure(err, meta)
+	if programName == buildinfo.LegacyName {
+		if failure.Error != nil {
+			cloned := *failure.Error
+			cloned.Message = strings.ReplaceAll(cloned.Message, buildinfo.CanonicalName, buildinfo.LegacyName)
+			failure.Error = &cloned
+		}
+		for index := range failure.Help {
+			failure.Help[index] = strings.ReplaceAll(failure.Help[index], buildinfo.CanonicalName, buildinfo.LegacyName)
+		}
+	}
+	if writeErr := output.WriteValue(stdout, format, failure); writeErr != nil {
+		_, _ = fmt.Fprintf(stderr, "%s: output failure\n", programName)
 		return 8
 	}
 	return uxv1.ExitCode(err)
@@ -268,6 +299,13 @@ func listOutput(key string, items any, meta uxv1.Meta, state listState) commandO
 
 func localMeta() uxv1.Meta {
 	return uxv1.Meta{Backend: "local", Complete: true}
+}
+
+func productProgramName(deps Dependencies) string {
+	if deps.ProgramName == buildinfo.LegacyName {
+		return buildinfo.LegacyName
+	}
+	return buildinfo.CanonicalName
 }
 
 func positivePosition(parsed Parsed, label string) (int64, error) {

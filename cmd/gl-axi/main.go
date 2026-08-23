@@ -4,13 +4,15 @@ import (
 	"context"
 	"os"
 
+	"gl-axi/internal/cli"
 	"gl-axi/internal/commandctx"
-	"gl-axi/internal/compat"
+	"gl-axi/internal/product"
 	runtimepkg "gl-axi/internal/runtime"
 )
 
 func main() {
 	os.Exit(commandctx.Run(func(ctx context.Context) int {
-		return compat.Run(ctx, os.Args[1:], runtimepkg.Defaults())
+		runtimeDeps := runtimepkg.Defaults()
+		return cli.RunAs(ctx, os.Args[1:], product.DefaultsFor(runtimeDeps, "gl-axi"), "gl-axi")
 	}))
 }

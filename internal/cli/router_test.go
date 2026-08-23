@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"glab-axi/internal/product"
-	runtimepkg "glab-axi/internal/runtime"
+	"gl-axi/internal/product"
+	runtimepkg "gl-axi/internal/runtime"
 )
 
 func TestFrozenV1RoutesNeverConstructOfficialGlab(t *testing.T) {
@@ -48,8 +48,45 @@ func TestVersionAliasesPreserveNativeHandshake(t *testing.T) {
 		}
 		outputs = append(outputs, stdout.String())
 	}
-	if outputs[0] != outputs[1] || outputs[1] != outputs[2] || !strings.Contains(outputs[0], "(contract glab-axi/v1)\n") {
+	if outputs[0] != outputs[1] || outputs[1] != outputs[2] || outputs[0] != "gl-axi 0.2.0 (contract glab-axi/v1)\n" {
 		t.Fatalf("version aliases=%q", outputs)
+	}
+
+	var legacy bytes.Buffer
+	deps := product.Dependencies{Runtime: runtimepkg.Dependencies{Stdout: &legacy, Stderr: &bytes.Buffer{}}}
+	if code := RunAs(context.Background(), []string{"--version"}, deps, "glab-axi"); code != 0 || legacy.String() != "glab-axi 0.2.0 (contract glab-axi/v1)\n" {
+		t.Fatalf("legacy alias exit=%d output=%q", code, legacy.String())
+	}
+}
+
+func TestCompatibilityAliasHelpKeepsItsExecutableName(t *testing.T) {
+	var canonical, legacy bytes.Buffer
+	canonicalDeps := product.Dependencies{Runtime: runtimepkg.Dependencies{Stdout: &canonical, Stderr: &bytes.Buffer{}}}
+	legacyDeps := product.Dependencies{Runtime: runtimepkg.Dependencies{Stdout: &legacy, Stderr: &bytes.Buffer{}}, ProgramName: "glab-axi"}
+	if code := RunAs(context.Background(), []string{"--help"}, canonicalDeps, "gl-axi"); code != 0 {
+		t.Fatalf("canonical help exit=%d", code)
+	}
+	if code := RunAs(context.Background(), []string{"--help"}, legacyDeps, "glab-axi"); code != 0 {
+		t.Fatalf("legacy help exit=%d", code)
+	}
+	if !strings.HasPrefix(canonical.String(), "gl-axi -") || !strings.HasPrefix(legacy.String(), "glab-axi -") || strings.Contains(legacy.String(), "Usage:\n  gl-axi ") {
+		t.Fatalf("canonical=%q legacy=%q", canonical.String(), legacy.String())
+	}
+}
+
+func TestCompatibilityAliasBrandsProductFailures(t *testing.T) {
+	for _, test := range []struct {
+		program string
+		want    string
+	}{
+		{program: "gl-axi", want: "use gl-axi --help"},
+		{program: "glab-axi", want: "use glab-axi --help"},
+	} {
+		var stdout bytes.Buffer
+		deps := product.Dependencies{Runtime: runtimepkg.Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}}}
+		if code := RunAs(context.Background(), []string{"unknown", "--format", "json"}, deps, test.program); code != 2 || !strings.Contains(stdout.String(), test.want) {
+			t.Fatalf("program=%s exit=%d output=%s", test.program, code, stdout.String())
+		}
 	}
 }
 

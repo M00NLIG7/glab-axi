@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
 )
 
 type Format string

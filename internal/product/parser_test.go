@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"glab-axi/internal/contract/uxv1"
+	"gl-axi/internal/contract/uxv1"
 )
 
 func TestEveryDeclaredHelpPathSucceedsWithoutCommandExecution(t *testing.T) {

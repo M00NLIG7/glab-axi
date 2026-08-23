@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
 )
 
 func TestJSONEnvelopeIsVersionedAndOmitsCauses(t *testing.T) {

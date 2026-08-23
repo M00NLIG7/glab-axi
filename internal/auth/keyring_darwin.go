@@ -10,21 +10,21 @@ package auth
 #include <stdlib.h>
 #include <string.h>
 
-static CFStringRef glab_axi_string(const char *value) {
+static CFStringRef gl_axi_string(const char *value) {
     return CFStringCreateWithBytes(kCFAllocatorDefault,
         (const UInt8 *)value, (CFIndex)strlen(value),
         kCFStringEncodingUTF8, false);
 }
 
-static void glab_axi_query_value(CFMutableDictionaryRef query,
+static void gl_axi_query_value(CFMutableDictionaryRef query,
                                  const void *key, const void *value) {
     CFDictionarySetValue(query, key, value);
 }
 
-static CFMutableDictionaryRef glab_axi_query(const char *service,
+static CFMutableDictionaryRef gl_axi_query(const char *service,
                                               const char *account) {
-    CFStringRef serviceRef = glab_axi_string(service);
-    CFStringRef accountRef = glab_axi_string(account);
+    CFStringRef serviceRef = gl_axi_string(service);
+    CFStringRef accountRef = gl_axi_string(account);
     if (serviceRef == NULL || accountRef == NULL) {
         if (serviceRef != NULL) CFRelease(serviceRef);
         if (accountRef != NULL) CFRelease(accountRef);
@@ -35,10 +35,10 @@ static CFMutableDictionaryRef glab_axi_query(const char *service,
         &kCFTypeDictionaryKeyCallBacks,
         &kCFTypeDictionaryValueCallBacks);
     if (query != NULL) {
-        glab_axi_query_value(query, kSecClass, kSecClassGenericPassword);
-        glab_axi_query_value(query, kSecAttrService, serviceRef);
-        glab_axi_query_value(query, kSecAttrAccount, accountRef);
-        glab_axi_query_value(query, kSecUseAuthenticationUI,
+        gl_axi_query_value(query, kSecClass, kSecClassGenericPassword);
+        gl_axi_query_value(query, kSecAttrService, serviceRef);
+        gl_axi_query_value(query, kSecAttrAccount, accountRef);
+        gl_axi_query_value(query, kSecUseAuthenticationUI,
                              kSecUseAuthenticationUIFail);
     }
     CFRelease(serviceRef);
@@ -46,14 +46,14 @@ static CFMutableDictionaryRef glab_axi_query(const char *service,
     return query;
 }
 
-static OSStatus glab_axi_get(const char *service, const char *account,
+static OSStatus gl_axi_get(const char *service, const char *account,
                              size_t *length, void **data) {
     *length = 0;
     *data = NULL;
-    CFMutableDictionaryRef query = glab_axi_query(service, account);
+    CFMutableDictionaryRef query = gl_axi_query(service, account);
     if (query == NULL) return errSecAllocate;
-    glab_axi_query_value(query, kSecReturnData, kCFBooleanTrue);
-    glab_axi_query_value(query, kSecMatchLimit, kSecMatchLimitOne);
+    gl_axi_query_value(query, kSecReturnData, kCFBooleanTrue);
+    gl_axi_query_value(query, kSecMatchLimit, kSecMatchLimitOne);
     CFTypeRef result = NULL;
     OSStatus status = SecItemCopyMatching(query, &result);
     CFRelease(query);
@@ -80,9 +80,9 @@ static OSStatus glab_axi_get(const char *service, const char *account,
     return errSecSuccess;
 }
 
-static OSStatus glab_axi_set(const char *service, const char *account,
+static OSStatus gl_axi_set(const char *service, const char *account,
                              const void *secret, size_t length) {
-    CFMutableDictionaryRef query = glab_axi_query(service, account);
+    CFMutableDictionaryRef query = gl_axi_query(service, account);
     if (query == NULL) return errSecAllocate;
     CFDataRef data = CFDataCreate(kCFAllocatorDefault,
         (const UInt8 *)secret, (CFIndex)length);
@@ -99,11 +99,11 @@ static OSStatus glab_axi_set(const char *service, const char *account,
         CFRelease(query);
         return errSecAllocate;
     }
-    glab_axi_query_value(attributes, kSecValueData, data);
+    gl_axi_query_value(attributes, kSecValueData, data);
     OSStatus status = SecItemUpdate(query, attributes);
     CFRelease(attributes);
     if (status == errSecItemNotFound) {
-        glab_axi_query_value(query, kSecValueData, data);
+        gl_axi_query_value(query, kSecValueData, data);
         status = SecItemAdd(query, NULL);
     }
     CFRelease(data);
@@ -111,15 +111,15 @@ static OSStatus glab_axi_set(const char *service, const char *account,
     return status;
 }
 
-static OSStatus glab_axi_delete(const char *service, const char *account) {
-    CFMutableDictionaryRef query = glab_axi_query(service, account);
+static OSStatus gl_axi_delete(const char *service, const char *account) {
+    CFMutableDictionaryRef query = gl_axi_query(service, account);
     if (query == NULL) return errSecAllocate;
     OSStatus status = SecItemDelete(query);
     CFRelease(query);
     return status;
 }
 
-static void glab_axi_zero(void *data, size_t length) {
+static void gl_axi_zero(void *data, size_t length) {
     if (data != NULL && length > 0) memset(data, 0, length);
 }
 */
@@ -143,7 +143,7 @@ func (systemKeyring) Get(ctx context.Context, service, account string) (string, 
 	defer C.free(unsafe.Pointer(ca))
 	var length C.size_t
 	var data unsafe.Pointer
-	status := C.glab_axi_get(cs, ca, &length, &data)
+	status := C.gl_axi_get(cs, ca, &length, &data)
 	if status == C.errSecItemNotFound {
 		return "", ErrKeyringNotFound
 	}
@@ -151,7 +151,7 @@ func (systemKeyring) Get(ctx context.Context, service, account string) (string, 
 		return "", fmt.Errorf("%w: OSStatus %d", ErrKeyringUnavailable, int(status))
 	}
 	defer func() {
-		C.glab_axi_zero(data, length)
+		C.gl_axi_zero(data, length)
 		C.free(data)
 	}()
 	return C.GoStringN((*C.char)(data), C.int(length)), nil
@@ -167,10 +167,10 @@ func (systemKeyring) Set(ctx context.Context, service, account, secret string) e
 	defer C.free(unsafe.Pointer(cs))
 	defer C.free(unsafe.Pointer(ca))
 	defer func() {
-		C.glab_axi_zero(data, C.size_t(len(secret)))
+		C.gl_axi_zero(data, C.size_t(len(secret)))
 		C.free(data)
 	}()
-	status := C.glab_axi_set(cs, ca, data, C.size_t(len(secret)))
+	status := C.gl_axi_set(cs, ca, data, C.size_t(len(secret)))
 	if status != C.errSecSuccess {
 		return fmt.Errorf("%w: OSStatus %d", ErrKeyringUnavailable, int(status))
 	}
@@ -185,7 +185,7 @@ func (systemKeyring) Delete(ctx context.Context, service, account string) error 
 	ca := C.CString(account)
 	defer C.free(unsafe.Pointer(cs))
 	defer C.free(unsafe.Pointer(ca))
-	status := C.glab_axi_delete(cs, ca)
+	status := C.gl_axi_delete(cs, ca)
 	if status == C.errSecItemNotFound {
 		return nil
 	}
