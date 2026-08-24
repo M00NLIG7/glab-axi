@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"os"
 
-	"glab-axi/internal/app"
-	"glab-axi/internal/auth"
-	"glab-axi/internal/config"
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/gitlab"
-	"glab-axi/internal/gitremote"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/app"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/config"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/gitlab"
+	"gl-axi/internal/gitremote"
+	"gl-axi/internal/safeurl"
 )
 
 type Dependencies struct {

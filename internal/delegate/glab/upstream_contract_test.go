@@ -27,14 +27,14 @@ import (
 	"testing"
 	"time"
 
-	"glab-axi/internal/contract/uxv1"
+	"gl-axi/internal/contract/uxv1"
 )
 
 // TestPinnedUpstreamPublicContract executes only version/help against the
 // checksum-verified official package. CI supplies the binary; no profile,
 // credential, repository, or GitLab API is involved.
 func TestPinnedUpstreamPublicContract(t *testing.T) {
-	binary := os.Getenv("GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY")
+	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
 	}
@@ -98,6 +98,13 @@ func TestPinnedUpstreamPublicContract(t *testing.T) {
 	}
 }
 
+func officialGlabTestBinary() string {
+	if binary := os.Getenv("GL_AXI_OFFICIAL_GLAB_TEST_BINARY"); binary != "" {
+		return binary
+	}
+	return os.Getenv("GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY")
+}
+
 type capturedOfficialGlabMutation struct {
 	method      string
 	host        string
@@ -116,7 +123,7 @@ func selfManagedTestCertificate(t *testing.T, hostname string) (tls.Certificate,
 	}
 	caTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "glab-axi official-glab test CA"},
+		Subject:               pkix.Name{CommonName: "gl-axi official-glab test CA"},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
@@ -203,7 +210,7 @@ func newTestTLSTunnelProxy(targetAuthority, targetAddress string) *httptest.Serv
 // argv against an isolated TLS server. Its environment starts empty and uses
 // only a runtime synthetic token; no GitLab credential or live write is used.
 func TestPinnedOfficialGlabEnsureCreateTLS(t *testing.T) {
-	binary := os.Getenv("GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY")
+	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
 	}
@@ -338,11 +345,94 @@ func TestPinnedOfficialGlabEnsureCreateTLS(t *testing.T) {
 	}
 }
 
+// TestPinnedOfficialGlabMRViewTLS executes the pinned official mr-view command
+// against an isolated TLS endpoint and proves the adapter normalizes the
+// client's diff_refs source-head shape without a live GitLab read.
+func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
+	binary := officialGlabTestBinary()
+	if binary == "" {
+		t.Skip("official-glab package fixture not supplied")
+	}
+	binary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logicalHost := "gitlab.view-contract.example"
+	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
+	const expectedHead = "0123456789012345678901234567890123456789"
+	var requestMu sync.Mutex
+	var requests []string
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMu.Lock()
+		requests = append(requests, r.Method+" "+r.URL.RequestURI())
+		requestMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/merge_requests/11/approval_state"):
+			_, _ = w.Write([]byte(`{"rules":[]}`))
+		case strings.HasSuffix(r.URL.Path, "/merge_requests/11"):
+			_, _ = w.Write([]byte(`{"id":1011,"iid":11,"project_id":101,"title":"new","description":"new body","state":"opened","web_url":"https://gitlab.view-contract.example/group/project/-/merge_requests/11","source_branch":"feature","target_branch":"main","source_project_id":101,"target_project_id":101,"sha":"","diff_refs":{"base_sha":"1123456789012345678901234567890123456789","head_sha":"` + expectedHead + `","start_sha":"2123456789012345678901234567890123456789"},"detailed_merge_status":"checking"}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	server.StartTLS()
+	defer server.Close()
+	proxy := newTestTLSTunnelProxy(logicalHost+":443", server.Listener.Addr().String())
+	defer proxy.Close()
+
+	home := t.TempDir()
+	caBundle := filepath.Join(home, "fake-gitlab-ca.pem")
+	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	syntheticToken := strings.Join([]string{"synthetic", "view", "contract", "token"}, "-")
+	client := NewClient(ClientConfig{Path: binary, Env: []string{
+		"HOME=" + home,
+		"GLAB_CONFIG_DIR=" + filepath.Join(home, "config"),
+		"GITLAB_TOKEN=" + syntheticToken,
+		"HTTPS_PROXY=" + proxy.URL,
+		"NO_PROXY=",
+		"SSL_CERT_FILE=" + caBundle,
+		"PATH=/usr/bin:/bin",
+	}})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	response, err := client.Do(ctx, Request{Operation: OpMRView, Host: logicalHost, Repo: "group/project", IID: 11})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(response.Body, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	if normalized["sha"] != expectedHead || normalized["id"] != float64(1011) || normalized["source_project_id"] != float64(101) || normalized["target_project_id"] != float64(101) {
+		t.Fatalf("normalized official view=%s", response.Body)
+	}
+	requestMu.Lock()
+	captured := append([]string(nil), requests...)
+	requestMu.Unlock()
+	mrReads := 0
+	for _, request := range captured {
+		if strings.HasPrefix(request, "GET /api/v4/projects/group%2Fproject/merge_requests/11?") {
+			mrReads++
+			if !strings.Contains(request, "include_diverged_commits_count=true") || !strings.Contains(request, "include_rebase_in_progress=true") || !strings.Contains(request, "render_html=true") || strings.Contains(request, syntheticToken) {
+				t.Fatalf("unexpected official view request=%q", request)
+			}
+		}
+	}
+	if mrReads != 1 {
+		t.Fatalf("official exact MR reads=%d requests=%q", mrReads, captured)
+	}
+}
+
 // TestPinnedOfficialGlabMRMergeTLS proves that the exact fixed merge argv sends
 // one PUT with the four-key private payload for success and rejection paths.
 // It uses only a synthetic runtime token and an isolated local TLS endpoint.
 func TestPinnedOfficialGlabMRMergeTLS(t *testing.T) {
-	binary := os.Getenv("GLAB_AXI_OFFICIAL_GLAB_TEST_BINARY")
+	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
 	}

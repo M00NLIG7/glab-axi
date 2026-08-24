@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"glab-axi/internal/app"
-	"glab-axi/internal/auth"
-	"glab-axi/internal/config"
-	v1 "glab-axi/internal/contract/v1"
-	"glab-axi/internal/gitlab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/safeurl"
-	"glab-axi/internal/testgitlab"
+	"gl-axi/internal/app"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/config"
+	v1 "gl-axi/internal/contract/v1"
+	"gl-axi/internal/gitlab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
+	"gl-axi/internal/testgitlab"
 )
 
 const (

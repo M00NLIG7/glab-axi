@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/output"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/output"
 )
 
 type Parsed struct {
@@ -24,9 +24,9 @@ type ParseResult struct {
 }
 
 var deniedTop = map[string]string{
-	"api":      "generic API authority is permanently outside glab-axi",
+	"api":      "generic API authority is permanently outside gl-axi",
 	"workflow": "GitLab uses pipelines and jobs; workflow is not a safe GitLab alias",
-	"secret":   "secret values are outside glab-axi's metadata boundary",
+	"secret":   "secret values are outside gl-axi's metadata boundary",
 	"variable": "GitLab variable responses can expose values and are outside this release",
 }
 
@@ -85,7 +85,7 @@ func Parse(args []string) (ParseResult, error) {
 		if help, ok := Help(path); ok {
 			return ParseResult{Help: help}, nil
 		}
-		return ParseResult{}, uxv1.NewError(uxv1.CodeUnsupported, "unknown command; use glab-axi --help")
+		return ParseResult{}, uxv1.NewError(uxv1.CodeUnsupported, "unknown command; use gl-axi --help")
 	}
 	if len(path) == 1 && isParent(path) {
 		help, _ := Help(path)
@@ -93,7 +93,7 @@ func Parse(args []string) (ParseResult, error) {
 	}
 	definition, ok := lookupDefinition(path)
 	if !ok {
-		return ParseResult{}, uxv1.NewError(uxv1.CodeUnsupported, "unknown command; use glab-axi --help")
+		return ParseResult{}, uxv1.NewError(uxv1.CodeUnsupported, "unknown command; use gl-axi --help")
 	}
 	parsed, err := parseFlags(definition, args[consumed:])
 	if err != nil {

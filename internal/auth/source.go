@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"glab-axi/internal/config"
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/config"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
 )
 
 type Kind string
@@ -48,6 +48,7 @@ func (r Resolver) Resolve(ctx context.Context, host config.ResolvedHost) (Creden
 		name string
 		kind Kind
 	}{
+		{"GL_AXI_TOKEN", PrivateToken},
 		{"GLAB_AXI_TOKEN", PrivateToken},
 		{"GITLAB_TOKEN", PrivateToken},
 		{"GITLAB_ACCESS_TOKEN", PrivateToken},
@@ -90,6 +91,8 @@ func (r Resolver) Resolve(ctx context.Context, host config.ResolvedHost) (Creden
 
 func ServiceName(host config.ResolvedHost) string {
 	sum := sha256.Sum256([]byte(host.Authority.API.String()))
+	// Retain the established keyring namespace so gl-axi and its glab-axi
+	// compatibility alias use the same credential without exporting it.
 	return "glab-axi/" + hex.EncodeToString(sum[:16])
 }
 

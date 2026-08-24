@@ -1,9 +1,9 @@
 # Architecture
 
-## One executable, two non-fallback lanes
+## One implementation, two executable names, two non-fallback lanes
 
 ```text
-cmd/glab-axi
+cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
   -> router
      |-> exact/explicit glab-axi/v1 grammar
      |    -> native config + native credential resolver
@@ -19,15 +19,16 @@ cmd/glab-axi
                -> glab-axi/ux-v1 TOON/JSON
 ```
 
-The router recognizes the exact legacy automation forms before creating an
-official-glab adapter. `--contract glab-axi/v1` is the explicit alias. Native
+Both executable names enter the same router; only the version handshake retains
+the selected name. The router recognizes the exact legacy automation forms
+before creating an official-glab adapter. `--contract glab-axi/v1` is the explicit alias. Native
 commands do not resolve PATH, inspect official config, emit update notices, or
 fall back to product authentication. Product commands likewise do not read or
 export the native keyring. The two credential stores are intentionally not
 interoperated.
 
 `cmd/glab-compat` imports the native typed core for one pinned legacy consumer.
-It never spawns `glab-axi`, and normal product builds/releases never produce an
+It never spawns `gl-axi`, and normal product builds/releases never produce an
 executable named `glab`.
 
 ## Product command registry
@@ -64,8 +65,12 @@ argv function. Each operation has one fixed builder in
 5. preserves approved GitLab token environment sources for headless reads but
    strips them from human login;
 6. bounds stdout/stderr and noninteractive operation time;
-7. rejects malformed, prefixed, trailing, oversized, or non-UTF-8 output; and
-8. maps child failures to controlled errors without rendering upstream stderr.
+7. rejects malformed, duplicate, prefixed, trailing, oversized, or non-UTF-8 output;
+8. at the `mr view` adapter boundary, reconciles the pinned client's
+   `diff_refs.head_sha` with the REST-shaped `sha` field, requiring equality
+   when both are present and refusing invalid, missing, or conflicting identity
+   during post-write proof; and
+9. maps child failures to controlled errors without rendering upstream stderr.
 
 Most reads use official commands with documented JSON output. Operations for
 which v1.112.0 has no safe dedicated JSON command—job detail/trace, bounded
@@ -101,7 +106,7 @@ success, so a warning cannot race a zero exit. Input bytes are not logged or
 copied to product output. Login follows caller/process cancellation instead of
 the ordinary 30-second request deadline; its output and teardown bounds remain
 enforced. An unavailable secure store or warning cancels login, and no official
-credential/config file is opened by glab-axi.
+credential/config file is opened by gl-axi.
 
 Product stdout remains one parseable envelope. Data commands always have stdin
 closed and prompts disabled. `auth status` does not expose `--show-token`; its
@@ -133,7 +138,9 @@ preserves native ensure semantics:
 
 An update reconciles only when the canonical MR retains the pre-write global
 ID, IID, project ownership/destination, URL, source/base branches, and head SHA
-and exactly matches the requested title/description. A create still reconciles
+and exactly matches the requested title/description. The adapter accepts either
+the prior REST `sha` shape or official `diff_refs.head_sha`; dual values must
+match, and it never invents a missing head. A create still reconciles
 through the bounded exact-branch lookup; after a verified empty result,
 recognized HTTP rejections retain only their bounded status category.
 Transport, overflow, timeout, incomplete identity, drift, and malformed or
@@ -182,7 +189,7 @@ boundary, identity drift, or an unproved result returns `ambiguous_merge`
 preflight, 15 seconds for the mutation, and 10 seconds for reconciliation. No
 path issues a second PUT.
 
-`glab-axi` owns provider truth and one mutation. The pinned contract records
+`gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected head, canonical URL, and
 captain/standing-yolo authority. This stage does not modify or integrate
 Firstmate. All other provider mutations remain denied.
@@ -204,8 +211,9 @@ normalization. The external no-mistakes consumer owns polling.
 
 `setup hooks` computes every target before writing, refuses symlink/non-regular
 config, preserves unrelated JSON/TOML, writes atomically, and rolls back earlier
-files on failure. It installs generated skills plus Claude Code/Codex
-SessionStart hooks that invoke the bounded dashboard; it performs no auth.
+files on failure. It installs the canonical `gl-axi` skill plus Claude
+Code/Codex SessionStart hooks that invoke the selected canonical or compatibility
+executable; it performs no auth and does not remove an existing legacy skill.
 
 Release binaries embed an Ed25519 update public key. Release CI first proves the
 private signing secret matches the separately configured public key, publishes
@@ -213,8 +221,10 @@ the public key plus signed checksums, and never supplies the private key to
 platform build jobs. `update --check` fetches only the fixed HTTPS manifest,
 verifies its canonical signature, and validates exactly one platform artifact. A human-only
 apply selects exactly one platform artifact, enforces the 128 MiB custody bound,
-verifies signed size/SHA-256 and the candidate standalone handshake, detects a
-path swap, and uses same-directory rename/rollback. Development builds,
+verifies signed size/SHA-256 and the name-specific candidate standalone
+handshake, detects a path swap, and uses same-directory rename/rollback.
+Canonical `gl-axi` and compatibility `glab-axi` assets use separate signed
+manifests so existing updaters remain valid. Development builds,
 symlink/package-managed installs, and Windows self-replacement fail closed.
 
 ## Output contracts

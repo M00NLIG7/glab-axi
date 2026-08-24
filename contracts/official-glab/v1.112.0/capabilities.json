@@ -48,7 +48,13 @@
     {
       "name": "mr-view",
       "kind": "read-json-object",
-      "argv": ["mr", "view", "{iid}", "--output", "json", "-R", "{repo}"]
+      "argv": ["mr", "view", "{iid}", "--output", "json", "-R", "{repo}"],
+      "response_normalization": {
+        "canonical_source_head": "sha",
+        "official_client_source_head": "diff_refs.head_sha",
+        "dual_value_policy": "require-exact-match",
+        "missing_or_malformed_policy": "refuse"
+      }
     },
     {
       "name": "mr-diff",

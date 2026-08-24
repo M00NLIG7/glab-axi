@@ -42,35 +42,35 @@ type FlagDefinition struct {
 }
 
 var definitions = []Definition{
-	{Path: nil, Summary: "Show a bounded current-project dashboard.", Usage: "glab-axi [global flags]", RepoMode: RepoRequired, Schema: "dashboard", Backend: "official-glab"},
-	{Path: []string{"auth", "login"}, Summary: "Authenticate through official glab in a human TTY.", Usage: "glab-axi auth login [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-login", Backend: "official-glab"},
-	{Path: []string{"auth", "status"}, Summary: "Check official-glab authentication without displaying a token.", Usage: "glab-axi auth status [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-status", Backend: "official-glab"},
-	{Path: []string{"issue", "list"}, Summary: "List project issues.", Usage: "glab-axi issue list [global flags]", RepoMode: RepoRequired, Schema: "issue-list", Backend: "official-glab"},
-	{Path: []string{"issue", "view"}, Summary: "View one project issue.", Usage: "glab-axi issue view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "issue-view", Backend: "official-glab"},
-	{Path: []string{"mr", "list"}, Summary: "List project merge requests.", Usage: "glab-axi mr list [global flags]", RepoMode: RepoRequired, Schema: "mr-list", Backend: "official-glab"},
-	{Path: []string{"mr", "view"}, Summary: "View one merge request.", Usage: "glab-axi mr view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-view", Backend: "official-glab"},
-	{Path: []string{"mr", "checks"}, Summary: "View the head pipeline and jobs for one merge request.", Usage: "glab-axi mr checks <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-checks", Backend: "official-glab"},
-	{Path: []string{"mr", "diff"}, Summary: "View a bounded, color-free merge-request diff.", Usage: "glab-axi mr diff <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-diff", Backend: "official-glab"},
-	{Path: []string{"mr", "merge"}, Summary: "Immediately squash-merge one exact green merge request.", Usage: "glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: mergeFlags(), Schema: "mr-merge", Backend: "official-glab", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true},
-	{Path: []string{"mr", "ensure"}, Summary: "Create or update exactly one matching open merge request.", Usage: "glab-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
-	{Path: []string{"mr", "create-or-update"}, Summary: "Alias for bounded MR ensure semantics.", Usage: "glab-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
-	{Path: []string{"pipeline", "list"}, Summary: "List project pipelines.", Usage: "glab-axi pipeline list [global flags]", RepoMode: RepoRequired, Schema: "pipeline-list", Backend: "official-glab"},
-	{Path: []string{"pipeline", "view"}, Summary: "View one pipeline.", Usage: "glab-axi pipeline view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "pipeline-view", Backend: "official-glab"},
-	{Path: []string{"job", "list"}, Summary: "List jobs for one pipeline.", Usage: "glab-axi job list --pipeline-id ID [global flags]", RepoMode: RepoRequired, Flags: []FlagDefinition{{Name: "--pipeline-id", Value: "ID", Description: "Pipeline ID."}}, Schema: "job-list", Backend: "official-glab"},
-	{Path: []string{"job", "view"}, Summary: "View one CI/CD job.", Usage: "glab-axi job view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-view", Backend: "official-glab"},
-	{Path: []string{"job", "trace"}, Summary: "View a bounded, redacted tail of one job trace.", Usage: "glab-axi job trace <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-trace", Backend: "official-glab"},
-	{Path: []string{"release", "list"}, Summary: "List project releases and bounded download metadata.", Usage: "glab-axi release list [global flags]", RepoMode: RepoRequired, Schema: "release-list", Backend: "official-glab"},
-	{Path: []string{"release", "view"}, Summary: "View a release and project-bound download metadata (latest when omitted).", Usage: "glab-axi release view [tag] [global flags]", RepoMode: RepoRequired, MaxPositions: 1, Schema: "release-view", Backend: "official-glab"},
-	{Path: []string{"repo", "list"}, Summary: "List repositories visible to the official profile.", Usage: "glab-axi repo list [--hostname HOST] [--limit N]", RepoMode: RepoNone, Schema: "repo-list", Backend: "official-glab"},
-	{Path: []string{"repo", "view"}, Summary: "View a project/repository.", Usage: "glab-axi repo view [namespace/project] [global flags]", RepoMode: RepoOptional, MaxPositions: 1, Schema: "repo-view", Backend: "official-glab"},
-	{Path: []string{"label", "list"}, Summary: "List project labels.", Usage: "glab-axi label list [global flags]", RepoMode: RepoRequired, Schema: "label-list", Backend: "official-glab"},
-	{Path: []string{"search", "issues"}, Summary: "Search issues in one project.", Usage: "glab-axi search issues <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
-	{Path: []string{"search", "mrs"}, Summary: "Search merge requests in one project.", Usage: "glab-axi search mrs <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
-	{Path: []string{"search", "repos"}, Summary: "Search projects/repositories on one host.", Usage: "glab-axi search repos <query> [--hostname HOST] [--limit N]", RepoMode: RepoNone, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
-	{Path: []string{"search", "commits"}, Summary: "Search commits in one project.", Usage: "glab-axi search commits <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
-	{Path: []string{"search", "code"}, Summary: "Search code blobs in one project.", Usage: "glab-axi search code <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
-	{Path: []string{"setup", "hooks"}, Summary: "Install or repair generated Agent Skill and session hooks.", Usage: "glab-axi setup hooks", RepoMode: RepoNone, Schema: "setup-hooks", Backend: "local"},
-	{Path: []string{"update"}, Summary: "Check for or install a signed glab-axi release.", Usage: "glab-axi update [--check]", RepoMode: RepoNone, Flags: []FlagDefinition{{Name: "--check", Description: "Check only; do not replace the executable.", Boolean: true}}, Schema: "update", Backend: "local"},
+	{Path: nil, Summary: "Show a bounded current-project dashboard.", Usage: "gl-axi [global flags]", RepoMode: RepoRequired, Schema: "dashboard", Backend: "official-glab"},
+	{Path: []string{"auth", "login"}, Summary: "Authenticate through official glab in a human TTY.", Usage: "gl-axi auth login [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-login", Backend: "official-glab"},
+	{Path: []string{"auth", "status"}, Summary: "Check official-glab authentication without displaying a token.", Usage: "gl-axi auth status [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-status", Backend: "official-glab"},
+	{Path: []string{"issue", "list"}, Summary: "List project issues.", Usage: "gl-axi issue list [global flags]", RepoMode: RepoRequired, Schema: "issue-list", Backend: "official-glab"},
+	{Path: []string{"issue", "view"}, Summary: "View one project issue.", Usage: "gl-axi issue view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "issue-view", Backend: "official-glab"},
+	{Path: []string{"mr", "list"}, Summary: "List project merge requests.", Usage: "gl-axi mr list [global flags]", RepoMode: RepoRequired, Schema: "mr-list", Backend: "official-glab"},
+	{Path: []string{"mr", "view"}, Summary: "View one merge request.", Usage: "gl-axi mr view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-view", Backend: "official-glab"},
+	{Path: []string{"mr", "checks"}, Summary: "View the head pipeline and jobs for one merge request.", Usage: "gl-axi mr checks <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-checks", Backend: "official-glab"},
+	{Path: []string{"mr", "diff"}, Summary: "View a bounded, color-free merge-request diff.", Usage: "gl-axi mr diff <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-diff", Backend: "official-glab"},
+	{Path: []string{"mr", "merge"}, Summary: "Immediately squash-merge one exact green merge request.", Usage: "gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: mergeFlags(), Schema: "mr-merge", Backend: "official-glab", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true},
+	{Path: []string{"mr", "ensure"}, Summary: "Create or update exactly one matching open merge request.", Usage: "gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
+	{Path: []string{"mr", "create-or-update"}, Summary: "Alias for bounded MR ensure semantics.", Usage: "gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
+	{Path: []string{"pipeline", "list"}, Summary: "List project pipelines.", Usage: "gl-axi pipeline list [global flags]", RepoMode: RepoRequired, Schema: "pipeline-list", Backend: "official-glab"},
+	{Path: []string{"pipeline", "view"}, Summary: "View one pipeline.", Usage: "gl-axi pipeline view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "pipeline-view", Backend: "official-glab"},
+	{Path: []string{"job", "list"}, Summary: "List jobs for one pipeline.", Usage: "gl-axi job list --pipeline-id ID [global flags]", RepoMode: RepoRequired, Flags: []FlagDefinition{{Name: "--pipeline-id", Value: "ID", Description: "Pipeline ID."}}, Schema: "job-list", Backend: "official-glab"},
+	{Path: []string{"job", "view"}, Summary: "View one CI/CD job.", Usage: "gl-axi job view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-view", Backend: "official-glab"},
+	{Path: []string{"job", "trace"}, Summary: "View a bounded, redacted tail of one job trace.", Usage: "gl-axi job trace <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-trace", Backend: "official-glab"},
+	{Path: []string{"release", "list"}, Summary: "List project releases and bounded download metadata.", Usage: "gl-axi release list [global flags]", RepoMode: RepoRequired, Schema: "release-list", Backend: "official-glab"},
+	{Path: []string{"release", "view"}, Summary: "View a release and project-bound download metadata (latest when omitted).", Usage: "gl-axi release view [tag] [global flags]", RepoMode: RepoRequired, MaxPositions: 1, Schema: "release-view", Backend: "official-glab"},
+	{Path: []string{"repo", "list"}, Summary: "List repositories visible to the official profile.", Usage: "gl-axi repo list [--hostname HOST] [--limit N]", RepoMode: RepoNone, Schema: "repo-list", Backend: "official-glab"},
+	{Path: []string{"repo", "view"}, Summary: "View a project/repository.", Usage: "gl-axi repo view [namespace/project] [global flags]", RepoMode: RepoOptional, MaxPositions: 1, Schema: "repo-view", Backend: "official-glab"},
+	{Path: []string{"label", "list"}, Summary: "List project labels.", Usage: "gl-axi label list [global flags]", RepoMode: RepoRequired, Schema: "label-list", Backend: "official-glab"},
+	{Path: []string{"search", "issues"}, Summary: "Search issues in one project.", Usage: "gl-axi search issues <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
+	{Path: []string{"search", "mrs"}, Summary: "Search merge requests in one project.", Usage: "gl-axi search mrs <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
+	{Path: []string{"search", "repos"}, Summary: "Search projects/repositories on one host.", Usage: "gl-axi search repos <query> [--hostname HOST] [--limit N]", RepoMode: RepoNone, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
+	{Path: []string{"search", "commits"}, Summary: "Search commits in one project.", Usage: "gl-axi search commits <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
+	{Path: []string{"search", "code"}, Summary: "Search code blobs in one project.", Usage: "gl-axi search code <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
+	{Path: []string{"setup", "hooks"}, Summary: "Install or repair generated Agent Skill and session hooks.", Usage: "gl-axi setup hooks", RepoMode: RepoNone, Schema: "setup-hooks", Backend: "local"},
+	{Path: []string{"update"}, Summary: "Check for or install a signed gl-axi release.", Usage: "gl-axi update [--check]", RepoMode: RepoNone, Flags: []FlagDefinition{{Name: "--check", Description: "Check only; do not replace the executable.", Boolean: true}}, Schema: "update", Backend: "local"},
 }
 
 func mergeFlags() []FlagDefinition {
@@ -129,8 +129,8 @@ func TopHelp() string {
 	}
 	sort.Strings(names)
 	var out strings.Builder
-	out.WriteString("glab-axi - bounded GitLab experience for humans and agents\n\n")
-	out.WriteString("Usage:\n  glab-axi [command] [args] [flags]\n\nCommands:\n")
+	out.WriteString("gl-axi - bounded GitLab experience for humans and agents\n\n")
+	out.WriteString("Usage:\n  gl-axi [command] [args] [flags]\n\nCommands:\n")
 	out.WriteString("  (none)       bounded current-project dashboard\n")
 	for _, name := range names {
 		leaves := make([]string, 0, len(groups[name]))
@@ -179,11 +179,11 @@ func Help(path []string) (string, bool) {
 	}
 	sort.Slice(children, func(i, j int) bool { return strings.Join(children[i].Path, " ") < strings.Join(children[j].Path, " ") })
 	var out strings.Builder
-	out.WriteString("Usage:\n  glab-axi " + strings.Join(path, " ") + " <command> [flags]\n\nCommands:\n")
+	out.WriteString("Usage:\n  gl-axi " + strings.Join(path, " ") + " <command> [flags]\n\nCommands:\n")
 	for _, child := range children {
 		out.WriteString(fmt.Sprintf("  %-18s %s\n", child.Path[len(child.Path)-1], child.Summary))
 	}
-	out.WriteString("\nRun glab-axi " + strings.Join(path, " ") + " <command> --help for details.\n")
+	out.WriteString("\nRun gl-axi " + strings.Join(path, " ") + " <command> --help for details.\n")
 	return out.String(), true
 }
 
@@ -209,16 +209,23 @@ func CommandReferenceMarkdown() string {
 // It intentionally teaches only declared reads and the two pinned MR writes.
 func SkillMarkdown() string {
 	var out strings.Builder
-	out.WriteString("---\nname: glab-axi\ndescription: Use bounded GitLab reads, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.\n---\n\n")
-	out.WriteString("# glab-axi\n\nUse `glab-axi` rather than official `glab` directly when operating as an agent. Human authentication is the only interactive command.\n\n## Commands\n\n")
+	out.WriteString("---\nname: gl-axi\ndescription: Use bounded GitLab reads, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.\n---\n\n")
+	out.WriteString("# gl-axi\n\nUse `gl-axi` rather than official `glab` directly when operating as an agent. Human authentication is the only interactive command.\n\n## Commands\n\n")
 	for _, definition := range definitions {
 		if len(definition.Path) == 0 || strings.Join(definition.Path, " ") == "auth login" || strings.Join(definition.Path, " ") == "setup hooks" || strings.Join(definition.Path, " ") == "update" {
 			continue
 		}
 		out.WriteString("- `" + definition.Usage + "` — " + definition.Summary + "\n")
 	}
-	out.WriteString("\n## Safety\n\n- Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.\n- Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
+	out.WriteString("\n## Safety\n\n- Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.\n- Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
 	return out.String()
+}
+
+// LegacySkillMarkdown keeps existing glab-axi agent installations functional
+// while making the canonical command and migration explicit.
+func LegacySkillMarkdown() string {
+	legacy := strings.ReplaceAll(SkillMarkdown(), "gl-axi", "glab-axi")
+	return strings.Replace(legacy, "# glab-axi\n\n", "# glab-axi compatibility alias\n\n`glab-axi` remains supported with no removal date. Prefer the canonical `gl-axi` command for new configuration.\n\n", 1)
 }
 
 func leafHelp(definition Definition) string {

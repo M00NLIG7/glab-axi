@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
 )
 
 func (c *Client) AuthenticatedUser(ctx context.Context) (User, error) {

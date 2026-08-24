@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
 )
 
 type Identity struct {

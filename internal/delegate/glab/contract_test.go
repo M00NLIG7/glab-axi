@@ -65,8 +65,14 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 			Version string `json:"version"`
 		} `json:"release"`
 		Operations []struct {
-			Name string   `json:"name"`
-			Argv []string `json:"argv"`
+			Name                  string   `json:"name"`
+			Argv                  []string `json:"argv"`
+			ResponseNormalization struct {
+				CanonicalSourceHead    string `json:"canonical_source_head"`
+				OfficialClientHead     string `json:"official_client_source_head"`
+				DualValuePolicy        string `json:"dual_value_policy"`
+				MissingMalformedPolicy string `json:"missing_or_malformed_policy"`
+			} `json:"response_normalization"`
 		} `json:"operations"`
 	}
 	if err := json.Unmarshal(data, &fixture); err != nil {
@@ -79,6 +85,12 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 	for _, operation := range fixture.Operations {
 		if operation.Name == "" || len(operation.Argv) == 0 || declared[operation.Name] {
 			t.Fatalf("invalid operation fixture: %#v", operation)
+		}
+		if operation.Name == string(OpMRView) {
+			normalization := operation.ResponseNormalization
+			if normalization.CanonicalSourceHead != "sha" || normalization.OfficialClientHead != "diff_refs.head_sha" || normalization.DualValuePolicy != "require-exact-match" || normalization.MissingMalformedPolicy != "refuse" {
+				t.Fatalf("mr-view response normalization is not pinned: %#v", normalization)
+			}
 		}
 		declared[operation.Name] = true
 	}

@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"glab-axi/internal/updater"
+	"gl-axi/internal/updater"
 )
 
 func main() {

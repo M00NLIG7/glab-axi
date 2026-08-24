@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"glab-axi/internal/product"
+	"gl-axi/internal/product"
 )
 
 func main() {
@@ -18,7 +18,8 @@ func main() {
 		fail("unexpected positional arguments")
 	}
 	files := map[string]string{
-		filepath.Join("skills", "glab-axi", "SKILL.md"): product.SkillMarkdown(),
+		filepath.Join("skills", "gl-axi", "SKILL.md"):   product.SkillMarkdown(),
+		filepath.Join("skills", "glab-axi", "SKILL.md"): product.LegacySkillMarkdown(),
 		filepath.Join("docs", "command-reference.md"):   product.CommandReferenceMarkdown(),
 	}
 	for relative, content := range files {

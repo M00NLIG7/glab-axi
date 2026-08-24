@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"glab-axi/internal/contract/v1"
+	"gl-axi/internal/contract/v1"
 )
 
 func verifyOwner(info os.FileInfo) error {

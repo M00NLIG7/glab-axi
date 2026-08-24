@@ -2,7 +2,7 @@
 
 ## Trust boundaries
 
-The operator controls the `glab-axi` executable, selected official `glab`
+The operator controls the `gl-axi` executable, selected official `glab`
 package/profile, explicit target flags, native private-host config, credential
 source, local repository, private MR files, setup command, and release signing
 key. Git remotes, PATH entries, official child output/stderr, provider JSON,
@@ -29,8 +29,10 @@ native HTTP transport.
   cancellation, with warning state reconciled before success;
 - 5-second version check, 30/45-second noninteractive operations, bounded
   stdout/stderr, and human login governed by caller/process cancellation;
-- malformed, ANSI-prefixed, trailing, non-UTF-8, or oversized data-command
-  child output rejected;
+- malformed, duplicate, ANSI-prefixed, trailing, non-UTF-8, or oversized
+  data-command child output rejected;
+- official MR-view `diff_refs.head_sha` normalized to the canonical `sha` field
+  only when valid; dual values must match and no missing head is invented;
 - controlled exit/error mapping without raw stderr or server body;
 - typed normalization and per-command JSON schemas;
 - HTTPS host and selected repository path validation on returned URLs;
@@ -60,7 +62,9 @@ PUT maximum, response validation, and at most one bounded read-only
 reconciliation after an unvalidated write. Create reconciliation repeats the
 exact-branch lookup. Update reconciliation reads the canonical exact IID and
 requires the pre-write MR/project IDs, URL, branches, and head plus the exact
-requested content. A verified create absence preserves only a bounded class for
+requested content. REST `sha` and official-client `diff_refs.head_sha` are
+accepted as two representations of that same head; conflicts, duplicates,
+malformed values, or missing identity remain `ambiguous_update`. A verified create absence preserves only a bounded class for
 recognized HTTP rejections; read failure, timeout, incomplete state, drift, or
 any other uncertain result remains ambiguous.
 
@@ -161,18 +165,22 @@ Help always exits 0 and performs no auth/dependency/network work.
 
 `setup hooks` plans all files before writes, refuses symlinks/non-regular or
 malformed hook structures, preserves unrelated configuration, writes mode-0600
-files atomically, and rolls back prior targets on failure. Hook commands are the
-fixed portable name `glab-axi`, not a shell-quoted arbitrary path. Setup never
+files atomically, and rolls back prior targets on failure. Hook commands are a
+fixed portable `gl-axi` or `glab-axi` compatibility name, never a shell-quoted
+arbitrary path. Setup always installs the canonical skill and never
 authenticates.
 
-Release CI publishes no compatibility executable. It verifies the private
+Release CI publishes both the canonical `gl-axi` executable and explicit
+`glab-axi` compatibility alias, but never the test-only executable named `glab`. It verifies the private
 signing secret against a separately configured public key while platform build
 jobs receive only that public value. Raw product binaries and packages receive
 SHA-256 checksums; checksums have a detached Ed25519 signature and the public key
 is published for comparison with a captain-pinned out-of-band value. Raw update
 artifacts are covered by an Ed25519-signed canonical manifest. Release binaries
-embed only the public key. Self-update is explicit and human
-confirmed, validates signature/size/checksum/standalone handshake, detects path
+embed only the public key. Separate signed manifests and name-specific
+handshakes prevent a canonical update from being confused with a compatibility
+candidate. Self-update is explicit and human confirmed, validates
+signature/size/checksum/standalone handshake, detects path
 replacement, and uses same-directory atomic rename with rollback. Development,
 symlinked/package-managed, unsupported-platform, wrong-key, wrong-checksum, and
 wrong-handshake paths refuse replacement. No update check occurs during help,

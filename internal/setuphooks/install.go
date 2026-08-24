@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"glab-axi/internal/contract/uxv1"
+	"gl-axi/internal/contract/uxv1"
 )
 
 const maxConfigBytes = 1 << 20
@@ -31,8 +31,8 @@ type update struct {
 }
 
 func Install(home, command, skill string) (Result, error) {
-	if !filepath.IsAbs(home) || (command != "glab-axi" && command != "glab-axi.exe") {
-		return Result{}, uxv1.NewError(uxv1.CodeSafety, "setup requires an installed glab-axi executable on PATH and an absolute home directory")
+	if !filepath.IsAbs(home) || (command != "gl-axi" && command != "gl-axi.exe" && command != "glab-axi" && command != "glab-axi.exe") {
+		return Result{}, uxv1.NewError(uxv1.CodeSafety, "setup requires an installed gl-axi or glab-axi compatibility executable on PATH and an absolute home directory")
 	}
 	targets := []struct {
 		relative string
@@ -41,8 +41,8 @@ func Install(home, command, skill string) (Result, error) {
 		{filepath.Join(".claude", "settings.json"), func(current []byte) ([]byte, error) { return updateHookJSON(current, command) }},
 		{filepath.Join(".codex", "hooks.json"), func(current []byte) ([]byte, error) { return updateHookJSON(current, command) }},
 		{filepath.Join(".codex", "config.toml"), updateCodexConfig},
-		{filepath.Join(".agents", "skills", "glab-axi", "SKILL.md"), func([]byte) ([]byte, error) { return []byte(skill), nil }},
-		{filepath.Join(".claude", "skills", "glab-axi", "SKILL.md"), func([]byte) ([]byte, error) { return []byte(skill), nil }},
+		{filepath.Join(".agents", "skills", "gl-axi", "SKILL.md"), func([]byte) ([]byte, error) { return []byte(skill), nil }},
+		{filepath.Join(".claude", "skills", "gl-axi", "SKILL.md"), func([]byte) ([]byte, error) { return []byte(skill), nil }},
 	}
 	updates := make([]update, 0, len(targets))
 	for _, target := range targets {
@@ -234,7 +234,7 @@ func writeSafeTarget(home, path string, content []byte) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return uxv1.Wrap(uxv1.CodeUpstream, "cannot inspect agent setup target", err)
 	}
-	temp, err := os.CreateTemp(dir, ".glab-axi-setup-*")
+	temp, err := os.CreateTemp(dir, ".gl-axi-setup-*")
 	if err != nil {
 		return uxv1.Wrap(uxv1.CodeUpstream, "cannot create agent setup file", err)
 	}

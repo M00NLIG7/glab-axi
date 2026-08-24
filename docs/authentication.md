@@ -1,6 +1,6 @@
 # Authentication
 
-`glab-axi` has two intentionally separate authentication lanes. There is no
+`gl-axi` has two intentionally separate authentication lanes. There is no
 automatic fallback, import, export, or token copy between them.
 
 ## Product lane: official glab profile
@@ -8,7 +8,7 @@ automatic fallback, import, export, or token copy between them.
 A human on a real terminal runs:
 
 ```sh
-glab-axi auth login --hostname gitlab.com
+gl-axi auth login --hostname gitlab.com
 ```
 
 The product accepts only `--hostname`; it does not expose official glab's token,
@@ -22,7 +22,7 @@ glab auth login --hostname <validated-host>
 
 Official `glab` v1.112.0 normally stores credentials in macOS Keychain, Windows
 Credential Manager, or Linux Secret Service, but its documented fallback is a
-plaintext config file when no keyring is available (and in CI). `glab-axi`
+plaintext config file when no keyring is available (and in CI). `gl-axi`
 refuses that fallback:
 
 1. all standard streams must be actual terminal files and pass a terminal
@@ -50,13 +50,13 @@ explicit caller/process cancellation, while cancellation and relay shutdown
 remain bounded.
 
 The sentinel uses a unique service/account and is not a credential. The probe
-does not list or read keyring entries. `glab-axi` never opens official glab's
+does not list or read keyring entries. `gl-axi` never opens official glab's
 config, asks official glab to print a token, parses a credential source, or
 copies a value into its native store.
 
 A profile configured independently by a human with official `glab` is an
 external trust decision. Product operations use it as official glab normally
-would. `glab-axi auth status` delegates without `--show-token`, discards all child
+would. `gl-axi auth status` delegates without `--show-token`, discards all child
 text, and returns only normalized authentication state/host/backend metadata.
 
 ### Headless product operations
@@ -80,14 +80,14 @@ credential and is passed through a private mode-0600 file.
 
 ### OAuth/device and private-host limitations
 
-`glab-axi` intentionally does not promise a universal device flow. Official
+`gl-axi` intentionally does not promise a universal device flow. Official
 glab's browser/device support depends on its pinned release, GitLab server
 version (device flow requires GitLab 17.9+), host OAuth configuration, and an
 appropriate client identity. Self-managed instances may disable OAuth, use a
 relative URL, separate API host, private CA, or proxy.
 
 A human who needs a special official-glab onboarding path may configure the
-profile directly outside glab-axi, subject to organizational policy. A
+profile directly outside `gl-axi`, subject to organizational policy. A
 `gitlab.com` checkout may supply product host/repository context; self-managed
 checkout hosts require explicit `--hostname` or `GITLAB_HOST` authority. The AXI
 will use that selected authenticated host but never expose insecure TLS/storage
@@ -98,11 +98,16 @@ below.
 
 Native `glab-axi/v1` resolution checks:
 
-1. `GLAB_AXI_TOKEN`
-2. `GITLAB_TOKEN`
-3. `GITLAB_ACCESS_TOKEN`
-4. `OAUTH_TOKEN`
-5. the host/API-scoped glab-axi OS keyring item
+1. `GL_AXI_TOKEN`
+2. the `GLAB_AXI_TOKEN` compatibility name
+3. `GITLAB_TOKEN`
+4. `GITLAB_ACCESS_TOKEN`
+5. `OAUTH_TOKEN`
+6. the host/API-scoped OS keyring item
+
+The keyring service namespace remains the established `glab-axi/...` value so
+both executable names resolve the same credential without copying or exporting
+it.
 
 Empty values are ignored. If populated environment variables disagree, the
 command fails rather than choosing silently. `OAUTH_TOKEN` uses a Bearer header;
@@ -117,7 +122,7 @@ push authorization is unrelated to REST API authority.
 ### Transactional native import
 
 ```sh
-printf '%s\n' "$TOKEN" | glab-axi auth import \
+printf '%s\n' "$TOKEN" | gl-axi auth import \
   --host gitlab.example.invalid \
   --api-base https://gitlab.example.invalid/api/v4 \
   --web-base https://gitlab.example.invalid \
@@ -144,9 +149,11 @@ available. There is no plaintext fallback.
 
 ## Native host config
 
-Default config is the platform user-config directory under
-`glab-axi/config.json`. Tests/automation may select an absolute file with
-`GLAB_AXI_CONFIG` or an absolute directory with `GLAB_AXI_CONFIG_DIR`.
+The default remains the established platform user-config path under
+`glab-axi/config.json`, shared by both executable names. Tests and automation
+should use canonical `GL_AXI_CONFIG` or `GL_AXI_CONFIG_DIR`; the corresponding
+`GLAB_AXI_*` names remain compatibility aliases. If both forms are set to
+different paths, resolution fails closed.
 
 ```json
 {

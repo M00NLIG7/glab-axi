@@ -17,9 +17,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"glab-axi/internal/auth"
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/limits"
 
 	"golang.org/x/term"
 )
@@ -97,6 +97,12 @@ func (c *Client) Do(ctx context.Context, request Request) (Response, error) {
 	}
 	if invocation.outputKind == outputJSON && !utf8.Valid(body) {
 		return Response{UpstreamVersion: version, Write: invocation.write}, uxv1.NewError(uxv1.CodeUpstream, "official glab returned non-UTF-8 JSON")
+	}
+	if request.Operation == OpMRView {
+		body, err = normalizeMRViewResponse(body)
+		if err != nil {
+			return Response{UpstreamVersion: version, Write: invocation.write}, err
+		}
 	}
 	return Response{Body: body, UpstreamVersion: version, Write: invocation.write}, nil
 }
@@ -358,7 +364,7 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 		}
 	}
 	if login || host == "" {
-		for _, name := range []string{"GLAB_AXI_TOKEN", "GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN", "CI_JOB_TOKEN"} {
+		for _, name := range []string{"GL_AXI_TOKEN", "GLAB_AXI_TOKEN", "GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN", "CI_JOB_TOKEN"} {
 			blocked[name] = true
 		}
 	}

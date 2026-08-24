@@ -12,11 +12,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/gitlab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/redact"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/gitlab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/redact"
+	"gl-axi/internal/safeurl"
 )
 
 type upstreamUser struct {

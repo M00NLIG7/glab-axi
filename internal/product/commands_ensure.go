@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/delegate/glab"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/privatefile"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/privatefile"
 )
 
 type ensureProject struct {
@@ -273,7 +273,7 @@ func decodeAndValidateEnsureMR(body []byte, target Target, projectID int64, sour
 }
 
 func writePrivateJSON(value any) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "glab-axi-mr-")
+	dir, err := os.MkdirTemp("", "gl-axi-mr-")
 	if err != nil {
 		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot create private MR input directory", err)
 	}

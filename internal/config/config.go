@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/safeurl"
 )
 
 const Schema = "glab-axi/config-v1"
@@ -41,23 +41,45 @@ type ResolvedHost struct {
 func New() Config { return Config{Schema: Schema, Hosts: make(map[string]Host)} }
 
 func Path() (string, error) {
-	if explicit := os.Getenv("GLAB_AXI_CONFIG"); explicit != "" {
+	explicit, err := compatiblePathEnv("GL_AXI_CONFIG", "GLAB_AXI_CONFIG")
+	if err != nil {
+		return "", err
+	}
+	if explicit != "" {
 		if !filepath.IsAbs(explicit) {
-			return "", v1.NewError(v1.CodeValidation, "GLAB_AXI_CONFIG must be absolute")
+			return "", v1.NewError(v1.CodeValidation, "GL_AXI_CONFIG and GLAB_AXI_CONFIG must be absolute")
 		}
 		return filepath.Clean(explicit), nil
 	}
-	if dir := os.Getenv("GLAB_AXI_CONFIG_DIR"); dir != "" {
+	dir, err := compatiblePathEnv("GL_AXI_CONFIG_DIR", "GLAB_AXI_CONFIG_DIR")
+	if err != nil {
+		return "", err
+	}
+	if dir != "" {
 		if !filepath.IsAbs(dir) {
-			return "", v1.NewError(v1.CodeValidation, "GLAB_AXI_CONFIG_DIR must be absolute")
+			return "", v1.NewError(v1.CodeValidation, "GL_AXI_CONFIG_DIR and GLAB_AXI_CONFIG_DIR must be absolute")
 		}
 		return filepath.Join(filepath.Clean(dir), "config.json"), nil
 	}
-	dir, err := os.UserConfigDir()
+	dir, err = os.UserConfigDir()
 	if err != nil {
 		return "", v1.Wrap(v1.CodeUpstream, "cannot locate user config directory", err)
 	}
+	// Keep the established non-secret authority path so both executable names
+	// share one configuration without copying or migrating it.
 	return filepath.Join(dir, "glab-axi", "config.json"), nil
+}
+
+func compatiblePathEnv(canonical, legacy string) (string, error) {
+	canonicalValue := os.Getenv(canonical)
+	legacyValue := os.Getenv(legacy)
+	if canonicalValue != "" && legacyValue != "" && filepath.Clean(canonicalValue) != filepath.Clean(legacyValue) {
+		return "", v1.NewError(v1.CodeValidation, canonical+" and "+legacy+" disagree")
+	}
+	if canonicalValue != "" {
+		return canonicalValue, nil
+	}
+	return legacyValue, nil
 }
 
 func Load(path string) (Config, error) {

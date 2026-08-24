@@ -10,9 +10,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"glab-axi/internal/contract/uxv1"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
 )
 
 const (

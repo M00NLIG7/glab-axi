@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"glab-axi/internal/delegate/glab"
-	"glab-axi/internal/limits"
-	runtimepkg "glab-axi/internal/runtime"
+	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
+	runtimepkg "gl-axi/internal/runtime"
 
 	"github.com/creack/pty"
 )

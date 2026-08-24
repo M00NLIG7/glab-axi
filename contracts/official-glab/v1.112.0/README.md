@@ -20,17 +20,20 @@ empty temporary home and config, update checks disabled, and color disabled.
 establish keyring probing and the documented plaintext fallback. The adapter
 never parses official `glab` config or credentials.
 
-`capabilities.json` is the implementation boundary. Public `glab-axi` input is
-never appended to an upstream argv. Each adapter constructs one listed argv,
-validates every substituted value, bounds child output, and normalizes it into
-a command-specific `glab-axi/ux-v1` schema. The guarded merge entries pin four
-fixed reads and one fixed PUT; the PUT consumes only a private four-key JSON
-file, is invoked once, and is never delegated through interactive `glab mr
-merge` behavior.
+`capabilities.json` is the implementation boundary. Its `mr-view` entry also
+pins the response normalization: the official client's `diff_refs.head_sha`
+becomes canonical `sha` only when valid, and two supplied values must match.
+Missing identity is never invented and cannot prove a post-write result. Public
+`gl-axi` input is never appended to an upstream argv. Each adapter constructs
+one listed argv, validates every substituted value, bounds child output, and
+normalizes it into a command-specific `glab-axi/ux-v1` schema. The guarded
+merge entries pin four fixed reads and one fixed PUT; the PUT consumes only a
+private four-key JSON file, is invoked once, and is never delegated through
+interactive `glab mr merge` behavior.
 
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
-ensure and guarded-merge requests with synthetic credentials; it never contacts
-a live GitLab API. Updating official `glab` requires a new versioned directory,
-fresh public-interface evidence, and adapter tests before changing the runtime
-pin.
+ensure, exact-MR-view normalization, and guarded-merge requests with synthetic
+credentials; it never contacts a live GitLab API. Updating official `glab`
+requires a new versioned directory, fresh public-interface evidence, and adapter
+tests before changing the runtime pin.

@@ -12,8 +12,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
 )
 
 var projectSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)

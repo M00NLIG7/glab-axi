@@ -19,14 +19,14 @@ import (
 	"strings"
 	"time"
 
-	"glab-axi/internal/auth"
-	"glab-axi/internal/config"
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/limits"
-	"glab-axi/internal/redact"
+	"gl-axi/internal/auth"
+	"gl-axi/internal/config"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/limits"
+	"gl-axi/internal/redact"
 )
 
-const userAgent = "glab-axi/0.1"
+const userAgent = "gl-axi/0.2"
 
 type SleepFunc func(context.Context, time.Duration) error
 

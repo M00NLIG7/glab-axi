@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"glab-axi/internal/contract/v1"
-	"glab-axi/internal/safeurl"
+	"gl-axi/internal/contract/v1"
+	"gl-axi/internal/safeurl"
 )
 
 var nextLinkPattern = regexp.MustCompile(`^\s*<([^>]+)>\s*;(?:[^,;]+;)*\s*rel\s*=\s*"?next"?(?:\s*;.*)?$`)

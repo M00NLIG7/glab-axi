@@ -3,7 +3,7 @@ package uxv1
 import (
 	"errors"
 
-	v1 "glab-axi/internal/contract/v1"
+	v1 "gl-axi/internal/contract/v1"
 )
 
 type Code string

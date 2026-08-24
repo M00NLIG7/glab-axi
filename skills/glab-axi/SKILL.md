@@ -3,7 +3,9 @@ name: glab-axi
 description: Use bounded GitLab reads, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.
 ---
 
-# glab-axi
+# glab-axi compatibility alias
+
+`glab-axi` remains supported with no removal date. Prefer the canonical `gl-axi` command for new configuration.
 
 Use `glab-axi` rather than official `glab` directly when operating as an agent. Human authentication is the only interactive command.
 

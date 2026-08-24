@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"glab-axi/internal/contract/v1"
+	"gl-axi/internal/contract/v1"
 )
 
 type CompatJob struct {
