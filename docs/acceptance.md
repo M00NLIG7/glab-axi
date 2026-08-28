@@ -46,8 +46,7 @@ GitLab project (not Rune).
     deletion or auto-merge. Repeat same-head source-branch change, target
     retargeting, stale-head, red/no CI, unresolved, conflict,
     malformed-response, and ambiguous transport cases; every preflight denial
-    has zero PUT and
-    uncertainty never retries or accepts branch drift.
+    has zero PUT, and uncertainty never retries or accepts branch drift.
 11. Run denied generic API, alternate merge (`--rebase`), approve/comment/close,
     pipeline retry, repo create, release create, and label delete while auditing
     child/network execution; each exits 2 with no child/request.
