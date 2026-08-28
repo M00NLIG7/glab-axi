@@ -57,12 +57,14 @@ local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
-reviewed lowercase head SHA, Firstmate authority class, and `--squash`. It
-requires provider-side successful-pipeline and resolved-discussion policies,
-revalidates the exact MR and all head-pipeline jobs/bridges, sends at most one
-fixed PUT with provider SHA enforcement, and reconciles uncertain outcomes with
-one GET. It never delegates `glab mr merge`, enables auto-merge, rebases, removes
-the source branch, or accepts a custom message. The pinned Firstmate contract is
+exact reviewed source and target branches, reviewed lowercase head SHA,
+Firstmate authority class, and `--squash`. It requires provider-side
+successful-pipeline and resolved-discussion policies, revalidates the
+caller-bound branches immediately before mutation along with the exact MR and
+all head-pipeline jobs/bridges, sends at most one fixed PUT with provider SHA
+enforcement, and reconciles uncertain outcomes with one GET. It never delegates
+`glab mr merge`, enables auto-merge, rebases, removes the source branch, or
+accepts a custom message. The pinned Firstmate contract is
 under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 

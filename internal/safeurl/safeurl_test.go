@@ -63,7 +63,7 @@ func TestProjectAndBranchValidationBoundaries(t *testing.T) {
 			t.Fatalf("valid branch %q rejected: %v", value, err)
 		}
 	}
-	invalidBranches := []string{"", "../main", "feature//x", "x.lock", "x@{y", "x:y", strings.Repeat("x", 1025)}
+	invalidBranches := []string{"", "@", "-release", "../main", ".hidden", "feature/.hidden", "feature//x", "x.lock", "x@{y", "x:y", strings.Repeat("x", 1025)}
 	for _, value := range invalidBranches {
 		if err := ValidateBranch(value); err == nil {
 			t.Fatalf("invalid branch %q accepted", value)

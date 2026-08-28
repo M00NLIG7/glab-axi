@@ -16,7 +16,7 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - `gl-axi mr view <iid> [global flags]` — View one merge request.
 - `gl-axi mr checks <iid> [global flags]` — View the head pipeline and jobs for one merge request.
 - `gl-axi mr diff <iid> [global flags]` — View a bounded, color-free merge-request diff.
-- `gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` — Immediately squash-merge one exact green merge request.
+- `gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` — Immediately squash-merge one exact green merge request.
 - `gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` — Create or update exactly one matching open merge request.
 - `gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` — Alias for bounded MR ensure semantics.
 - `gl-axi pipeline list [global flags]` — List project pipelines.
@@ -40,6 +40,6 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.
 - Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.
 - Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.
-- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, reviewed head, authority class, provider-enforced green policy, and `--squash`.
+- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.
 - Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.
 - Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.
