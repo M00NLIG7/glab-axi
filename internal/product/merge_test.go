@@ -51,6 +51,7 @@ func TestMRMergeParserDenialsConstructNoDelegate(t *testing.T) {
 		{name: "missing expected target", args: removeFlag(base, "--expected-target", true)},
 		{name: "missing expected head", args: removeFlag(base, "--expected-head", true)},
 		{name: "malformed expected source", args: replaceArg(base, mergeTestSource, "feature..other")},
+		{name: "dot-prefixed expected source component", args: replaceArg(base, mergeTestSource, "feature/.hidden")},
 		{name: "malformed expected target", args: replaceArg(base, mergeTestTarget, "main.lock")},
 		{name: "same expected branches", args: replaceArg(base, mergeTestTarget, mergeTestSource)},
 		{name: "missing authority", args: removeFlag(base, "--authority", true)},

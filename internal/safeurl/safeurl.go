@@ -136,7 +136,7 @@ func ValidateBranch(branch string) error {
 		return v1.NewError(v1.CodeValidation, "invalid Git branch")
 	}
 	for _, part := range strings.Split(branch, "/") {
-		if part == "" || part == "." || part == ".." || strings.HasSuffix(part, ".lock") {
+		if part == "" || strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
 			return v1.NewError(v1.CodeValidation, "invalid Git branch")
 		}
 	}
