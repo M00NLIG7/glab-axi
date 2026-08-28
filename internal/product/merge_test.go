@@ -23,6 +23,8 @@ const (
 	mergeTestSquash    = "1111111111111111111111111111111111111111"
 	mergeTestCommit    = "2222222222222222222222222222222222222222"
 	mergeTestURL       = "https://gitlab.com/group/project/-/merge_requests/42"
+	mergeTestSource    = "feature"
+	mergeTestTarget    = "main"
 	mergeErrorSentinel = "merge-provider-error-sentinel"
 )
 
@@ -45,7 +47,12 @@ func TestMRMergeParserDenialsConstructNoDelegate(t *testing.T) {
 		{name: "missing hostname", args: removeFlag(base, "--hostname", true)},
 		{name: "missing repo", args: removeFlag(base, "--repo", true)},
 		{name: "missing expected URL", args: removeFlag(base, "--expected-url", true)},
+		{name: "missing expected source", args: removeFlag(base, "--expected-source", true)},
+		{name: "missing expected target", args: removeFlag(base, "--expected-target", true)},
 		{name: "missing expected head", args: removeFlag(base, "--expected-head", true)},
+		{name: "malformed expected source", args: replaceArg(base, mergeTestSource, "feature..other")},
+		{name: "malformed expected target", args: replaceArg(base, mergeTestTarget, "main.lock")},
+		{name: "same expected branches", args: replaceArg(base, mergeTestTarget, mergeTestSource)},
 		{name: "missing authority", args: removeFlag(base, "--authority", true)},
 		{name: "missing squash", args: removeFlag(base, "--squash", false)},
 		{name: "noncanonical IID", args: replaceArg(base, "42", "042")},
@@ -84,7 +91,7 @@ func TestMRMergeParserDenialsConstructNoDelegate(t *testing.T) {
 			}
 			code := Run(context.Background(), test.args, deps)
 			if test.help {
-				if code != 0 || !strings.Contains(stdout.String(), "Immediately squash-merge") {
+				if code != 0 || !strings.Contains(stdout.String(), "Immediately squash-merge") || !strings.Contains(stdout.String(), "--expected-source BRANCH") || !strings.Contains(stdout.String(), "--expected-target BRANCH") {
 					t.Fatalf("help exit=%d output=%s", code, stdout.String())
 				}
 				return
@@ -127,11 +134,58 @@ func TestMRMergeSuccessUsesOnePrivatePUTAndClosedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := envelope.Data.Merge
-	if !envelope.OK || got.Action != "merged" || got.IID != 42 || got.WebURL != mergeTestURL || got.SourceHeadSHA != mergeTestHead || got.SquashCommitSHA != mergeTestSquash || got.ResultCommitSHA != mergeTestCommit || got.Pipeline.ID != 77 || got.Pipeline.Status != "success" || got.Authority != "captain-explicit" {
+	if !envelope.OK || got.Action != "merged" || got.IID != 42 || got.WebURL != mergeTestURL || got.SourceBranch != mergeTestSource || got.TargetBranch != mergeTestTarget || got.SourceHeadSHA != mergeTestHead || got.SquashCommitSHA != mergeTestSquash || got.ResultCommitSHA != mergeTestCommit || got.Pipeline.ID != 77 || got.Pipeline.Status != "success" || got.Authority != "captain-explicit" {
 		t.Fatalf("unexpected merge output: %#v", envelope)
 	}
 	if envelope.Meta.Count != 1 || envelope.Meta.Limit != 0 || envelope.Meta.Backend != "official-glab" {
 		t.Fatalf("unexpected merge metadata: %#v", envelope.Meta)
+	}
+}
+
+func TestMRMergeExpectedBranchMismatchNeverPUT(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*upstreamMR)
+		wantMessage string
+	}{
+		{
+			name: "source branch changed with the same head",
+			mutate: func(record *upstreamMR) {
+				record.SourceBranch = "renamed-feature"
+			},
+			wantMessage: "merge request source branch does not match --expected-source",
+		},
+		{
+			name: "target retargeted with the same head",
+			mutate: func(record *upstreamMR) {
+				record.TargetBranch = "release"
+			},
+			wantMessage: "merge request target branch does not match --expected-target",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			first := mergeMRFixture("opened")
+			adjacent := mergeMRFixture("opened")
+			test.mutate(&adjacent)
+			delegate := mergeDelegate(first, adjacent, mergeJobFixture("success", false), nil)
+			stdout, _, deps := productTestDeps(t, delegate)
+
+			if code := Run(context.Background(), mergeArgs(), deps); code != 6 {
+				t.Fatalf("exit=%d output=%s", code, stdout.String())
+			}
+			var envelope uxv1.Envelope
+			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Error == nil || envelope.Error.Code != uxv1.CodeConflict || envelope.Error.Message != test.wantMessage {
+				t.Fatalf("error=%#v output=%s", envelope.Error, stdout.String())
+			}
+			if countOperation(delegate.requests, glab.OpMergeMRView) != 2 || countOperation(delegate.requests, glab.OpMRMerge) != 0 {
+				t.Fatalf("branch mismatch crossed the adjacent-read guard: %#v", delegate.requests)
+			}
+		})
 	}
 }
 
@@ -431,6 +485,8 @@ func TestMRMergeIncompletePaginationNeverPUT(t *testing.T) {
 }
 
 func TestMRMergeAmbiguityReconcilesWithOneGETAndNeverRetriesPUT(t *testing.T) {
+	retargetedMerged := mergeMRFixture("merged")
+	retargetedMerged.TargetBranch = "release"
 	tests := []struct {
 		name       string
 		response   glab.Response
@@ -446,6 +502,10 @@ func TestMRMergeAmbiguityReconcilesWithOneGETAndNeverRetriesPUT(t *testing.T) {
 		{
 			name: "malformed success then merged", response: mergeResponse(map[string]any{"malformed": true, "description": mergeErrorSentinel}),
 			reconciled: mergeMRFixture("merged"), wantAction: "reconciled_merged",
+		},
+		{
+			name: "transport then retargeted merge remains ambiguous", writeErr: uxv1.NewError(uxv1.CodeUpstream, mergeErrorSentinel),
+			reconciled: retargetedMerged, wantCode: uxv1.CodeAmbiguousMerge,
 		},
 		{
 			name: "transport then open remains ambiguous", writeErr: uxv1.NewError(uxv1.CodeUpstream, mergeErrorSentinel),
@@ -479,8 +539,16 @@ func TestMRMergeAmbiguityReconcilesWithOneGETAndNeverRetriesPUT(t *testing.T) {
 				t.Fatalf("mutation/reconciliation counts changed: %#v", delegate.requests)
 			}
 			if test.wantAction != "" {
-				if code != 0 || !strings.Contains(stdout.String(), `"action":"`+test.wantAction+`"`) {
-					t.Fatalf("exit=%d output=%s", code, stdout.String())
+				var envelope struct {
+					OK   bool        `json:"ok"`
+					Data mergeOutput `json:"data"`
+				}
+				if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				got := envelope.Data.Merge
+				if code != 0 || !envelope.OK || got.Action != test.wantAction || got.SourceBranch != mergeTestSource || got.TargetBranch != mergeTestTarget || got.SourceHeadSHA != mergeTestHead {
+					t.Fatalf("exit=%d receipt=%#v output=%s", code, got, stdout.String())
 				}
 				return
 			}
@@ -524,6 +592,8 @@ func mergeArgs() []string {
 		"--repo", "group/project",
 		"--hostname", "gitlab.com",
 		"--expected-url", mergeTestURL,
+		"--expected-source", mergeTestSource,
+		"--expected-target", mergeTestTarget,
 		"--expected-head", mergeTestHead,
 		"--authority", "captain-explicit",
 		"--squash", "--format", "json",
@@ -541,7 +611,7 @@ func mergeProjectFixture(pipelinePolicy, discussionPolicy bool) mergeProject {
 func mergeMRFixture(state string) upstreamMR {
 	record := upstreamMR{
 		ID: 1001, IID: 42, Title: "Guarded merge", State: state, WebURL: mergeTestURL,
-		SourceBranch: "feature", TargetBranch: "main", SourceProjectID: 101, TargetProjectID: 101,
+		SourceBranch: mergeTestSource, TargetBranch: mergeTestTarget, SourceProjectID: 101, TargetProjectID: 101,
 		SHA: mergeTestHead, HasConflicts: false, DetailedMergeStatus: "can_be_merged",
 		BlockingDiscussionsResolved: true,
 		HeadPipeline: &upstreamPipeline{

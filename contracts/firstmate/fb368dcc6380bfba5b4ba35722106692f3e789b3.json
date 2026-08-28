@@ -28,6 +28,10 @@
       "{host}",
       "--expected-url",
       "{canonical_mr_url}",
+      "--expected-source",
+      "{recorded_source_branch}",
+      "--expected-target",
+      "{recorded_target_branch}",
       "--expected-head",
       "{recorded_head_sha}",
       "--authority",
@@ -41,6 +45,8 @@
       "nested_project",
       "host",
       "canonical_mr_url",
+      "recorded_source_branch",
+      "recorded_target_branch",
       "recorded_head_sha",
       "authority",
       "squash"
@@ -109,11 +115,13 @@
       "task identity",
       "captain or standing-yolo authority",
       "canonical merge-request URL",
+      "durable expected source and target branches",
       "durable expected head",
       "lifecycle policy"
     ],
     "glab_axi_owns": [
       "provider identity and policy validation",
+      "expected-branch precondition and receipt enforcement",
       "expected-head enforcement",
       "complete green pipeline validation",
       "one immediate squash PUT maximum",

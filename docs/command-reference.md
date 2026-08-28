@@ -95,7 +95,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-diff.schema.json`.
 ## `mr merge`
 
 ```text
-gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]
+gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]
 ```
 
 Immediately squash-merge one exact green merge request.

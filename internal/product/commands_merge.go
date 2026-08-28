@@ -36,6 +36,13 @@ type mergeInput struct {
 	AutoMerge                bool   `json:"auto_merge"`
 }
 
+type mergeExpectation struct {
+	URL          string
+	Head         string
+	SourceBranch string
+	TargetBranch string
+}
+
 type mergePipelineResult struct {
 	ID     int64  `json:"id"`
 	SHA    string `json:"sha"`
@@ -95,6 +102,15 @@ func validateParsedCommand(parsed Parsed) error {
 	if err := safeurl.ValidateProject(parsed.Values["--repo"]); err != nil {
 		return uxv1.Wrap(uxv1.CodeValidation, "invalid repository target", err)
 	}
+	if err := safeurl.ValidateBranch(parsed.Values["--expected-source"]); err != nil {
+		return uxv1.Wrap(uxv1.CodeValidation, "--expected-source must be a valid Git source branch", err)
+	}
+	if err := safeurl.ValidateBranch(parsed.Values["--expected-target"]); err != nil {
+		return uxv1.Wrap(uxv1.CodeValidation, "--expected-target must be a valid Git target branch", err)
+	}
+	if parsed.Values["--expected-source"] == parsed.Values["--expected-target"] {
+		return uxv1.NewError(uxv1.CodeValidation, "--expected-source and --expected-target must name different branches")
+	}
 	if !validMergeSHA(parsed.Values["--expected-head"]) {
 		return uxv1.NewError(uxv1.CodeValidation, "--expected-head must be a lowercase 40- or 64-hex SHA")
 	}
@@ -151,8 +167,12 @@ func executeMRMerge(ctx context.Context, client delegateClient, target Target, p
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	expectedURL := parsed.Values["--expected-url"]
-	expectedHead := parsed.Values["--expected-head"]
+	expected := mergeExpectation{
+		URL:          parsed.Values["--expected-url"],
+		Head:         parsed.Values["--expected-head"],
+		SourceBranch: parsed.Values["--expected-source"],
+		TargetBranch: parsed.Values["--expected-target"],
+	}
 	authority := parsed.Values["--authority"]
 	budget := &mergeReadBudget{}
 	preflightCtx, cancelPreflight := context.WithTimeout(ctx, limits.MergePreflightOperation)
@@ -166,47 +186,56 @@ func executeMRMerge(ctx context.Context, client delegateClient, target Target, p
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	if err := validateMergeMRIdentity(record, target, project.ID, iid, expectedURL, expectedHead); err != nil {
+	if err := validateMergeMRIdentity(record, target, project.ID, iid, expected); err != nil {
 		return commandOutput{meta: meta}, err
 	}
 
 	preMerged := record.State == "merged"
 	if preMerged {
-		if err := validateMergedPostcondition(record, target, project.ID, iid, expectedURL, expectedHead, nil); err != nil {
+		if err := validateMergedPostcondition(record, target, project.ID, iid, expected, nil); err != nil {
 			return commandOutput{meta: meta}, err
 		}
-	} else if err := validateOpenMergeMR(record, expectedHead); err != nil {
+	} else if err := validateOpenMergeMR(record, expected.Head); err != nil {
 		return commandOutput{meta: meta}, err
 	}
 
-	snapshot, err := loadMergeSnapshot(preflightCtx, client, target, record, expectedHead, &meta, budget)
+	snapshot, err := loadMergeSnapshot(preflightCtx, client, target, record, expected.Head, &meta, budget)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
 	meta.Count = snapshot.Checks
 	if preMerged {
-		if err := validateMergedPostcondition(record, target, project.ID, iid, expectedURL, expectedHead, &snapshot); err != nil {
+		if err := validateMergedPostcondition(record, target, project.ID, iid, expected, &snapshot); err != nil {
 			return commandOutput{meta: meta}, err
 		}
-		return mergeSuccess(record, snapshot, authority, "already_merged", meta), nil
+		return mergeSuccess(record, snapshot, expected, authority, "already_merged", meta), nil
 	}
 
-	// The second MR read is unconditional and immediately adjacent to the only
-	// possible mutation. GitLab's sha field remains the final provider guard.
+	input, cleanup, err := writePrivateJSON(mergeInput{
+		SHA: expected.Head, Squash: true, ShouldRemoveSourceBranch: false, AutoMerge: false,
+	})
+	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	defer cleanup()
+
+	// Prepare the private body first, then make the second MR read the final
+	// provider operation before the only possible mutation. The read binds both
+	// caller-expected branches; GitLab's sha field remains the provider head guard.
 	record, err = loadMergeMR(preflightCtx, client, target, iid, &meta, budget)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	if err := validateMergeMRIdentity(record, target, project.ID, iid, expectedURL, expectedHead); err != nil {
+	if err := validateMergeMRIdentity(record, target, project.ID, iid, expected); err != nil {
 		return commandOutput{meta: meta}, err
 	}
 	if record.State == "merged" {
-		if err := validateMergedPostcondition(record, target, project.ID, iid, expectedURL, expectedHead, &snapshot); err != nil {
+		if err := validateMergedPostcondition(record, target, project.ID, iid, expected, &snapshot); err != nil {
 			return commandOutput{meta: meta}, err
 		}
-		return mergeSuccess(record, snapshot, authority, "already_merged", meta), nil
+		return mergeSuccess(record, snapshot, expected, authority, "already_merged", meta), nil
 	}
-	if err := validateOpenMergeMR(record, expectedHead); err != nil {
+	if err := validateOpenMergeMR(record, expected.Head); err != nil {
 		return commandOutput{meta: meta}, err
 	}
 	if err := validateSnapshotPipeline(record.HeadPipeline, snapshot.Pipeline, target); err != nil {
@@ -219,14 +248,6 @@ func executeMRMerge(ctx context.Context, client delegateClient, target Target, p
 		}
 		return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeUpstream, "merge request merge timed out before mutation", ctxErr)
 	}
-
-	input, cleanup, err := writePrivateJSON(mergeInput{
-		SHA: expectedHead, Squash: true, ShouldRemoveSourceBranch: false, AutoMerge: false,
-	})
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	defer cleanup()
 
 	mutationCtx, cancelMutation := context.WithTimeout(ctx, limits.MergeMutationOperation)
 	response, writeErr := client.Do(mutationCtx, glab.Request{
@@ -243,14 +264,14 @@ func executeMRMerge(ctx context.Context, client delegateClient, target Target, p
 		var merged upstreamMR
 		if decodeErr := decodeStrict(response.Body, &merged); decodeErr != nil {
 			writeErr = decodeErr
-		} else if validateErr := validateMergedPostcondition(merged, target, project.ID, iid, expectedURL, expectedHead, &snapshot); validateErr != nil {
+		} else if validateErr := validateMergedPostcondition(merged, target, project.ID, iid, expected, &snapshot); validateErr != nil {
 			writeErr = validateErr
 		} else {
-			return mergeSuccess(merged, snapshot, authority, "merged", meta), nil
+			return mergeSuccess(merged, snapshot, expected, authority, "merged", meta), nil
 		}
 	}
 
-	return reconcileMRMerge(ctx, client, target, project.ID, iid, expectedURL, expectedHead, authority, snapshot, meta, budget, writeErr)
+	return reconcileMRMerge(ctx, client, target, project.ID, iid, expected, authority, snapshot, meta, budget, writeErr)
 }
 
 func loadMergeProject(ctx context.Context, client delegateClient, target Target, meta *uxv1.Meta, budget *mergeReadBudget) (mergeProject, error) {
@@ -295,14 +316,14 @@ func loadMergeMR(ctx context.Context, client delegateClient, target Target, iid 
 	return record, nil
 }
 
-func validateMergeMRIdentity(record upstreamMR, target Target, projectID, iid int64, expectedURL, expectedHead string) error {
+func validateMergeMRIdentity(record upstreamMR, target Target, projectID, iid int64, expected mergeExpectation) error {
 	if record.ID < 1 || record.IID != iid || record.SourceProjectID != projectID || record.TargetProjectID != projectID {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request identity")
 	}
-	if record.WebURL != expectedURL || record.WebURL != canonicalMRURL(target.Host, target.Repo, iid) {
+	if record.WebURL != expected.URL || record.WebURL != canonicalMRURL(target.Host, target.Repo, iid) {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request URL")
 	}
-	if record.SHA != expectedHead || !validMergeSHA(record.SHA) {
+	if record.SHA != expected.Head || !validMergeSHA(record.SHA) {
 		return uxv1.NewError(uxv1.CodeConflict, "merge request source head does not match --expected-head")
 	}
 	if err := safeurl.ValidateBranch(record.SourceBranch); err != nil {
@@ -313,6 +334,12 @@ func validateMergeMRIdentity(record upstreamMR, target Target, projectID, iid in
 	}
 	if record.SourceBranch == record.TargetBranch {
 		return uxv1.NewError(uxv1.CodeSafety, "merge request source and target branches must differ")
+	}
+	if record.SourceBranch != expected.SourceBranch {
+		return uxv1.NewError(uxv1.CodeConflict, "merge request source branch does not match --expected-source")
+	}
+	if record.TargetBranch != expected.TargetBranch {
+		return uxv1.NewError(uxv1.CodeConflict, "merge request target branch does not match --expected-target")
 	}
 	if record.State != "opened" && record.State != "merged" {
 		return uxv1.NewError(uxv1.CodeConflict, "merge request is neither open nor merged")
@@ -475,8 +502,8 @@ func validMergeText(value string, required bool) bool {
 	})
 }
 
-func validateMergedPostcondition(record upstreamMR, target Target, projectID, iid int64, expectedURL, expectedHead string, snapshot *mergeSnapshot) error {
-	if err := validateMergeMRIdentity(record, target, projectID, iid, expectedURL, expectedHead); err != nil {
+func validateMergedPostcondition(record upstreamMR, target Target, projectID, iid int64, expected mergeExpectation, snapshot *mergeSnapshot) error {
+	if err := validateMergeMRIdentity(record, target, projectID, iid, expected); err != nil {
 		return err
 	}
 	if record.State != "merged" || record.Draft || record.HasConflicts || !record.Squash || !record.BlockingDiscussionsResolved {
@@ -515,21 +542,21 @@ func validMergeActor(primary, legacy *upstreamUser) bool {
 	return primary == nil || legacy == nil || primary.Username == legacy.Username
 }
 
-func mergeSuccess(record upstreamMR, snapshot mergeSnapshot, authority, action string, meta uxv1.Meta) commandOutput {
+func mergeSuccess(record upstreamMR, snapshot mergeSnapshot, expected mergeExpectation, authority, action string, meta uxv1.Meta) commandOutput {
 	resultCommit := record.MergeCommitSHA
 	if resultCommit == "" {
 		resultCommit = record.SquashCommitSHA
 	}
 	return commandOutput{data: mergeOutput{Merge: mergeResult{
-		Action: action, IID: record.IID, WebURL: record.WebURL,
-		SourceBranch: record.SourceBranch, TargetBranch: record.TargetBranch,
-		SourceHeadSHA: record.SHA, MergeCommitSHA: record.MergeCommitSHA,
+		Action: action, IID: record.IID, WebURL: expected.URL,
+		SourceBranch: expected.SourceBranch, TargetBranch: expected.TargetBranch,
+		SourceHeadSHA: expected.Head, MergeCommitSHA: record.MergeCommitSHA,
 		SquashCommitSHA: record.SquashCommitSHA, ResultCommitSHA: resultCommit,
 		Pipeline: snapshot.Pipeline, Authority: authority,
 	}}, meta: meta}
 }
 
-func reconcileMRMerge(parent context.Context, client delegateClient, target Target, projectID, iid int64, expectedURL, expectedHead, authority string, snapshot mergeSnapshot, meta uxv1.Meta, budget *mergeReadBudget, writeErr error) (commandOutput, error) {
+func reconcileMRMerge(parent context.Context, client delegateClient, target Target, projectID, iid int64, expected mergeExpectation, authority string, snapshot mergeSnapshot, meta uxv1.Meta, budget *mergeReadBudget, writeErr error) (commandOutput, error) {
 	if parent.Err() != nil {
 		return commandOutput{meta: meta}, ambiguousMergeError(writeErr)
 	}
@@ -539,14 +566,14 @@ func reconcileMRMerge(parent context.Context, client delegateClient, target Targ
 	if readErr != nil {
 		return commandOutput{meta: meta}, ambiguousMergeError(errors.Join(writeErr, readErr))
 	}
-	if identityErr := validateMergeMRIdentity(record, target, projectID, iid, expectedURL, expectedHead); identityErr != nil {
+	if identityErr := validateMergeMRIdentity(record, target, projectID, iid, expected); identityErr != nil {
 		return commandOutput{meta: meta}, ambiguousMergeError(errors.Join(writeErr, identityErr))
 	}
 	if record.State == "merged" {
-		if postErr := validateMergedPostcondition(record, target, projectID, iid, expectedURL, expectedHead, &snapshot); postErr != nil {
+		if postErr := validateMergedPostcondition(record, target, projectID, iid, expected, &snapshot); postErr != nil {
 			return commandOutput{meta: meta}, ambiguousMergeError(errors.Join(writeErr, postErr))
 		}
-		return mergeSuccess(record, snapshot, authority, "reconciled_merged", meta), nil
+		return mergeSuccess(record, snapshot, expected, authority, "reconciled_merged", meta), nil
 	}
 	if record.State == "opened" {
 		if classified := uxv1.AsError(writeErr); classified != nil {

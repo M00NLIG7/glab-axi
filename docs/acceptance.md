@@ -41,10 +41,13 @@ GitLab project (not Rune).
    remains `ambiguous_update`.
 10. Under a separate explicit merge authorization, create a synthetic green MR
     in a project that enforces successful pipelines and resolved discussions.
-    Run guarded squash merge with exact URL/head/authority, then replay it.
-    Observe one PUT maximum and no source deletion/auto-merge. Repeat stale-head,
-    red/no CI, unresolved, conflict, malformed-response, and ambiguous transport
-    cases; every preflight denial has zero PUT and uncertainty never retries.
+    Run guarded squash merge with the exact URL, source branch, target branch,
+    head, and authority, then replay it. Observe one PUT maximum and no source
+    deletion or auto-merge. Repeat same-head source-branch change, target
+    retargeting, stale-head, red/no CI, unresolved, conflict,
+    malformed-response, and ambiguous transport cases; every preflight denial
+    has zero PUT and
+    uncertainty never retries or accepts branch drift.
 11. Run denied generic API, alternate merge (`--rebase`), approve/comment/close,
     pipeline retry, repo create, release create, and label delete while auditing
     child/network execution; each exits 2 with no child/request.

@@ -150,9 +150,10 @@ otherwise unverifiable results remain ambiguous.
 
 Product `mr merge` exists only for the pinned Firstmate consumer contract under
 `contracts/firstmate/`. Its parser requires an explicit host/repository,
-canonical MR URL, canonical positive IID, reviewed lowercase 40/64-hex head,
-authority enum, and `--squash` before target or delegate construction. Alternate
-strategies, auto-merge, rebase, source deletion, messages, aliases, and generic
+canonical MR URL, canonical positive IID, exact reviewed source and target
+branches, reviewed lowercase 40/64-hex head, authority enum, and `--squash`
+before target or delegate construction. Alternate strategies, auto-merge,
+rebase, source deletion, messages, aliases, and generic
 fields remain security denials. Nested namespaces and explicit host ports are
 supported; official profiles whose web base has an additional relative path are
 outside this first consumer contract and fail exact URL validation.
@@ -161,19 +162,22 @@ The state machine uses the official profile without reading its credential:
 
 1. validate exact project identity and require provider-side successful-pipeline
    and resolved-discussion policies;
-2. read the exact same-project MR with merge-status recheck and bind URL/IID/head;
+2. read the exact same-project MR with merge-status recheck and require the
+   caller-bound URL, IID, source branch, target branch, and head;
 3. reject draft, conflict, unresolved, auto-merge, explicit per-merge
    source-removal intent, unknown, or nonmergeable states;
 4. require the provider-designated head pipeline at the expected SHA to be
    `success`, then consume every bounded page of non-retried jobs and trigger
    bridges with fail-closed status/identity checks;
-5. always re-read the MR adjacent to mutation and require the same pipeline;
-6. write a mode-0600 body containing only `sha`, `squash:true`,
-   `should_remove_source_branch:false`, and `auto_merge:false`;
-7. execute one fixed merge PUT under a 15-second phase budget, never retry it;
-8. validate exact merged identity, attribution, squash commit, strategy and
-   pipeline; and
-9. after any unvalidated mutation outcome, perform at most one bounded MR GET.
+5. prepare a mode-0600 body containing only `sha`, `squash:true`,
+   `should_remove_source_branch:false`, and `auto_merge:false`, then re-read the
+   canonical MR as the final provider operation before mutation and require the
+   expected source branch, target branch, head, and pipeline;
+6. execute one fixed merge PUT under a 15-second phase budget, never retry it;
+7. validate exact merged identity, expected branches, attribution, squash
+   commit, strategy, and pipeline; and
+8. after any unvalidated mutation outcome, perform at most one bounded MR GET
+   that must retain the caller's expected branches before proving success.
 
 GitLab's `force_remove_source_branch` is a persisted/default preference, not
 immutable merge intent. It is accepted because the fixed body explicitly sends
@@ -190,9 +194,9 @@ preflight, 15 seconds for the mutation, and 10 seconds for reconciliation. No
 path issues a second PUT.
 
 `gl-axi` owns provider truth and one mutation. The pinned contract records
-that Firstmate owns task metadata, durable expected head, canonical URL, and
-captain/standing-yolo authority. This stage does not modify or integrate
-Firstmate. All other provider mutations remain denied.
+that Firstmate owns task metadata, durable expected source/target branches and
+head, canonical URL, and captain/standing-yolo authority. This stage does not
+modify or integrate Firstmate. All other provider mutations remain denied.
 
 ## Native authority and CI semantics
 

@@ -68,10 +68,12 @@ malformed values, or missing identity remain `ambiguous_update`. A verified crea
 recognized HTTP rejections; read failure, timeout, incomplete state, drift, or
 any other uncertain result remains ambiguous.
 
-Guarded merge requires explicit host/project/URL/IID/reviewed-head/authority and
-`--squash` at parse time. It additionally requires:
+Guarded merge requires explicit host/project/URL/IID, exact reviewed source and
+target branches, reviewed head, authority, and `--squash` at parse time. It
+additionally requires:
 
-- same-project identity and exact canonical returned URLs;
+- same-project identity, exact canonical returned URLs, and exact
+  caller-expected source and target branches;
 - provider-side successful-pipeline and resolved-discussion enforcement;
 - open, non-draft, conflict-free, currently mergeable state with no existing
   auto-merge or explicit per-merge source-removal intent; a persisted/default
@@ -79,15 +81,17 @@ Guarded merge requires explicit host/project/URL/IID/reviewed-head/authority and
   merge body explicitly overrides it;
 - one exact successful head pipeline and every bounded page of current jobs and
   trigger bridges, with unknown/incomplete state non-green;
-- an unconditional adjacent MR recheck;
+- an unconditional adjacent canonical MR recheck that refuses source or target
+  branch drift before the PUT;
 - one private four-key merge body with expected SHA, squash enabled, auto-merge
   disabled, and source removal disabled;
 - one PUT maximum under a 15-second phase timeout, never a mutation retry;
-- strict merged identity, strategy, attribution, pipeline, and commit-SHA
-  validation; and
-- at most one bounded MR GET after an unvalidated outcome. Exact landed state
-  reconciles; a still-open MR preserves only a recognized framed rejection;
-  otherwise `ambiguous_merge` prevents a blind retry.
+- strict merged identity, expected-branch receipt, strategy, attribution,
+  pipeline, and commit-SHA validation; and
+- at most one bounded MR GET after an unvalidated outcome. Only exact landed
+  state retaining both caller-expected branches reconciles; a still-open MR
+  preserves only a recognized framed rejection, and otherwise
+  `ambiguous_merge` prevents a blind retry.
 
 Generic API, alternate/unguarded merge, approval, comment/note,
 close/reopen/delete, repository mutation, release/label mutation,

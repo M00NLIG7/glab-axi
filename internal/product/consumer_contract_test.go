@@ -64,6 +64,8 @@ func TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar(t *testing.T) {
 		"{nested_project}":                       "group/subgroup/project",
 		"{host}":                                 "gitlab.example.invalid",
 		"{canonical_mr_url}":                     "https://gitlab.example.invalid/group/subgroup/project/-/merge_requests/42",
+		"{recorded_source_branch}":               mergeTestSource,
+		"{recorded_target_branch}":               mergeTestTarget,
 		"{recorded_head_sha}":                    mergeTestHead,
 		"{captain-explicit|standing-yolo-green}": "captain-explicit",
 	}
@@ -79,7 +81,7 @@ func TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar(t *testing.T) {
 		t.Fatalf("pinned invocation did not parse: argv=%v result=%#v error=%v", argv, result, err)
 	}
 	parsed := result.Command
-	if strings.Join(parsed.Definition.Path, " ") != "mr merge" || parsed.Positionals[0] != "42" || parsed.Values["--repo"] != "group/subgroup/project" || parsed.Values["--hostname"] != "gitlab.example.invalid" || parsed.Values["--expected-head"] != mergeTestHead || parsed.Values["--authority"] != "captain-explicit" || !parsed.Booleans["--squash"] || string(parsed.Format) != "json" {
+	if strings.Join(parsed.Definition.Path, " ") != "mr merge" || parsed.Positionals[0] != "42" || parsed.Values["--repo"] != "group/subgroup/project" || parsed.Values["--hostname"] != "gitlab.example.invalid" || parsed.Values["--expected-source"] != mergeTestSource || parsed.Values["--expected-target"] != mergeTestTarget || parsed.Values["--expected-head"] != mergeTestHead || parsed.Values["--authority"] != "captain-explicit" || !parsed.Booleans["--squash"] || string(parsed.Format) != "json" {
 		t.Fatalf("pinned invocation changed meaning: %#v", parsed)
 	}
 	for _, flag := range contract.PlannedInvocation.ForbiddenFlags {
@@ -88,7 +90,7 @@ func TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar(t *testing.T) {
 		}
 	}
 
-	wantInputs := []string{"iid", "nested_project", "host", "canonical_mr_url", "recorded_head_sha", "authority", "squash"}
+	wantInputs := []string{"iid", "nested_project", "host", "canonical_mr_url", "recorded_source_branch", "recorded_target_branch", "recorded_head_sha", "authority", "squash"}
 	wantActions := []string{"merged", "already_merged", "reconciled_merged"}
 	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || contract.SuccessContract.EnvelopeSchema != uxv1.Schema || contract.SuccessContract.DataSchema != "schema/ux-v1/mr-merge.schema.json" || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || contract.ExitContract["conflict_or_ambiguous_merge"] != 6 {
 		t.Fatalf("consumer contract fields changed: %#v", contract)
