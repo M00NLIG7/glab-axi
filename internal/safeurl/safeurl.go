@@ -132,7 +132,7 @@ func ValidateProject(project string) error {
 }
 
 func ValidateBranch(branch string) error {
-	if branch == "" || len(branch) > limits.MaxBranchBytes || !utf8.ValidString(branch) || strings.ContainsAny(branch, "\x00\r\n ~^:?*[\\") || strings.ContainsFunc(branch, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) || strings.Contains(branch, "..") || strings.Contains(branch, "@{") || strings.Contains(branch, "//") || strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") || strings.HasSuffix(branch, ".") {
+	if branch == "" || branch == "@" || len(branch) > limits.MaxBranchBytes || !utf8.ValidString(branch) || strings.ContainsAny(branch, "\x00\r\n ~^:?*[\\") || strings.ContainsFunc(branch, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) || strings.Contains(branch, "..") || strings.Contains(branch, "@{") || strings.Contains(branch, "//") || strings.HasPrefix(branch, "/") || strings.HasPrefix(branch, "-") || strings.HasSuffix(branch, "/") || strings.HasSuffix(branch, ".") {
 		return v1.NewError(v1.CodeValidation, "invalid Git branch")
 	}
 	for _, part := range strings.Split(branch, "/") {
