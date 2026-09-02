@@ -11,6 +11,7 @@ import (
 type Definition struct {
 	Path                []string
 	Summary             string
+	Details             string
 	Usage               string
 	Examples            []string
 	RepoMode            RepoMode
@@ -50,6 +51,7 @@ var definitions = []Definition{
 	{Path: []string{"mr", "list"}, Summary: "List project merge requests.", Usage: "gl-axi mr list [global flags]", RepoMode: RepoRequired, Schema: "mr-list", Backend: "official-glab"},
 	{Path: []string{"mr", "view"}, Summary: "View one merge request.", Usage: "gl-axi mr view <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-view", Backend: "official-glab"},
 	{Path: []string{"mr", "checks"}, Summary: "View the head pipeline and jobs for one merge request.", Usage: "gl-axi mr checks <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-checks", Backend: "official-glab"},
+	{Path: []string{"mr", "discussions"}, Summary: "View bounded, read-only discussion threads for one merge request.", Details: "The limit counts threads. Provider thread/note order is preserved.\nNo reply, resolve, or other mutation is exposed.", Usage: "gl-axi mr discussions <iid> [global flags]", Examples: []string{"gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --format json"}, RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-discussions", Backend: "official-glab"},
 	{Path: []string{"mr", "diff"}, Summary: "View a bounded, color-free merge-request diff.", Usage: "gl-axi mr diff <iid> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "mr-diff", Backend: "official-glab"},
 	{Path: []string{"mr", "merge"}, Summary: "Immediately squash-merge one exact green merge request.", Usage: "gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: mergeFlags(), Schema: "mr-merge", Backend: "official-glab", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true},
 	{Path: []string{"mr", "ensure"}, Summary: "Create or update exactly one matching open merge request.", Usage: "gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]", RepoMode: RepoRequired, Flags: ensureFlags(), Schema: "mr-ensure", Backend: "official-glab", Write: true},
@@ -159,7 +161,7 @@ func TopHelp() string {
 	out.WriteString("  -h, --help                    show contextual help\n")
 	out.WriteString("  -v, -V, --version             show version (the long form preserves the v1 handshake)\n")
 	out.WriteString("\nBackends:\n  bounded product operations and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
-	out.WriteString("\nSecurity boundary:\n  only MR ensure and guarded immediate squash merge may write; no generic API,\n  approve, comment, close/reopen/delete, repository/release/label mutation,\n  secrets/variables, pipeline mutation, or alternate merge strategy.\n")
+	out.WriteString("\nSecurity boundary:\n  only MR ensure and guarded immediate squash merge may write; no generic API,\n  approve, discussion/label mutation, close/reopen/delete,\n  repository/release mutation, secrets/variables, pipeline mutation,\n  or alternate merge strategy.\n")
 	return out.String()
 }
 
@@ -199,11 +201,17 @@ func CommandReferenceMarkdown() string {
 			out.WriteString("## `" + strings.Join(definition.Path, " ") + "`\n\n")
 		}
 		out.WriteString("```text\n" + definition.Usage + "\n```\n\n" + definition.Summary + "\n\n")
+		if definition.Details != "" {
+			out.WriteString(definition.Details + "\n\n")
+		}
 		if definition.Backend != "" {
 			out.WriteString("Backend: `" + definition.Backend + "`. Schema: `schema/ux-v1/" + definition.Schema + ".schema.json`.\n\n")
 		}
+		if len(definition.Examples) > 0 {
+			out.WriteString("Examples:\n\n```text\n" + strings.Join(definition.Examples, "\n") + "\n```\n\n")
+		}
 	}
-	out.WriteString("## Permanent denials\n\nGeneric API, unguarded or alternate-strategy merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.\n")
+	out.WriteString("## Permanent denials\n\nGeneric API, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve/label mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.\n")
 	return out.String()
 }
 
@@ -217,9 +225,9 @@ func SkillMarkdown() string {
 		if len(definition.Path) == 0 || strings.Join(definition.Path, " ") == "auth login" || strings.Join(definition.Path, " ") == "setup hooks" || strings.Join(definition.Path, " ") == "update" {
 			continue
 		}
-		out.WriteString("- `" + definition.Usage + "` — " + definition.Summary + "\n")
+		out.WriteString("- `" + definition.Usage + "` - " + definition.Summary + "\n")
 	}
-	out.WriteString("\n## Safety\n\n- Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.\n- Do not attempt generic API, alternate merge strategies, approve, comment, close/reopen/delete, repository/release/label writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
+	out.WriteString("\n## Safety\n\n- Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.\n- Use `-R namespace/project --hostname host` when context is ambiguous. Guarded merge requires both explicitly.\n- Do not attempt generic API, alternate merge strategies, approve, comment/note/reply/resolve/label mutation, close/reopen/delete, repository/release writes, secrets/variables, or pipeline mutations.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
 	return out.String()
 }
 
@@ -234,6 +242,9 @@ func leafHelp(definition Definition) string {
 	var out strings.Builder
 	out.WriteString("Usage:\n  " + definition.Usage + "\n\n")
 	out.WriteString(definition.Summary + "\n")
+	if definition.Details != "" {
+		out.WriteString(definition.Details + "\n")
+	}
 	if definition.Backend == "official-glab" {
 		out.WriteString("Backend: pinned official glab 1.112.0 (816e3a52); output is bounded and normalized.\n")
 	}

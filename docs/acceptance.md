@@ -26,9 +26,11 @@ GitLab project (not Rune).
    ambient synthetic token sentinel and prove login strips it before the child.
 6. Confirm no token appears in argv, shell history, chat, logs, config output,
    AXI output, or test evidence.
-7. Run auth status, dashboard, issue list/view, MR list/view/checks/diff,
-   pipeline list/view, job list/view/trace, release list/view, repo list/view,
-   label list, and bounded search against synthetic non-secret data.
+7. Run auth status, dashboard, issue list/view, MR
+   list/view/checks/diff/discussions, pipeline list/view, job list/view/trace,
+   release list/view, repo list/view, label list, and bounded search against
+   synthetic non-secret data. Discussion fixtures must include multi-note,
+   system, resolved, unresolved, and positioned threads.
 8. Repeat target selection inside the checkout and with
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before
@@ -47,12 +49,14 @@ GitLab project (not Rune).
     retargeting, stale-head, red/no CI, unresolved, conflict,
     malformed-response, and ambiguous transport cases; every preflight denial
     has zero PUT, and uncertainty never retries or accepts branch drift.
-11. Run denied generic API, alternate merge (`--rebase`), approve/comment/close,
-    pipeline retry, repo create, release create, and label delete while auditing
+11. Run denied generic API, alternate merge (`--rebase`), approval,
+    comment/reply/resolve/label mutations, close, pipeline retry, repo create,
+    release create, and label delete while auditing
     child/network execution; each exits 2 with no child/request.
 12. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
-    completeness metadata, bounded trace/diff, canonical setup idempotence,
-    compatibility-hook preservation, both signed update manifests, and update
+    completeness metadata, bounded discussions/trace/diff, canonical setup
+    idempotence, compatibility-hook preservation, both signed update manifests,
+    and update
     refusal/rollback cases.
 13. Exercise the supported subset on macOS, Linux, and Windows. Document
     official-login differences rather than hiding them.

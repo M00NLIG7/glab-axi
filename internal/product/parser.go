@@ -35,7 +35,9 @@ var deniedNested = map[string]map[string]string{
 		"token": "credential display", "show-token": "credential display",
 	},
 	"mr": {
-		"approve": "approval", "comment": "commenting", "note": "commenting",
+		"approve": "approval", "comment": "commenting", "note": "commenting", "reply": "commenting",
+		"resolve": "discussion resolution", "unresolve": "discussion resolution",
+		"label": "label mutation", "edit": "merge request editing", "update": "merge request editing",
 		"close": "closing", "reopen": "reopening", "delete": "deletion",
 	},
 	"issue": {
@@ -270,6 +272,12 @@ func deniedFlag(definition Definition, name string) string {
 			"--delete-branch", "--remove-source-branch", "--message", "-m", "--squash-message",
 			"--subject", "--body", "--body-file", "--admin", "--yes", "-y", "-s":
 			return "unguarded or alternate merge behavior"
+		}
+	}
+	if path == "mr discussions" {
+		switch name {
+		case "--reply", "--body", "--body-file", "--resolve", "--unresolve", "--label", "--add-label", "--remove-label":
+			return "discussion or merge request mutation"
 		}
 	}
 	return ""

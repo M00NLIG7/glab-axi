@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,7 @@ func TestPinnedRequestBuildersEmitOnlyDeclaredArgv(t *testing.T) {
 		{Request{Operation: OpMRView, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"mr", "view", "8", "--output", "json", "-R", "group/project"}},
 		{Request{Operation: OpMRDiff, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"mr", "diff", "8", "--color", "never", "-R", "group/project"}},
 		{Request{Operation: OpMRChecks, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"ci", "get", "--merge-request", "8", "--output", "json", "-R", "group/project"}},
+		{Request{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/subgroup/project", IID: 8, Page: 2, PerPage: 31}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/merge_requests/8/discussions?page=2&per_page=31"}},
 		{Request{Operation: OpPipelineList, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 30}, []string{"ci", "list", "--output", "json", "--page", "1", "--per-page", "30", "-R", "group/project"}},
 		{Request{Operation: OpPipelineView, Host: "gitlab.com", Repo: "group/project", ID: 42}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/pipelines/42"}},
 		{Request{Operation: OpJobList, Host: "gitlab.com", Repo: "group/project", PipelineID: 42, Page: 1, PerPage: 30}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/pipelines/42/jobs?page=1&per_page=30"}},
@@ -94,7 +96,7 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		}
 		declared[operation.Name] = true
 	}
-	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
+	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
 		if !declared[string(operation)] {
 			t.Fatalf("operation %q has no pinned fixture", operation)
 		}
@@ -136,12 +138,37 @@ func TestPinnedEvidenceFilesMatchCapabilityManifest(t *testing.T) {
 	}
 }
 
+func TestMRDiscussionsBuilderIsFixedAndReadOnly(t *testing.T) {
+	invocation, err := build(Request{
+		Operation: OpMRDiscussions,
+		Host:      "gitlab.example.invalid",
+		Repo:      "group/project",
+		IID:       42,
+		Page:      1,
+		PerPage:   31,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"api", "--method", "GET", "--hostname", "gitlab.example.invalid", "projects/group%2Fproject/merge_requests/42/discussions?page=1&per_page=31"}
+	if invocation.write || invocation.outputKind != outputJSON || !reflect.DeepEqual(invocation.args, want) {
+		t.Fatalf("discussion invocation=%#v", invocation)
+	}
+	for _, arg := range invocation.args {
+		if arg == "POST" || arg == "PUT" || arg == "PATCH" || arg == "DELETE" || strings.Contains(arg, "/notes/") {
+			t.Fatalf("discussion invocation exposed write capability: %#v", invocation.args)
+		}
+	}
+}
+
 func TestRequestBuilderRejectsInjectionBeforeExecution(t *testing.T) {
 	for _, request := range []Request{
 		{Operation: OpIssueView, Host: "gitlab.com", Repo: "-R", IID: 1},
 		{Operation: OpReleaseView, Host: "gitlab.com", Repo: "group/project", Tag: "v1\n--web"},
 		{Operation: OpReleaseView, Host: "gitlab.com", Repo: "group/project", Tag: "--web"},
 		{Operation: OpSearch, Host: "gitlab.com", Repo: "group/project", Scope: "issues", Query: "", Page: 1, PerPage: 30},
+		{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/project", IID: 0, Page: 1, PerPage: 30},
+		{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/project", IID: 1, Page: 11, PerPage: 30},
 		{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: "relative.json"},
 		{Operation: OpMergeMRView, Host: "gitlab.com", Repo: "group/project", IID: 0},
 		{Operation: OpMergeJobList, Host: "gitlab.com", Repo: "group/project", PipelineID: 7, Page: 11, PerPage: 100},
