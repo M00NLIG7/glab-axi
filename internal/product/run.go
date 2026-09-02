@@ -239,6 +239,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 		return executeMRView(ctx, client, target, parsed, meta)
 	case "mr checks":
 		return executeMRChecks(ctx, client, target, parsed, meta)
+	case "mr discussions":
+		return executeMRDiscussions(ctx, client, target, parsed, meta)
 	case "mr diff":
 		return executeMRDiff(ctx, client, target, parsed, meta)
 	case "mr merge":

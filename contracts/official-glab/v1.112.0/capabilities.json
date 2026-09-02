@@ -67,6 +67,11 @@
       "argv": ["ci", "get", "--merge-request", "{iid}", "--output", "json", "-R", "{repo}"]
     },
     {
+      "name": "mr-discussions",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/discussions?page={page}&per_page={per_page}"]
+    },
+    {
       "name": "pipeline-list",
       "kind": "read-json-page",
       "argv": ["ci", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
@@ -171,7 +176,8 @@
     "public api passthrough",
     "unguarded or alternate-strategy merge",
     "approve",
-    "comment or note",
+    "comment, note, reply, or discussion resolution mutation",
+    "merge request label or edit mutation",
     "close, reopen, or delete",
     "repository mutation",
     "release mutation",

@@ -39,7 +39,10 @@ native HTTP transport.
 - item/field/page/display caps with explicit completeness/truncation metadata;
 - unknown CI/merge states normalize pending-compatible, never green;
 - fixed internal API routes only where official v1.112.0 lacks safe JSON
-  commands; public `api` remains denied.
+  commands; the MR discussion route is GET-only and public `api` remains denied;
+- MR discussion notes must repeat the selected MR/project global identities,
+  preserve provider ordering, omit note/author URLs, and remain within thread,
+  nested-note, field, aggregate-body, page, and operation limits.
 
 Approved environment credentials pass directly to official glab for headless
 product operations but are never placed in AXI argv/output; login removes them
@@ -93,9 +96,10 @@ additionally requires:
   preserves only a recognized framed rejection, and otherwise
   `ambiguous_merge` prevents a blind retry.
 
-Generic API, alternate/unguarded merge, approval, comment/note,
-close/reopen/delete, repository mutation, release/label mutation,
-secrets/variables, and pipeline/job trigger/retry/cancel/delete remain denied
+Generic API, alternate/unguarded merge, approval,
+comment/note/reply/resolve/label mutation, close/reopen/delete,
+repository/release mutation, secrets/variables, and pipeline/job
+trigger/retry/cancel/delete remain denied
 before child execution.
 
 ## Native v1 controls
@@ -129,8 +133,9 @@ redirects are rejected before forwarding credentials.
 | project | 1,024 bytes / 32 segments |
 | branch | 1,024 bytes |
 | title | 1,024 bytes |
-| description | 128 KiB |
-| native JSON page | 2 MiB |
+| description / individual discussion body | 128 KiB |
+| all discussion bodies / nested notes | 2 MiB / 1,000 notes |
+| JSON page | 2 MiB |
 | operation/output | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |

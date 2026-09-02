@@ -29,6 +29,7 @@ const (
 	OpMRView          Operation = "mr-view"
 	OpMRDiff          Operation = "mr-diff"
 	OpMRChecks        Operation = "mr-checks"
+	OpMRDiscussions   Operation = "mr-discussions"
 	OpPipelineList    Operation = "pipeline-list"
 	OpPipelineView    Operation = "pipeline-view"
 	OpJobList         Operation = "job-list"
@@ -153,6 +154,15 @@ func build(request Request) (invocation, error) {
 		}
 		args := []string{"ci", "get", "--merge-request", strconv.FormatInt(request.IID, 10), "--output", "json"}
 		return invocation{args: append(args, repoArgs()...), host: request.Host, maxStdout: limits.MaxOperationBytes, outputKind: outputJSON}, nil
+	case OpMRDiscussions:
+		if request.IID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
+		}
+		if _, err := pageArgs(); err != nil {
+			return invocation{}, err
+		}
+		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?page=%d&per_page=%d", escapedRepo, request.IID, request.Page, request.PerPage)
+		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpPipelineView:
 		if request.ID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "pipeline ID must be a positive integer")

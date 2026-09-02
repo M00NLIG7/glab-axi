@@ -183,4 +183,4 @@ jobs:
       - name: Execute version, help, and TLS read/write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRMergeTLS)$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabMRMergeTLS)$' -count=1

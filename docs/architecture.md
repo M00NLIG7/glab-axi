@@ -73,8 +73,9 @@ argv function. Each operation has one fixed builder in
 9. maps child failures to controlled errors without rendering upstream stderr.
 
 Most reads use official commands with documented JSON output. Operations for
-which v1.112.0 has no safe dedicated JSON command—job detail/trace, bounded
-search, MR ensure, and guarded MR merge—use internal fixed `glab api` routes.
+which v1.112.0 has no safe dedicated JSON command, including job detail/trace,
+bounded search, MR discussions, MR ensure, and guarded MR merge, use internal
+fixed `glab api` routes.
 The public AXI has no `api` command, endpoint/method/header/body authority, or
 passthrough. Every fixed API argv is represented in the upstream capability
 fixture and exact-argv tests. Guarded merge callers cannot choose any route,
@@ -82,7 +83,12 @@ method, query, header, or body field.
 
 List adapters request a one-item probe beyond the display limit, use at most 100
 items/page and 10 pages, and never claim completeness when a display/provider
-hard limit is reached. Normalizers keep documented fields only, normalize
+hard limit is reached. MR discussions first bind the requested IID to its
+provider MR/project identity, then accept only notes that repeat those global
+identities. They preserve provider thread/note order, cap nested notes at 1,000,
+cap each body at the description bound and all emitted note bodies at 2 MiB,
+and omit provider fields such as author-profile and note URLs. Normalizers keep
+documented fields only, normalize
 unknown CI/merge states to pending-compatible values, validate HTTPS host and
 repository URL paths, cap individual fields, and set backend/completeness/
 truncation metadata. Raw official documents never cross the product envelope.
@@ -238,6 +244,7 @@ symlink/package-managed installs, and Windows self-replacement fail closed.
 - `glab-axi/ux-v1` has a separate envelope and one closed data schema per
   product command under `schema/ux-v1/`.
 - TOON and JSON use the same normalized fields and deterministic ordering.
-- Output is capped at 8 MiB; traces are a redacted 256 KiB tail; diffs are 1 MiB.
+- Output is capped at 8 MiB; discussion bodies share a 2 MiB budget, traces are
+  a redacted 256 KiB tail, and diffs are 1 MiB.
 - Errors never include causes, server HTML, headers, cookies, tokens, proxy URLs,
   official config paths, or raw child stderr.

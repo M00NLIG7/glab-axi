@@ -82,6 +82,25 @@ View the head pipeline and jobs for one merge request.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-checks.schema.json`.
 
+## `mr discussions`
+
+```text
+gl-axi mr discussions <iid> [global flags]
+```
+
+View bounded, read-only discussion threads for one merge request.
+
+The limit counts threads. Provider thread/note order is preserved.
+No reply, resolve, or other mutation is exposed.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/mr-discussions.schema.json`.
+
+Examples:
+
+```text
+gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --format json
+```
+
 ## `mr diff`
 
 ```text
@@ -294,4 +313,4 @@ Backend: `local`. Schema: `schema/ux-v1/update.schema.json`.
 
 ## Permanent denials
 
-Generic API, unguarded or alternate-strategy merge, approve, comments/notes, close/reopen/delete, repository mutation, release/label mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.
+Generic API, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve/label mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.

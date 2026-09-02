@@ -416,6 +416,9 @@ func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
 	requestMu.Unlock()
 	mrReads := 0
 	for _, request := range captured {
+		if !strings.HasPrefix(request, "GET ") {
+			t.Fatalf("official MR view made a non-GET request: %q", request)
+		}
 		if strings.HasPrefix(request, "GET /api/v4/projects/group%2Fproject/merge_requests/11?") {
 			mrReads++
 			if !strings.Contains(request, "include_diverged_commits_count=true") || !strings.Contains(request, "include_rebase_in_progress=true") || !strings.Contains(request, "render_html=true") || strings.Contains(request, syntheticToken) {
@@ -425,6 +428,83 @@ func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
 	}
 	if mrReads != 1 {
 		t.Fatalf("official exact MR reads=%d requests=%q", mrReads, captured)
+	}
+}
+
+// TestPinnedOfficialGlabMRDiscussionsTLS proves that the fixed discussion-page
+// operation reaches only the selected merge request through one GET. It uses a
+// synthetic runtime token and an isolated local TLS endpoint.
+func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
+	binary := officialGlabTestBinary()
+	if binary == "" {
+		t.Skip("official-glab package fixture not supplied")
+	}
+	binary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logicalHost := "gitlab.discussions-contract.example"
+	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
+	records := make(chan capturedOfficialGlabMutation, 4)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
+		records <- capturedOfficialGlabMutation{
+			method: r.Method, host: r.Host, requestURI: r.RequestURI,
+			contentType: r.Header.Get("Content-Type"), body: body, readErr: readErr,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"thread-1","individual_note":true,"notes":[]}]`))
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	server.StartTLS()
+	defer server.Close()
+	proxy := newTestTLSTunnelProxy(logicalHost+":443", server.Listener.Addr().String())
+	defer proxy.Close()
+
+	home := t.TempDir()
+	caBundle := filepath.Join(home, "fake-gitlab-ca.pem")
+	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	syntheticToken := strings.Join([]string{"synthetic", "discussion", "contract", "token"}, "-")
+	client := NewClient(ClientConfig{Path: binary, Env: []string{
+		"HOME=" + home,
+		"GLAB_CONFIG_DIR=" + filepath.Join(home, "config"),
+		"GITLAB_TOKEN=" + syntheticToken,
+		"HTTPS_PROXY=" + proxy.URL,
+		"NO_PROXY=",
+		"SSL_CERT_FILE=" + caBundle,
+		"PATH=/usr/bin:/bin",
+	}})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	response, err := client.Do(ctx, Request{
+		Operation: OpMRDiscussions, Host: logicalHost, Repo: "group/project",
+		IID: 42, Page: 2, PerPage: 31,
+	})
+	if err != nil || response.Write || response.UpstreamVersion != SupportedVersion {
+		t.Fatalf("response=%#v error=%v", response, err)
+	}
+	if got := string(response.Body); got != `[{"id":"thread-1","individual_note":true,"notes":[]}]` {
+		t.Fatalf("response body=%q", got)
+	}
+	select {
+	case captured := <-records:
+		wantURI := "/api/v4/projects/group%2Fproject/merge_requests/42/discussions?page=2&per_page=31"
+		if captured.readErr != nil || captured.method != http.MethodGet || captured.host != logicalHost || captured.requestURI != wantURI || len(captured.body) != 0 {
+			t.Fatalf("discussion request=%#v", captured)
+		}
+		if strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
+			t.Fatal("discussion request exposed its credential outside the authorization header")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("discussion GET did not reach the TLS fake server")
+	}
+	select {
+	case extra := <-records:
+		t.Fatalf("discussion operation made an extra request: %#v", extra)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

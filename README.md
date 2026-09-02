@@ -32,7 +32,7 @@ gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
 gl-axi issue list|view
-gl-axi mr list|view|checks|diff
+gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
@@ -56,6 +56,59 @@ TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
 
+`mr discussions` gives agents bounded, read-only access to the conversation on
+one merge request without a browser. `--limit` counts discussion threads;
+provider thread and note order is preserved. Each result includes the canonical
+MR identity, stable discussion and note IDs, authors, timestamps, bodies,
+resolution/system flags, resolver details, and supplied diff position metadata.
+It never invents note URLs and never exposes a reply or resolve operation.
+Pagination remains within 10 pages and 1,000 threads; nested output keeps at
+most 1,000 notes, 128 KiB per body, and 2 MiB across bodies. `meta` reports
+result-set completeness plus display, nested-record, or field truncation.
+
+```sh
+glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --format json
+```
+
+```json
+{
+  "schema": "glab-axi/ux-v1",
+  "ok": true,
+  "data": {
+    "discussions": [{
+      "id": "thread-id",
+      "individual_note": false,
+      "notes": [{
+        "id": 9001,
+        "author": {"id": 17, "username": "reviewer", "name": "Reviewer"},
+        "created_at": "2024-01-02T03:04:05Z",
+        "updated_at": "2024-01-02T03:04:06Z",
+        "body": "Please cover the empty case.",
+        "system": false,
+        "resolvable": true,
+        "resolved": false
+      }]
+    }],
+    "mr": {
+      "id": 7007,
+      "iid": 42,
+      "project_id": 99,
+      "web_url": "https://gitlab.com/group/project/-/merge_requests/42"
+    }
+  },
+  "meta": {
+    "backend": "official-glab",
+    "host": "gitlab.com",
+    "repo": "group/project",
+    "complete": true,
+    "truncated": false,
+    "count": 1,
+    "limit": 30,
+    "upstream_version": "1.112.0"
+  }
+}
+```
+
 Guarded merge requires an explicit host, nested project, canonical MR URL,
 exact reviewed source and target branches, reviewed lowercase head SHA,
 Firstmate authority class, and `--squash`. It requires provider-side
@@ -69,8 +122,8 @@ under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 
 The permanent denial boundary includes generic API, unguarded or alternate
-merge, approve, comments or notes, close/reopen/delete, repository writes,
-release/label writes, secrets/variables, and pipeline/job mutation.
+merge, approve, comment/note/reply/resolve/label mutation, close/reopen/delete,
+repository/release writes, secrets/variables, and pipeline/job mutation.
 
 ## `glab-axi` compatibility alias
 
