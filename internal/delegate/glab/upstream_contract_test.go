@@ -535,6 +535,144 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	}
 }
 
+// TestPinnedOfficialGlabIssueEditTLS proves that guarded issue-edit project,
+// issue, label, and mutation operations use only their fixed routes. The PUT
+// body stays in a private file, redirects remain one failed request, and no
+// synthetic credential reaches URI/body.
+func TestPinnedOfficialGlabIssueEditTLS(t *testing.T) {
+	binary := officialGlabTestBinary()
+	if binary == "" {
+		t.Skip("official-glab package fixture not supplied")
+	}
+	binary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logicalHost := "gitlab.issue-edit-contract.example"
+	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
+	records := make(chan capturedOfficialGlabMutation, 6)
+	const issueBefore = `{"id":1001,"iid":42,"project_id":101,"title":"old","description":"body","state":"opened","web_url":"https://gitlab.issue-edit-contract.example/group/project/-/issues/42","labels":["keep"],"updated_at":"2026-08-15T12:00:00Z"}`
+	const issueAfter = `{"id":1001,"iid":42,"project_id":101,"title":"new","description":"body","state":"opened","web_url":"https://gitlab.issue-edit-contract.example/group/project/-/issues/42","labels":["keep","triage"],"updated_at":"2026-08-15T12:00:01Z"}`
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		records <- capturedOfficialGlabMutation{
+			method: r.Method, host: r.Host, requestURI: r.RequestURI,
+			contentType: r.Header.Get("Content-Type"), body: body, readErr: readErr,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.RequestURI {
+		case "GET /api/v4/projects/group%2Fproject":
+			_, _ = w.Write([]byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.issue-edit-contract.example/group/project"}`))
+		case "GET /api/v4/projects/group%2Fproject/issues/42":
+			_, _ = w.Write([]byte(issueBefore))
+		case "GET /api/v4/projects/group%2Fproject/labels?include_ancestor_groups=true&page=2&per_page=100":
+			_, _ = w.Write([]byte(`[{"id":10,"name":"triage"}]`))
+		case "PUT /api/v4/projects/group%2Fproject/issues/42":
+			_, _ = w.Write([]byte(issueAfter))
+		case "PUT /api/v4/projects/group%2Fproject/issues/43":
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"issue-edit-provider-rejection-sentinel"}`))
+		case "PUT /api/v4/projects/group%2Fproject/issues/44":
+			w.Header().Set("Location", "https://"+logicalHost+"/api/v4/projects/group%2Fproject/issues/44/redirected")
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			_, _ = w.Write([]byte(`{"message":"issue-edit-redirect-sentinel"}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	server.StartTLS()
+	defer server.Close()
+	proxy := newTestTLSTunnelProxy(logicalHost+":443", server.Listener.Addr().String())
+	defer proxy.Close()
+
+	home := t.TempDir()
+	caBundle := filepath.Join(home, "fake-gitlab-ca.pem")
+	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"title": "new", "add_labels": "triage"}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(home, "issue-edit.json")
+	if err := os.WriteFile(input, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	syntheticToken := strings.Join([]string{"synthetic", "issue", "edit", "token"}, "-")
+	client := NewClient(ClientConfig{Path: binary, Env: []string{
+		"HOME=" + home,
+		"GLAB_CONFIG_DIR=" + filepath.Join(home, "config"),
+		"GITLAB_TOKEN=" + syntheticToken,
+		"HTTPS_PROXY=" + proxy.URL,
+		"NO_PROXY=",
+		"SSL_CERT_FILE=" + caBundle,
+		"PATH=/usr/bin:/bin",
+	}})
+	requests := []struct {
+		request    Request
+		wantURI    string
+		wantBody   string
+		write      bool
+		wantCode   uxv1.Code
+		wantStatus int
+	}{
+		{request: Request{Operation: OpIssueEditProject, Host: logicalHost, Repo: "group/project"}, wantURI: "/api/v4/projects/group%2Fproject", wantBody: `{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.issue-edit-contract.example/group/project"}`},
+		{request: Request{Operation: OpIssueEditView, Host: logicalHost, Repo: "group/project", IID: 42}, wantURI: "/api/v4/projects/group%2Fproject/issues/42", wantBody: issueBefore},
+		{request: Request{Operation: OpIssueEditLabelList, Host: logicalHost, Repo: "group/project", Page: 2, PerPage: 100}, wantURI: "/api/v4/projects/group%2Fproject/labels?include_ancestor_groups=true&page=2&per_page=100", wantBody: `[{"id":10,"name":"triage"}]`},
+		{request: Request{Operation: OpIssueEdit, Host: logicalHost, Repo: "group/project", IID: 42, InputFile: input}, wantURI: "/api/v4/projects/group%2Fproject/issues/42", wantBody: issueAfter, write: true},
+		{request: Request{Operation: OpIssueEdit, Host: logicalHost, Repo: "group/project", IID: 43, InputFile: input}, wantURI: "/api/v4/projects/group%2Fproject/issues/43", write: true, wantCode: uxv1.CodeValidation, wantStatus: http.StatusUnprocessableEntity},
+		{request: Request{Operation: OpIssueEdit, Host: logicalHost, Repo: "group/project", IID: 44, InputFile: input}, wantURI: "/api/v4/projects/group%2Fproject/issues/44", write: true, wantCode: uxv1.CodeUpstream},
+	}
+	for _, test := range requests {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		response, requestErr := client.Do(ctx, test.request)
+		cancel()
+		if test.wantCode == "" {
+			if requestErr != nil || response.Write != test.write || response.UpstreamVersion != SupportedVersion || string(response.Body) != test.wantBody {
+				t.Fatalf("operation=%s response=%#v error=%v", test.request.Operation, response, requestErr)
+			}
+		} else {
+			classified := uxv1.AsError(requestErr)
+			if classified.Code != test.wantCode || classified.StatusCode != test.wantStatus || response.UpstreamVersion != SupportedVersion || !response.Write || strings.Contains(classified.Error(), "issue-edit-provider-rejection-sentinel") || strings.Contains(classified.Error(), "issue-edit-redirect-sentinel") {
+				t.Fatalf("operation=%s rejection=%#v response=%#v raw=%v", test.request.Operation, classified, response, requestErr)
+			}
+		}
+		select {
+		case captured := <-records:
+			if captured.readErr != nil || captured.host != logicalHost || captured.requestURI != test.wantURI {
+				t.Fatalf("operation=%s request=%#v", test.request.Operation, captured)
+			}
+			wantMethod := http.MethodGet
+			if test.write {
+				wantMethod = http.MethodPut
+				mediaType, _, mediaErr := mime.ParseMediaType(captured.contentType)
+				if mediaErr != nil || mediaType != "application/json" {
+					t.Fatalf("issue-edit content type=%q error=%v", captured.contentType, mediaErr)
+				}
+				var got map[string]any
+				if err := json.Unmarshal(captured.body, &got); err != nil || !reflect.DeepEqual(got, payload) {
+					t.Fatalf("issue-edit payload=%q decoded=%v error=%v", captured.body, got, err)
+				}
+			} else if len(captured.body) != 0 {
+				t.Fatalf("read operation sent body: %q", captured.body)
+			}
+			if captured.method != wantMethod || strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
+				t.Fatalf("operation=%s unsafe request=%#v", test.request.Operation, captured)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("operation=%s did not reach TLS fake server", test.request.Operation)
+		}
+	}
+	select {
+	case extra := <-records:
+		t.Fatalf("issue-edit operation made an extra request: %#v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 // TestPinnedOfficialGlabMRMergeTLS proves that the exact fixed merge argv sends
 // one PUT with the four-key private payload for success and rejection paths.
 // It uses only a synthetic runtime token and an isolated local TLS endpoint.

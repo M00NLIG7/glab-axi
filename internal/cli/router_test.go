@@ -74,6 +74,22 @@ func TestCompatibilityAliasHelpKeepsItsExecutableName(t *testing.T) {
 	}
 }
 
+func TestCanonicalAndCompatibilityIssueEditHelpMatch(t *testing.T) {
+	for _, program := range []string{"gl-axi", "glab-axi"} {
+		var stdout bytes.Buffer
+		deps := product.Dependencies{Runtime: runtimepkg.Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}}}
+		if code := RunAs(context.Background(), []string{"issue", "edit", "--help"}, deps, program); code != 0 {
+			t.Fatalf("program=%s help exit=%d output=%s", program, code, stdout.String())
+		}
+		output := stdout.String()
+		for _, required := range []string{program + " issue edit <iid>", "--expected-url URL", "--expected-state STATE", "--expected-updated-at TIMESTAMP", "--add-label NAME", "--remove-label NAME", "--dry-run"} {
+			if !strings.Contains(output, required) {
+				t.Fatalf("program=%s issue-edit help missing %q: %s", program, required, output)
+			}
+		}
+	}
+}
+
 func TestCompatibilityAliasBrandsProductFailures(t *testing.T) {
 	for _, test := range []struct {
 		program string

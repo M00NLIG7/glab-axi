@@ -20,7 +20,7 @@
             "interactive_required", "dependency_missing", "dependency_unsupported",
             "authentication_error", "forbidden", "not_found", "conflict",
             "rate_limited", "upstream_error", "safety_violation", "canceled",
-            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge"
+            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_issue_edit", "ambiguous_merge"
           ]
         },
         "message": {"type": "string", "maxLength": 4096},

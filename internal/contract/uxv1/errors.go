@@ -26,6 +26,7 @@ const (
 	CodeInternal              Code = "internal_error"
 	CodeAmbiguousCreate       Code = "ambiguous_create"
 	CodeAmbiguousUpdate       Code = "ambiguous_update"
+	CodeAmbiguousIssueEdit    Code = "ambiguous_issue_edit"
 	CodeAmbiguousMerge        Code = "ambiguous_merge"
 )
 
@@ -140,7 +141,7 @@ func ExitCode(err error) int {
 		return 4
 	case CodeNotFound:
 		return 5
-	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge:
+	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousIssueEdit, CodeAmbiguousMerge:
 		return 6
 	case CodeRateLimited:
 		return 7

@@ -87,10 +87,14 @@ func (b *mergeReadBudget) add(body []byte) error {
 	return nil
 }
 
-// validateParsedCommand keeps every merge identity and authority denial ahead
+// validateParsedCommand keeps guarded-write identity and policy denials ahead
 // of target discovery, credential resolution, executable lookup, and child work.
 func validateParsedCommand(parsed Parsed) error {
-	if strings.Join(parsed.Definition.Path, " ") != "mr merge" {
+	path := strings.Join(parsed.Definition.Path, " ")
+	if path == "issue edit" {
+		return validateIssueEditParsed(parsed)
+	}
+	if path != "mr merge" {
 		return nil
 	}
 	if _, err := mergeIID(parsed); err != nil {

@@ -73,10 +73,11 @@ from `auth login`. Product data commands close stdin and disable prompts, pager,
 editor, browser, debug HTTP, CI auto-login, color, and update checks. Do not put
 credentials in argv, shell history, chat, fixtures, or logs.
 
-Guarded `mr merge` uses this same opaque official-glab profile/environment lane.
-It never asks official glab to print a token, never reads its config, and never
-falls back to the native v1 keyring. Its fixed four-key request body contains no
-credential and is passed through a private mode-0600 file.
+Guarded `issue edit` and `mr merge` use this same opaque official-glab
+profile/environment lane. Neither asks official glab to print a token, reads its
+config, or falls back to the native v1 keyring. Fixed request bodies contain no
+credential and pass through private mode-0600 files. Issue title and description
+also enter only through descriptor-validated private files.
 
 ### OAuth/device and private-host limitations
 

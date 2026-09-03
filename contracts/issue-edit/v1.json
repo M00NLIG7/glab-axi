@@ -1,0 +1,89 @@
+{
+  "schema": "glab-axi/issue-edit-consumer-contract/v1",
+  "surface": "exact-identity GitLab issue editing",
+  "provider": "gitlab",
+  "glab_axi": {
+    "required_envelope": "glab-axi/ux-v1",
+    "required_backend": "official-glab",
+    "required_upstream_version": "1.112.0"
+  },
+  "planned_invocation": {
+    "argv": [
+      "issue",
+      "edit",
+      "{iid}",
+      "--repo",
+      "{nested_project}",
+      "--hostname",
+      "{host}",
+      "--expected-url",
+      "{canonical_issue_url}",
+      "--expected-state",
+      "{opened|closed}",
+      "--expected-updated-at",
+      "{updated_at}",
+      "{field_flags}",
+      "--format",
+      "json"
+    ],
+    "field_flags": [
+      "--title-file {private_file}",
+      "--description-file {private_file}",
+      "--add-label {exact_name} (repeatable)",
+      "--remove-label {exact_name} (repeatable)"
+    ],
+    "preview_flag": "--dry-run",
+    "required_explicit_inputs": [
+      "iid",
+      "nested_project",
+      "host",
+      "canonical_issue_url",
+      "expected_state",
+      "expected_updated_at",
+      "at_least_one_field_change"
+    ],
+    "forbidden_fields": [
+      "state_event",
+      "assignee_ids",
+      "milestone_id",
+      "discussion_locked",
+      "confidential",
+      "issue_type",
+      "weight",
+      "epic_id",
+      "health_status"
+    ]
+  },
+  "success_contract": {
+    "envelope_schema": "glab-axi/ux-v1",
+    "data_schema": "schema/ux-v1/issue-edit.schema.json",
+    "actions": [
+      "updated",
+      "reconciled_updated",
+      "reconciled_not_applied",
+      "preview",
+      "unchanged"
+    ],
+    "outcomes": ["applied", "not_applied"],
+    "unprovable_error": "ambiguous_issue_edit"
+  },
+  "provider_contract": {
+    "project_reads": 1,
+    "issue_reads_before_mutation": 2,
+    "mutation_attempts_maximum": 1,
+    "issue_reads_after_attempt": 1,
+    "label_catalog": "complete bounded project and ancestor catalog, read twice when labels are requested",
+    "mutation_fields": ["title", "description", "add_labels", "remove_labels"]
+  },
+  "excluded": [
+    "generic API",
+    "issue creation",
+    "comments or notes",
+    "close or reopen",
+    "assignee or milestone mutation",
+    "work-item hierarchy or board mutation",
+    "approvals",
+    "secrets or variables",
+    "pipeline mutation"
+  ]
+}

@@ -25,6 +25,10 @@ type Operation string
 const (
 	OpIssueList                  Operation = "issue-list"
 	OpIssueView                  Operation = "issue-view"
+	OpIssueEditProject           Operation = "issue-edit-project"
+	OpIssueEditView              Operation = "issue-edit-view"
+	OpIssueEditLabelList         Operation = "issue-edit-label-list"
+	OpIssueEdit                  Operation = "issue-edit"
 	OpMRList                     Operation = "mr-list"
 	OpMRView                     Operation = "mr-view"
 	OpMRDiff                     Operation = "mr-diff"
@@ -144,6 +148,23 @@ func build(request Request) (invocation, error) {
 		}
 		args := []string{group, "view", strconv.FormatInt(id, 10), "--output", "json"}
 		return jsonObject(append(args, repoArgs()...)), nil
+	case OpIssueEditView:
+		if request.IID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "issue IID must be a positive integer")
+		}
+		endpoint := fmt.Sprintf("projects/%s/issues/%d", escapedRepo, request.IID)
+		return jsonObject(append(apiPrefix(), endpoint)), nil
+	case OpIssueEditLabelList:
+		if _, err := pageArgs(); err != nil {
+			return invocation{}, err
+		}
+		query := url.Values{
+			"include_ancestor_groups": {"true"},
+			"page":                    {strconv.Itoa(request.Page)},
+			"per_page":                {strconv.Itoa(request.PerPage)},
+		}.Encode()
+		endpoint := "projects/" + escapedRepo + "/labels?" + query
+		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpMRDiff:
 		if request.IID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
@@ -234,7 +255,7 @@ func build(request Request) (invocation, error) {
 			endpoint = "projects/" + escapedRepo + "/search?" + query
 		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureProject, OpMergeProject:
+	case OpEnsureProject, OpMergeProject, OpIssueEditProject:
 		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
 	case OpMergeMRView:
 		if request.IID < 1 {
@@ -268,7 +289,7 @@ func build(request Request) (invocation, error) {
 		query := url.Values{"state": {"opened"}, "source_branch": {request.Source}, "target_branch": {request.Target}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}.Encode()
 		endpoint := "projects/" + escapedRepo + "/merge_requests?" + query
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge:
+	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge, OpIssueEdit:
 		if err := validatePrivateInputPath(request.InputFile); err != nil {
 			return invocation{}, err
 		}
@@ -287,6 +308,12 @@ func build(request Request) (invocation, error) {
 			}
 			method = "PUT"
 			endpoint += "/" + strconv.FormatInt(request.IID, 10) + "/merge"
+		case OpIssueEdit:
+			if request.IID < 1 {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "issue IID must be a positive integer")
+			}
+			method = "PUT"
+			endpoint = "projects/" + escapedRepo + "/issues/" + strconv.FormatInt(request.IID, 10)
 		}
 		args := []string{"api", "--method", method, "--hostname", request.Host, endpoint, "--input", request.InputFile, "--header", "Content-Type: application/json"}
 		return invocation{args: args, host: request.Host, maxStdout: limits.MaxJSONPageBytes, write: true, outputKind: outputJSON}, nil

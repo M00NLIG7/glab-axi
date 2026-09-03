@@ -22,6 +22,21 @@ func TestAmbiguousMergeUsesConflictExitWithoutSerializingCause(t *testing.T) {
 	}
 }
 
+func TestAmbiguousIssueEditUsesConflictExitWithoutSerializingCause(t *testing.T) {
+	raw := "ambiguous-issue-edit-provider-sentinel"
+	err := Wrap(CodeAmbiguousIssueEdit, "issue edit outcome is unprovable", errors.New(raw))
+	if ExitCode(err) != 6 {
+		t.Fatalf("ambiguous issue-edit exit=%d", ExitCode(err))
+	}
+	encoded, marshalErr := json.Marshal(Failure(err, Meta{Complete: false}))
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"code":"ambiguous_issue_edit"`) {
+		t.Fatalf("ambiguous issue-edit envelope=%s", encoded)
+	}
+}
+
 func TestHTTPRejectionsAreBoundedAndKeepControlMetadataPrivate(t *testing.T) {
 	for _, test := range []struct {
 		status    int

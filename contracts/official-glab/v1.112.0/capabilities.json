@@ -41,6 +41,26 @@
       "argv": ["issue", "view", "{iid}", "--output", "json", "-R", "{repo}"]
     },
     {
+      "name": "issue-edit-project",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]
+    },
+    {
+      "name": "issue-edit-view",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/issues/{iid}"]
+    },
+    {
+      "name": "issue-edit-label-list",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/labels?include_ancestor_groups=true&page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "issue-edit",
+      "kind": "fixed-api-write-json-object-one-attempt",
+      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/issues/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
+    },
+    {
       "name": "mr-list",
       "kind": "read-json-page",
       "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
@@ -190,11 +210,12 @@
     "unguarded or alternate-strategy merge",
     "approve",
     "comment, note, reply, or discussion resolution mutation",
+    "unguarded issue editing or issue creation",
     "merge request label or edit mutation",
+    "label-resource mutation",
     "close, reopen, or delete",
     "repository mutation",
     "release mutation",
-    "label mutation",
     "pipeline trigger, retry, cancel, or delete",
     "secret or variable access"
   ]

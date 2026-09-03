@@ -37,13 +37,19 @@ GitLab project (not Rune).
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before
    official-glab execution.
-9. In the disposable project only, run MR ensure twice. The second invocation
+9. In the disposable project only, run guarded issue edit with exact URL, state,
+   and `updated_at`, first using `--dry-run` and then live. Exercise title-only,
+   description-only, label-only, combined, no-op, stale evidence, changed target,
+   unavailable/ambiguous labels, rejection, and uncertain response cases. Audit
+   two adjacent issue reads before at most one PUT and one exact read after it;
+   preview and every refusal must send zero PUT, and unrelated labels must remain.
+10. In the disposable project only, run MR ensure twice. The second invocation
    must replay/update the exact MR and never create a duplicate. Exercise an
    applied-but-ambiguous update whose exact official view carries the head in
    `diff_refs.head_sha`; it reconciles only when project, IID, branches, URL,
    head, title, and body match, while dual-head mismatch or malformed identity
    remains `ambiguous_update`.
-10. Under a separate explicit merge authorization, create a synthetic green MR
+11. Under a separate explicit merge authorization, create a synthetic green MR
     in a project that enforces successful pipelines and resolved discussions.
     Run guarded squash merge with the exact URL, source branch, target branch,
     head, and authority, then replay it. Observe one PUT maximum and no source
@@ -51,23 +57,24 @@ GitLab project (not Rune).
     retargeting, stale-head, red/no CI, unresolved, conflict,
     malformed-response, and ambiguous transport cases; every preflight denial
     has zero PUT, and uncertainty never retries or accepts branch drift.
-11. Run denied generic API, alternate merge (`--rebase`), approval,
-    comment/reply/resolve/label mutations, close, pipeline retry, repo create,
-    release create, and label delete while auditing
-    child/network execution; each exits 2 with no child/request.
-12. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
+12. Run denied generic API, unguarded issue update, alternate merge
+    (`--rebase`), approval, comment/reply/resolve, MR-label mutation, close,
+    pipeline retry, repo create, release create, and label-resource delete while
+    auditing child/network execution; each exits 2 with no child/request.
+13. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
     completeness metadata, bounded discussions/trace/diff, canonical setup
     idempotence, compatibility-hook preservation, both signed update manifests,
     and update
     refusal/rollback cases.
-13. Exercise the supported subset on macOS, Linux, and Windows. Document
+14. Exercise the supported subset on macOS, Linux, and Windows. Document
     official-login differences rather than hiding them.
-14. Revoke/remove disposable credentials through the official human cleanup
+15. Revoke/remove disposable credentials through the official human cleanup
     path.
 
 Pass: a new human reaches authenticated, repository-scoped useful reads,
-idempotent MR ensure, and guarded squash merge without manually discovering API
-bases on the default host, without an agent handling interactive credentials,
+guarded issue edit, idempotent MR ensure, and guarded squash merge without
+manually discovering API bases on the default host, without an agent handling
+interactive credentials,
 and without plaintext fallback.
 
 ## Safe read-only Rune MR/CI
