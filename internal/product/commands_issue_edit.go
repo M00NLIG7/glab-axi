@@ -298,9 +298,6 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 		return commandOutput{meta: meta}, err
 	}
 
-	// Prepare a live private body before the adjacent read so that the exact
-	// issue revalidation remains the final provider operation before the sole
-	// possible mutation. Preview and exact no-op paths never create a body.
 	inputFile := ""
 	cleanup := func() {}
 	if !parsed.Booleans["--dry-run"] && len(plan.changedFields) > 0 {
@@ -320,6 +317,24 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 	}
 	if !sameIssueEditSnapshot(before, adjacent) {
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "issue changed during edit validation")
+	}
+	if len(requested.AddLabels)+len(requested.RemoveLabels) > 0 {
+		catalog, err := loadIssueEditLabels(preflightCtx, client, target, &meta, budget)
+		if err != nil {
+			return commandOutput{meta: meta}, err
+		}
+		finalAdd, err := resolveIssueEditLabels(catalog, requested.AddLabels, "add")
+		if err != nil {
+			return commandOutput{meta: meta}, err
+		}
+		finalRemove, err := resolveIssueEditLabels(catalog, requested.RemoveLabels, "remove")
+		if err != nil {
+			return commandOutput{meta: meta}, err
+		}
+		if !sameIssueEditLabelIdentities(firstAdd, finalAdd) || !sameIssueEditLabelIdentities(firstRemove, finalRemove) ||
+			!sameIssueEditLabelIdentities(resolvedAdd, finalAdd) || !sameIssueEditLabelIdentities(resolvedRemove, finalRemove) {
+			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "requested label identity changed before issue edit")
+		}
 	}
 	if parsed.Booleans["--dry-run"] {
 		return issueEditSuccess("preview", "not_applied", true, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, adjacent, meta), nil

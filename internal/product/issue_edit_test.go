@@ -93,7 +93,7 @@ func TestIssueEditFieldCombinationsUseOnePrivateMutationAndExactReadBack(t *test
 			assertOneIssueEditAndReadBack(t, delegate)
 			wantLabelReads := 0
 			if len(test.add)+len(test.remove) > 0 {
-				wantLabelReads = 2
+				wantLabelReads = 3
 			}
 			if got := countOperation(delegate.requests, glab.OpIssueEditLabelList); got != wantLabelReads {
 				t.Fatalf("label reads=%d want=%d requests=%#v", got, wantLabelReads, delegate.requests)
@@ -133,7 +133,7 @@ func TestIssueEditNoOpAndPreviewPerformFullValidationWithoutMutation(t *testing.
 			t.Fatalf("exit=%d output=%s", code, stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
-		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 2 {
+		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 3 {
 			t.Fatalf("no-op skipped adjacent validation: %#v", delegate.requests)
 		}
 		var envelope struct {
@@ -155,7 +155,7 @@ func TestIssueEditNoOpAndPreviewPerformFullValidationWithoutMutation(t *testing.
 			t.Fatalf("exit=%d output=%s", code, stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
-		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 2 {
+		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 3 {
 			t.Fatalf("preview skipped validation: %#v", delegate.requests)
 		}
 		var envelope struct {
@@ -400,6 +400,7 @@ func TestIssueEditLabelResolutionConsumesEveryPageInBothSnapshots(t *testing.T) 
 	delegate.responses[glab.OpIssueEditLabelList] = []glab.Response{
 		issueEditResponse(pageOne), issueEditResponse(pageTwo),
 		issueEditResponse(pageOne), issueEditResponse(pageTwo),
+		issueEditResponse(pageOne), issueEditResponse(pageTwo),
 	}
 	stdout, _, deps := productTestDeps(t, delegate)
 	if code := Run(context.Background(), issueEditArgs(t, nil, nil, []string{"triage"}, nil, true, "json"), deps); code != 0 {
@@ -412,7 +413,7 @@ func TestIssueEditLabelResolutionConsumesEveryPageInBothSnapshots(t *testing.T) 
 			pages = append(pages, request.Page)
 		}
 	}
-	if !reflect.DeepEqual(pages, []int{1, 2, 1, 2}) || !strings.Contains(stdout.String(), `"id":200`) {
+	if !reflect.DeepEqual(pages, []int{1, 2, 1, 2, 1, 2}) || !strings.Contains(stdout.String(), `"id":200`) {
 		t.Fatalf("label pagination=%v output=%s", pages, stdout.String())
 	}
 }
@@ -453,6 +454,28 @@ func TestIssueEditLabelResolutionRefusalsNeverMutate(t *testing.T) {
 			t.Fatalf("changed label identity succeeded: %s", stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
+	})
+
+	t.Run("label identity changes after exact issue revalidation", func(t *testing.T) {
+		before := issueEditFixture()
+		after := before
+		after.Title = "new title"
+		after.Labels = []string{"bug", "keep", "triage"}
+		after.UpdatedAt = timePointer(issueEditNextTime)
+		delegate := issueEditDelegate(before, before, &after, issueEditCatalog())
+		delegate.responses[glab.OpIssueEditLabelList] = []glab.Response{
+			issueEditResponse(issueEditCatalog()),
+			issueEditResponse(issueEditCatalog()),
+			issueEditResponse([]issueEditLabel{{ID: 99, Name: "triage"}, {ID: 11, Name: "bug"}, {ID: 12, Name: "keep"}, {ID: 13, Name: "unused"}}),
+		}
+		stdout, _, deps := productTestDeps(t, delegate)
+		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, []string{"triage"}, nil, false, "json"), deps); code == 0 {
+			t.Fatalf("changed final label identity succeeded: %s", stdout.String())
+		}
+		assertIssueEditNoMutation(t, delegate)
+		if got := countOperation(delegate.requests, glab.OpIssueEditLabelList); got != 3 {
+			t.Fatalf("final label reads=%d requests=%#v", got, delegate.requests)
+		}
 	})
 }
 
@@ -764,7 +787,7 @@ func issueEditDelegate(first, second upstreamIssue, after *upstreamIssue, labels
 		glab.OpIssueEditView:    issueResponses,
 	}
 	if labels != nil {
-		responses[glab.OpIssueEditLabelList] = []glab.Response{issueEditResponse(labels), issueEditResponse(labels)}
+		responses[glab.OpIssueEditLabelList] = []glab.Response{issueEditResponse(labels), issueEditResponse(labels), issueEditResponse(labels)}
 	}
 	return &fakeDelegate{responses: responses}
 }
@@ -859,8 +882,15 @@ func assertOneIssueEditAndReadBack(t *testing.T, delegate *fakeDelegate) {
 			mutation = index
 		}
 	}
-	if mutation < 1 || mutation+1 >= len(delegate.requests) || delegate.requests[mutation-1].Operation != glab.OpIssueEditView || delegate.requests[mutation+1].Operation != glab.OpIssueEditView {
-		t.Fatalf("mutation did not have adjacent exact reads: %#v", delegate.requests)
+	if mutation < 1 || mutation+1 >= len(delegate.requests) || delegate.requests[mutation+1].Operation != glab.OpIssueEditView {
+		t.Fatalf("mutation did not have an exact read-back: %#v", delegate.requests)
+	}
+	prior := mutation - 1
+	for prior >= 0 && delegate.requests[prior].Operation == glab.OpIssueEditLabelList {
+		prior--
+	}
+	if prior < 0 || delegate.requests[prior].Operation != glab.OpIssueEditView {
+		t.Fatalf("mutation did not follow final issue and label validation: %#v", delegate.requests)
 	}
 }
 
