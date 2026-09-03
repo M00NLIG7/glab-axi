@@ -50,6 +50,7 @@
         "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
         "source_branch": {"type": "string", "maxLength": 1024},
         "target_branch": {"type": "string", "maxLength": 1024},
+        "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
         "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
         "has_conflicts": {"type": "boolean"},
         "merge_status": {"enum": ["can_be_merged", "cannot_be_merged", "checking"]},

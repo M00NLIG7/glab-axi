@@ -12,11 +12,11 @@ import (
 	"gl-axi/internal/contract/uxv1"
 )
 
-// normalizeMRViewResponse converts the pinned official client's source-head
-// representation into the REST-shaped field consumed by product normalizers.
-// Official glab can carry the exact source head in diff_refs.head_sha, while
-// fixed API reads and mutation responses carry it in sha. Both forms remain
-// accepted, but conflicting or malformed proofs fail closed.
+// normalizeMRViewResponse converts the pinned official client's diff_refs
+// representation into the REST-shaped fields consumed by product normalizers.
+// Official glab carries the authoritative source head and merge base in
+// diff_refs, while fixed API reads may also carry canonical top-level fields.
+// Both forms remain accepted, but conflicting or malformed proofs fail closed.
 func normalizeMRViewResponse(body []byte) ([]byte, error) {
 	object, err := decodeUniqueJSONObject(body)
 	if err != nil {
@@ -27,11 +27,18 @@ func normalizeMRViewResponse(body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	topBase, _, err := optionalJSONString(object, "base_sha")
+	if err != nil {
+		return nil, err
+	}
 	if topHead != "" && !validResponseSHA(topHead) {
 		return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid merge request head")
 	}
+	if topBase != "" && !validResponseSHA(topBase) {
+		return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid merge request base")
+	}
 
-	diffHead := ""
+	diffHead, diffBase := "", ""
 	if raw, exists := object["diff_refs"]; exists && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		diffRefs, decodeErr := decodeUniqueJSONObject(raw)
 		if decodeErr != nil {
@@ -41,16 +48,37 @@ func normalizeMRViewResponse(body []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		diffBase, _, err = optionalJSONString(diffRefs, "base_sha")
+		if err != nil {
+			return nil, err
+		}
+		diffStart, _, startErr := optionalJSONString(diffRefs, "start_sha")
+		if startErr != nil {
+			return nil, startErr
+		}
 		if diffHead != "" && !validResponseSHA(diffHead) {
 			return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid merge request diff head")
+		}
+		if diffBase != "" && !validResponseSHA(diffBase) {
+			return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid merge request diff base")
+		}
+		if diffStart != "" && !validResponseSHA(diffStart) {
+			return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid merge request diff start")
 		}
 	}
 	if topHead != "" && diffHead != "" && topHead != diffHead {
 		return nil, uxv1.NewError(uxv1.CodeSafety, "official glab returned conflicting merge request head identities")
 	}
+	if topBase != "" && diffBase != "" && topBase != diffBase {
+		return nil, uxv1.NewError(uxv1.CodeSafety, "official glab returned conflicting merge request base identities")
+	}
 	if topHead == "" && diffHead != "" {
 		encoded, _ := json.Marshal(diffHead)
 		object["sha"] = encoded
+	}
+	if topBase == "" && diffBase != "" {
+		encoded, _ := json.Marshal(diffBase)
+		object["base_sha"] = encoded
 	}
 
 	projectID, hasProjectID, err := optionalPositiveJSONInteger(object, "project_id")
@@ -59,6 +87,9 @@ func normalizeMRViewResponse(body []byte) ([]byte, error) {
 	}
 	targetProjectID, hasTargetProjectID, err := optionalPositiveJSONInteger(object, "target_project_id")
 	if err != nil {
+		return nil, err
+	}
+	if _, _, err := optionalPositiveJSONInteger(object, "source_project_id"); err != nil {
 		return nil, err
 	}
 	if hasProjectID && hasTargetProjectID && projectID != targetProjectID {

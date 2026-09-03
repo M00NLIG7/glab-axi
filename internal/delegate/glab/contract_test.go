@@ -24,6 +24,8 @@ func TestPinnedRequestBuildersEmitOnlyDeclaredArgv(t *testing.T) {
 		{Request{Operation: OpMRDiff, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"mr", "diff", "8", "--color", "never", "-R", "group/project"}},
 		{Request{Operation: OpMRChecks, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"ci", "get", "--merge-request", "8", "--output", "json", "-R", "group/project"}},
 		{Request{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/subgroup/project", IID: 8, Page: 2, PerPage: 31}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/merge_requests/8/discussions?page=2&per_page=31"}},
+		{Request{Operation: OpMRDiscussionsTargetProject, Host: "gitlab.com", Repo: "group/subgroup/project"}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject"}},
+		{Request{Operation: OpMRDiscussionsSourceProject, Host: "gitlab.com", ID: 1234}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/1234"}},
 		{Request{Operation: OpPipelineList, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 30}, []string{"ci", "list", "--output", "json", "--page", "1", "--per-page", "30", "-R", "group/project"}},
 		{Request{Operation: OpPipelineView, Host: "gitlab.com", Repo: "group/project", ID: 42}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/pipelines/42"}},
 		{Request{Operation: OpJobList, Host: "gitlab.com", Repo: "group/project", PipelineID: 42, Page: 1, PerPage: 30}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fproject/pipelines/42/jobs?page=1&per_page=30"}},
@@ -69,9 +71,12 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		Operations []struct {
 			Name                  string   `json:"name"`
 			Argv                  []string `json:"argv"`
+			InputPolicy           string   `json:"input_policy"`
 			ResponseNormalization struct {
 				CanonicalSourceHead    string `json:"canonical_source_head"`
 				OfficialClientHead     string `json:"official_client_source_head"`
+				CanonicalBase          string `json:"canonical_base"`
+				OfficialClientBase     string `json:"official_client_base"`
 				DualValuePolicy        string `json:"dual_value_policy"`
 				MissingMalformedPolicy string `json:"missing_or_malformed_policy"`
 			} `json:"response_normalization"`
@@ -90,13 +95,16 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		}
 		if operation.Name == string(OpMRView) {
 			normalization := operation.ResponseNormalization
-			if normalization.CanonicalSourceHead != "sha" || normalization.OfficialClientHead != "diff_refs.head_sha" || normalization.DualValuePolicy != "require-exact-match" || normalization.MissingMalformedPolicy != "refuse" {
+			if normalization.CanonicalSourceHead != "sha" || normalization.OfficialClientHead != "diff_refs.head_sha" || normalization.CanonicalBase != "base_sha" || normalization.OfficialClientBase != "diff_refs.base_sha" || normalization.DualValuePolicy != "require-exact-match" || normalization.MissingMalformedPolicy != "refuse" {
 				t.Fatalf("mr-view response normalization is not pinned: %#v", normalization)
 			}
 		}
+		if operation.Name == string(OpMRDiscussionsSourceProject) && operation.InputPolicy != "source_project_id must be a validated positive integer from the bound merge request" {
+			t.Fatalf("source-project evidence input policy is not pinned: %#v", operation)
+		}
 		declared[operation.Name] = true
 	}
-	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
+	for _, operation := range []Operation{OpIssueList, OpIssueView, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpMRDiscussionsTargetProject, OpMRDiscussionsSourceProject, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
 		if !declared[string(operation)] {
 			t.Fatalf("operation %q has no pinned fixture", operation)
 		}
@@ -139,24 +147,35 @@ func TestPinnedEvidenceFilesMatchCapabilityManifest(t *testing.T) {
 }
 
 func TestMRDiscussionsBuilderIsFixedAndReadOnly(t *testing.T) {
-	invocation, err := build(Request{
-		Operation: OpMRDiscussions,
-		Host:      "gitlab.example.invalid",
-		Repo:      "group/project",
-		IID:       42,
-		Page:      1,
-		PerPage:   31,
-	})
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		request Request
+		want    []string
+	}{
+		{
+			request: Request{Operation: OpMRDiscussions, Host: "gitlab.example.invalid", Repo: "group/project", IID: 42, Page: 1, PerPage: 31},
+			want:    []string{"api", "--method", "GET", "--hostname", "gitlab.example.invalid", "projects/group%2Fproject/merge_requests/42/discussions?page=1&per_page=31"},
+		},
+		{
+			request: Request{Operation: OpMRDiscussionsTargetProject, Host: "gitlab.example.invalid", Repo: "group/project"},
+			want:    []string{"api", "--method", "GET", "--hostname", "gitlab.example.invalid", "projects/group%2Fproject"},
+		},
+		{
+			request: Request{Operation: OpMRDiscussionsSourceProject, Host: "gitlab.example.invalid", ID: 1234},
+			want:    []string{"api", "--method", "GET", "--hostname", "gitlab.example.invalid", "projects/1234"},
+		},
 	}
-	want := []string{"api", "--method", "GET", "--hostname", "gitlab.example.invalid", "projects/group%2Fproject/merge_requests/42/discussions?page=1&per_page=31"}
-	if invocation.write || invocation.outputKind != outputJSON || !reflect.DeepEqual(invocation.args, want) {
-		t.Fatalf("discussion invocation=%#v", invocation)
-	}
-	for _, arg := range invocation.args {
-		if arg == "POST" || arg == "PUT" || arg == "PATCH" || arg == "DELETE" || strings.Contains(arg, "/notes/") {
-			t.Fatalf("discussion invocation exposed write capability: %#v", invocation.args)
+	for _, test := range tests {
+		invocation, err := build(test.request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if invocation.write || invocation.outputKind != outputJSON || !reflect.DeepEqual(invocation.args, test.want) {
+			t.Fatalf("discussion invocation=%#v", invocation)
+		}
+		for _, arg := range invocation.args {
+			if arg == "POST" || arg == "PUT" || arg == "PATCH" || arg == "DELETE" || strings.Contains(arg, "/notes/") {
+				t.Fatalf("discussion invocation exposed write capability: %#v", invocation.args)
+			}
 		}
 	}
 }
@@ -169,6 +188,8 @@ func TestRequestBuilderRejectsInjectionBeforeExecution(t *testing.T) {
 		{Operation: OpSearch, Host: "gitlab.com", Repo: "group/project", Scope: "issues", Query: "", Page: 1, PerPage: 30},
 		{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/project", IID: 0, Page: 1, PerPage: 30},
 		{Operation: OpMRDiscussions, Host: "gitlab.com", Repo: "group/project", IID: 1, Page: 11, PerPage: 30},
+		{Operation: OpMRDiscussionsTargetProject, Host: "gitlab.com", Repo: "1234"},
+		{Operation: OpMRDiscussionsSourceProject, Host: "gitlab.com", ID: 0},
 		{Operation: OpEnsureCreate, Host: "gitlab.com", Repo: "group/project", InputFile: "relative.json"},
 		{Operation: OpMergeMRView, Host: "gitlab.com", Repo: "group/project", IID: 0},
 		{Operation: OpMergeJobList, Host: "gitlab.com", Repo: "group/project", PipelineID: 7, Page: 11, PerPage: 100},

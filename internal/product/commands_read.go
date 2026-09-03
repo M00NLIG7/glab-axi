@@ -21,15 +21,22 @@ func fetchList[T any](ctx context.Context, client delegateClient, request glab.R
 		response, err := client.Do(ctx, request)
 		if err != nil {
 			state.count = min(len(items), limit)
+			state.truncated = len(items) > 0
+			state.reason = "pagination_failure"
 			return nil, state, err
 		}
 		state.upstreamVersion = response.UpstreamVersion
 		pageItems, pageTruncated, err := normalize(response.Body)
 		if err != nil {
 			state.count = min(len(items), limit)
+			state.truncated = len(items) > 0
+			state.reason = "provider_response"
 			return nil, state, err
 		}
 		if len(pageItems) > perPage {
+			state.count = min(len(items), limit)
+			state.truncated = len(items) > 0
+			state.reason = "provider_response"
 			return nil, state, uxv1.NewError(uxv1.CodeUpstream, "official glab returned more items than requested")
 		}
 		fieldTruncated = fieldTruncated || pageTruncated

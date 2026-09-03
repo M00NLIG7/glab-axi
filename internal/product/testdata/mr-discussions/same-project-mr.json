@@ -1,0 +1,13 @@
+{
+  "id": 7007,
+  "iid": 7,
+  "project_id": 99,
+  "source_project_id": 99,
+  "target_project_id": 99,
+  "source_branch": "feature",
+  "target_branch": "main",
+  "base_sha": "1123456789012345678901234567890123456789",
+  "sha": "3123456789012345678901234567890123456789",
+  "web_url": "https://gitlab.com/group/project/-/merge_requests/7",
+  "updated_at": "2024-02-03T04:05:06Z"
+}

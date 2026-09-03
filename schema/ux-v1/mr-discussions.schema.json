@@ -14,15 +14,33 @@
     }
   },
   "$defs": {
+    "project_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "full_path", "web_url"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "full_path": {"type": "string", "minLength": 3, "maxLength": 1024},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"}
+      }
+    },
     "mr_identity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "iid", "project_id", "web_url"],
+      "required": ["id", "iid", "project_id", "web_url", "same_project", "source_project", "target_project", "source_branch", "target_branch", "base_sha", "head_sha", "updated_at"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "iid": {"type": "integer", "minimum": 1},
         "project_id": {"type": "integer", "minimum": 1},
-        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"}
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "same_project": {"type": "boolean"},
+        "source_project": {"$ref": "#/$defs/project_identity"},
+        "target_project": {"$ref": "#/$defs/project_identity"},
+        "source_branch": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "target_branch": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+        "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+        "updated_at": {"type": "string", "format": "date-time"}
       }
     },
     "user": {
@@ -100,10 +118,16 @@
     "discussion": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "individual_note", "notes"],
+      "required": ["id", "target_project_id", "merge_request_id", "merge_request_iid", "individual_note", "resolvable", "resolved", "resolution_state", "notes"],
       "properties": {
         "id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "target_project_id": {"type": "integer", "minimum": 1},
+        "merge_request_id": {"type": "integer", "minimum": 1},
+        "merge_request_iid": {"type": "integer", "minimum": 1},
         "individual_note": {"type": "boolean"},
+        "resolvable": {"type": "boolean"},
+        "resolved": {"type": "boolean"},
+        "resolution_state": {"enum": ["not_resolvable", "unresolved", "resolved"]},
         "notes": {
           "type": "array",
           "minItems": 1,

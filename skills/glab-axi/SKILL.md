@@ -17,7 +17,7 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi mr list [global flags]` - List project merge requests.
 - `glab-axi mr view <iid> [global flags]` - View one merge request.
 - `glab-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.
-- `glab-axi mr discussions <iid> [global flags]` - View bounded, read-only discussion threads for one merge request.
+- `glab-axi mr discussions <iid> [global flags]` - View bounded, read-only discussion evidence for one merge request.
 - `glab-axi mr diff <iid> [global flags]` - View a bounded, color-free merge-request diff.
 - `glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` - Immediately squash-merge one exact green merge request.
 - `glab-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` - Create or update exactly one matching open merge request.
