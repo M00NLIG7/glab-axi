@@ -22,18 +22,19 @@ func TestAmbiguousMergeUsesConflictExitWithoutSerializingCause(t *testing.T) {
 	}
 }
 
-func TestAmbiguousIssueEditUsesConflictExitWithoutSerializingCause(t *testing.T) {
-	raw := "ambiguous-issue-edit-provider-sentinel"
-	err := Wrap(CodeAmbiguousIssueEdit, "issue edit outcome is unprovable", errors.New(raw))
-	if ExitCode(err) != 6 {
-		t.Fatalf("ambiguous issue-edit exit=%d", ExitCode(err))
-	}
+func TestSafetyRefusalSerializesOnlyExplicitReceipt(t *testing.T) {
+	raw := "provider-controlled-refusal-sentinel"
+	err := Wrap(CodeSafety, "mutation refused before provider write", errors.New(raw))
+	err.Receipt = struct {
+		Action  string `json:"action"`
+		Outcome string `json:"outcome"`
+	}{Action: "refused", Outcome: "not_applied"}
 	encoded, marshalErr := json.Marshal(Failure(err, Meta{Complete: false}))
 	if marshalErr != nil {
 		t.Fatal(marshalErr)
 	}
-	if strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"code":"ambiguous_issue_edit"`) {
-		t.Fatalf("ambiguous issue-edit envelope=%s", encoded)
+	if ExitCode(err) != 9 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"refused","outcome":"not_applied"}`) {
+		t.Fatalf("safety refusal envelope=%s exit=%d", encoded, ExitCode(err))
 	}
 }
 

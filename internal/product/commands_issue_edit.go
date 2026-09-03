@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	issueEditPageSize         = 100
-	issueEditInlineTextBytes  = 4 << 10
-	issueEditInlineLabels     = 100
-	issueEditInlineLabelBytes = 16 << 10
+	issueEditPageSize                    = 100
+	issueEditInlineTextBytes             = 4 << 10
+	issueEditInlineLabels                = 100
+	issueEditInlineLabelBytes            = 16 << 10
+	issueEditProviderPreconditionReason  = "provider_precondition_unavailable"
+	issueEditProviderPreconditionMessage = "GitLab issue edit refused before mutation: the provider cannot enforce the expected issue revision or requested numeric label identities; use --dry-run for a validated preview"
 )
 
 type issueEditProject struct {
@@ -38,13 +40,6 @@ type issueEditProject struct {
 type issueEditLabel struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
-}
-
-type issueEditInput struct {
-	Title        *string `json:"title,omitempty"`
-	Description  *string `json:"description,omitempty"`
-	AddLabels    string  `json:"add_labels,omitempty"`
-	RemoveLabels string  `json:"remove_labels,omitempty"`
 }
 
 type issueEditIdentity struct {
@@ -98,6 +93,7 @@ type issueEditResult struct {
 	Action             string            `json:"action"`
 	Outcome            string            `json:"outcome"`
 	DryRun             bool              `json:"dry_run"`
+	RefusalReason      string            `json:"refusal_reason,omitempty"`
 	Identity           issueEditIdentity `json:"identity"`
 	Expected           issueEditExpected `json:"expected"`
 	ChangedFields      []string          `json:"changed_fields"`
@@ -117,8 +113,6 @@ type issueEditRequested struct {
 }
 
 type issueEditPlan struct {
-	input         issueEditInput
-	desired       upstreamIssue
 	changedFields []string
 	changes       issueEditChanges
 }
@@ -258,23 +252,7 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 		return commandOutput{meta: meta}, err
 	}
 
-	var firstAdd, firstRemove []issueEditLabel
-	if len(requested.AddLabels)+len(requested.RemoveLabels) > 0 {
-		catalog, err := loadIssueEditLabels(preflightCtx, client, target, &meta, budget)
-		if err != nil {
-			return commandOutput{meta: meta}, err
-		}
-		firstAdd, err = resolveIssueEditLabels(catalog, requested.AddLabels, "add")
-		if err != nil {
-			return commandOutput{meta: meta}, err
-		}
-		firstRemove, err = resolveIssueEditLabels(catalog, requested.RemoveLabels, "remove")
-		if err != nil {
-			return commandOutput{meta: meta}, err
-		}
-	}
-
-	resolvedAdd, resolvedRemove := firstAdd, firstRemove
+	var resolvedAdd, resolvedRemove []issueEditLabel
 	if len(requested.AddLabels)+len(requested.RemoveLabels) > 0 {
 		catalog, err := loadIssueEditLabels(preflightCtx, client, target, &meta, budget)
 		if err != nil {
@@ -288,24 +266,11 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 		if err != nil {
 			return commandOutput{meta: meta}, err
 		}
-		if !sameIssueEditLabelIdentities(firstAdd, resolvedAdd) || !sameIssueEditLabelIdentities(firstRemove, resolvedRemove) {
-			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "requested label identity changed before issue edit")
-		}
 	}
 
 	plan, err := buildIssueEditPlan(before, requested, resolvedAdd, resolvedRemove)
 	if err != nil {
 		return commandOutput{meta: meta}, err
-	}
-
-	inputFile := ""
-	cleanup := func() {}
-	if !parsed.Booleans["--dry-run"] && len(plan.changedFields) > 0 {
-		inputFile, cleanup, err = writePrivateJSON(plan.input)
-		if err != nil {
-			return commandOutput{meta: meta}, err
-		}
-		defer cleanup()
 	}
 
 	adjacent, err := loadIssueEditIssue(preflightCtx, client, target, iid, &meta, budget)
@@ -331,88 +296,20 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 		if err != nil {
 			return commandOutput{meta: meta}, err
 		}
-		if !sameIssueEditLabelIdentities(firstAdd, finalAdd) || !sameIssueEditLabelIdentities(firstRemove, finalRemove) ||
-			!sameIssueEditLabelIdentities(resolvedAdd, finalAdd) || !sameIssueEditLabelIdentities(resolvedRemove, finalRemove) {
-			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "requested label identity changed before issue edit")
+		if !sameIssueEditLabelIdentities(resolvedAdd, finalAdd) || !sameIssueEditLabelIdentities(resolvedRemove, finalRemove) {
+			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "requested label identity changed during issue edit validation")
 		}
+	}
+	if preflightErr := preflightCtx.Err(); preflightErr != nil {
+		return commandOutput{meta: meta}, issueEditValidationContextError(preflightErr)
 	}
 	if parsed.Booleans["--dry-run"] {
-		return issueEditSuccess("preview", "not_applied", true, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, adjacent, meta), nil
+		return issueEditReceipt("preview", true, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta), nil
 	}
 	if len(plan.changedFields) == 0 {
-		return issueEditSuccess("unchanged", "not_applied", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, adjacent, meta), nil
+		return issueEditReceipt("unchanged", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta), nil
 	}
-
-	if preflightErr := preflightCtx.Err(); preflightErr != nil {
-		return commandOutput{meta: meta}, issueEditPreMutationContextError(preflightErr)
-	}
-	cancelPreflight()
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return commandOutput{meta: meta}, issueEditPreMutationContextError(ctxErr)
-	}
-
-	mutationCtx, cancelMutation := context.WithTimeout(ctx, limits.IssueEditMutation)
-	response, writeErr := client.Do(mutationCtx, glab.Request{
-		Operation: glab.OpIssueEdit, Host: target.Host, Repo: target.Repo, IID: iid, InputFile: inputFile,
-	})
-	cancelMutation()
-	cleanup()
-	if response.UpstreamVersion != "" {
-		meta.UpstreamVersion = response.UpstreamVersion
-	}
-	if len(response.Body) > 0 {
-		if budgetErr := budget.add(response.Body); budgetErr != nil {
-			writeErr = errors.Join(writeErr, budgetErr)
-		}
-	}
-
-	responseApplied := false
-	var responseRecord upstreamIssue
-	if writeErr == nil {
-		var decodeErr error
-		responseRecord, decodeErr = decodeIssueEditIssue(response.Body)
-		if decodeErr != nil {
-			writeErr = decodeErr
-		} else if validateErr := validateIssueEditPostcondition(responseRecord, target, project.ID, iid, adjacent.ID, expectedURL, expectedState, expectedAt, plan.desired); validateErr != nil {
-			writeErr = validateErr
-		} else {
-			responseApplied = true
-		}
-	}
-
-	// Once a mutation was attempted, caller cancellation must not suppress the
-	// single safety read-back. Drop cancellation and deadlines while retaining
-	// context values, then impose the dedicated bounded reconciliation timeout.
-	reconcileCtx, cancelReconcile := context.WithTimeout(context.WithoutCancel(ctx), limits.IssueEditReconcile)
-	defer cancelReconcile()
-	result, readErr := loadIssueEditIssue(reconcileCtx, client, target, iid, &meta, budget)
-	if readErr != nil {
-		return commandOutput{meta: meta}, ambiguousIssueEditError(errors.Join(writeErr, readErr))
-	}
-	if identityErr := validateIssueEditIdentity(result, target, project.ID, iid, adjacent.ID, expectedURL, expectedState); identityErr != nil {
-		return commandOutput{meta: meta}, ambiguousIssueEditError(errors.Join(writeErr, identityErr))
-	}
-
-	if issueEditMatchesDesired(result, plan.desired) && issueEditTimestampAfter(result, expectedAt) {
-		if responseApplied && !sameIssueEditSnapshot(responseRecord, result) {
-			return commandOutput{meta: meta}, ambiguousIssueEditError(errors.Join(writeErr, errors.New("issue changed after the mutation response")))
-		}
-		action := "reconciled_updated"
-		if responseApplied {
-			action = "updated"
-		}
-		return issueEditSuccess(action, "applied", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, result, meta), nil
-	}
-	if sameIssueEditSnapshot(adjacent, result) {
-		if responseApplied {
-			return commandOutput{meta: meta}, ambiguousIssueEditError(errors.Join(writeErr, errors.New("mutation response and exact read-back disagree")))
-		}
-		if rejection, ok := boundedIssueEditRejection(writeErr); ok {
-			return commandOutput{meta: meta}, rejection
-		}
-		return issueEditSuccess("reconciled_not_applied", "not_applied", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, result, meta), nil
-	}
-	return commandOutput{meta: meta}, ambiguousIssueEditError(writeErr)
+	return issueEditProviderPreconditionRefusal(target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta)
 }
 
 func loadIssueEditRequested(parsed Parsed) (issueEditRequested, error) {
@@ -589,7 +486,7 @@ func validateIssueEditExpected(record upstreamIssue, target Target, projectID, i
 }
 
 // expectedIssueID is zero only for the first read that establishes the global
-// issue identity. Every adjacent, mutation-response, and read-back check pins it.
+// issue identity. Every subsequent validation read pins it.
 func validateIssueEditIdentity(record upstreamIssue, target Target, projectID, iid, expectedIssueID int64, expectedURL, expectedState string) error {
 	if record.ID < 1 || (expectedIssueID > 0 && record.ID != expectedIssueID) || record.IID != iid || record.ProjectID != projectID {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue identity")
@@ -655,18 +552,14 @@ func canonicalIssueEditLabels(values []string) ([]string, error) {
 }
 
 func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add, remove []issueEditLabel) (issueEditPlan, error) {
-	plan := issueEditPlan{desired: record, changedFields: make([]string, 0, 3)}
+	plan := issueEditPlan{changedFields: make([]string, 0, 3)}
 	if requested.Title != nil && record.Title != *requested.Title {
 		value := *requested.Title
-		plan.input.Title = &value
-		plan.desired.Title = value
 		plan.changedFields = append(plan.changedFields, "title")
 		plan.changes.Title = &issueEditTextChange{Before: issueEditTextValue(record.Title), After: issueEditTextValue(value)}
 	}
 	if requested.Description != nil && record.Description != *requested.Description {
 		value := *requested.Description
-		plan.input.Description = &value
-		plan.desired.Description = value
 		plan.changedFields = append(plan.changedFields, "description")
 		plan.changes.Description = &issueEditTextChange{Before: issueEditTextValue(record.Description), After: issueEditTextValue(value)}
 	}
@@ -710,9 +603,6 @@ func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add,
 		if _, err := canonicalIssueEditLabels(afterLabels); err != nil {
 			return issueEditPlan{}, err
 		}
-		plan.desired.Labels = afterLabels
-		plan.input.AddLabels = joinIssueEditLabelNames(actualAdd)
-		plan.input.RemoveLabels = joinIssueEditLabelNames(actualRemove)
 		plan.changedFields = append(plan.changedFields, "labels")
 		plan.changes.Labels = &issueEditLabelChange{
 			Add: actualAdd, Remove: actualRemove,
@@ -729,37 +619,6 @@ func issueEditLabelPresence(labels []string, requested string) (present, exact b
 		}
 	}
 	return false, false
-}
-
-func joinIssueEditLabelNames(labels []issueEditLabel) string {
-	names := make([]string, len(labels))
-	for index, label := range labels {
-		names[index] = label.Name
-	}
-	return strings.Join(names, ",")
-}
-
-func validateIssueEditPostcondition(record upstreamIssue, target Target, projectID, iid, expectedIssueID int64, expectedURL, expectedState string, expectedAt time.Time, desired upstreamIssue) error {
-	if err := validateIssueEditIdentity(record, target, projectID, iid, expectedIssueID, expectedURL, expectedState); err != nil {
-		return err
-	}
-	if !issueEditMatchesDesired(record, desired) || !issueEditTimestampAfter(record, expectedAt) {
-		return uxv1.NewError(uxv1.CodeConflict, "issue edit response did not prove the requested state")
-	}
-	return nil
-}
-
-func issueEditTimestampAfter(record upstreamIssue, expected time.Time) bool {
-	return record.UpdatedAt != nil && record.UpdatedAt.After(expected)
-}
-
-func issueEditMatchesDesired(record, desired upstreamIssue) bool {
-	if record.Title != desired.Title || record.Description != desired.Description || record.State != desired.State {
-		return false
-	}
-	left, leftErr := canonicalIssueEditLabels(record.Labels)
-	right, rightErr := canonicalIssueEditLabels(desired.Labels)
-	return leftErr == nil && rightErr == nil && equalStrings(left, right)
 }
 
 func sameIssueEditSnapshot(left, right upstreamIssue) bool {
@@ -815,40 +674,41 @@ func issueEditLabelSetValue(values []string) issueEditLabelSetEvidence {
 	return evidence
 }
 
-func issueEditSuccess(action, outcome string, dryRun bool, target Target, project issueEditProject, before upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, result upstreamIssue, meta uxv1.Meta) commandOutput {
+func issueEditReceipt(action string, dryRun bool, target Target, project issueEditProject, issue upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, meta uxv1.Meta) commandOutput {
 	updatedAt := ""
-	if result.UpdatedAt != nil {
-		updatedAt = result.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	if issue.UpdatedAt != nil {
+		updatedAt = issue.UpdatedAt.UTC().Format(time.RFC3339Nano)
 	}
 	changedFields := make([]string, len(plan.changedFields))
 	copy(changedFields, plan.changedFields)
-	return commandOutput{data: issueEditOutput{Edit: issueEditResult{
-		Action: action, Outcome: outcome, DryRun: dryRun,
+	edit := issueEditResult{
+		Action: action, Outcome: "not_applied", DryRun: dryRun,
 		Identity: issueEditIdentity{
 			Host: target.Host, ProjectID: project.ID, ProjectFullPath: project.PathWithNamespace,
-			ProjectWebURL: project.WebURL, IssueID: before.ID, IID: before.IID, WebURL: before.WebURL,
+			ProjectWebURL: project.WebURL, IssueID: issue.ID, IID: issue.IID, WebURL: issue.WebURL,
 		},
-		Expected:      issueEditExpected{WebURL: expectedURL, State: expectedState, UpdatedAt: expectedAt.UTC().Format(time.RFC3339Nano)},
-		ChangedFields: changedFields, Changes: plan.changes,
+		Expected:           issueEditExpected{WebURL: expectedURL, State: expectedState, UpdatedAt: expectedAt.UTC().Format(time.RFC3339Nano)},
+		ChangedFields:      changedFields,
+		Changes:            plan.changes,
 		ResultingUpdatedAt: updatedAt,
-	}}, meta: meta}
-}
-
-func boundedIssueEditRejection(err error) (*uxv1.Error, bool) {
-	classified := uxv1.AsError(err)
-	if classified == nil || classified.StatusCode == 0 {
-		return nil, false
 	}
-	return uxv1.NewHTTPRejection(classified.StatusCode)
+	if action == "refused" {
+		edit.RefusalReason = issueEditProviderPreconditionReason
+	}
+	return commandOutput{data: issueEditOutput{Edit: edit}, meta: meta}
 }
 
-func issueEditPreMutationContextError(err error) error {
+func issueEditProviderPreconditionRefusal(target Target, project issueEditProject, before upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, meta uxv1.Meta) (commandOutput, error) {
+	result := issueEditReceipt("refused", false, target, project, before, expectedURL, expectedState, expectedAt, plan, meta)
+	result.meta.Reason = issueEditProviderPreconditionReason
+	refusal := uxv1.NewError(uxv1.CodeSafety, issueEditProviderPreconditionMessage)
+	refusal.Receipt = result.data
+	return result, refusal
+}
+
+func issueEditValidationContextError(err error) error {
 	if errors.Is(err, context.Canceled) {
-		return uxv1.Wrap(uxv1.CodeCanceled, "issue edit was canceled before mutation", err)
+		return uxv1.Wrap(uxv1.CodeCanceled, "issue edit validation was canceled", err)
 	}
-	return uxv1.Wrap(uxv1.CodeUpstream, "issue edit timed out before mutation", err)
-}
-
-func ambiguousIssueEditError(cause error) error {
-	return uxv1.Wrap(uxv1.CodeAmbiguousIssueEdit, "issue edit outcome is unprovable; inspect the exact issue before any retry", cause)
+	return uxv1.Wrap(uxv1.CodeUpstream, "issue edit validation timed out", err)
 }

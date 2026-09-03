@@ -54,8 +54,6 @@ func helpFor(code Code) []string {
 		return []string{"refresh and inspect the exact selected GitLab resource before retrying"}
 	case CodeAmbiguousCreate, CodeAmbiguousUpdate:
 		return []string{"inspect exact matching merge requests before retrying"}
-	case CodeAmbiguousIssueEdit:
-		return []string{"inspect the exact issue URL, state, and updated-at before any retry"}
 	case CodeAmbiguousMerge:
 		return []string{"inspect the exact merge request URL and expected head before any retry"}
 	case CodeRateLimited:

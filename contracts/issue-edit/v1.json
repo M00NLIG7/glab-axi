@@ -1,6 +1,6 @@
 {
   "schema": "glab-axi/issue-edit-consumer-contract/v1",
-  "surface": "exact-identity GitLab issue editing",
+  "surface": "exact-identity GitLab issue edit validation",
   "provider": "gitlab",
   "glab_axi": {
     "required_envelope": "glab-axi/ux-v1",
@@ -57,23 +57,24 @@
   "success_contract": {
     "envelope_schema": "glab-axi/ux-v1",
     "data_schema": "schema/ux-v1/issue-edit.schema.json",
-    "actions": [
-      "updated",
-      "reconciled_updated",
-      "reconciled_not_applied",
-      "preview",
-      "unchanged"
-    ],
-    "outcomes": ["applied", "not_applied"],
-    "unprovable_error": "ambiguous_issue_edit"
+    "actions": ["preview", "unchanged"],
+    "outcomes": ["not_applied"]
+  },
+  "refusal_contract": {
+    "error": "safety_violation",
+    "action": "refused",
+    "outcome": "not_applied",
+    "reason": "provider_precondition_unavailable",
+    "receipt_schema": "schema/ux-v1/issue-edit.schema.json"
   },
   "provider_contract": {
     "project_reads": 1,
-    "issue_reads_before_mutation": 2,
-    "mutation_attempts_maximum": 1,
-    "issue_reads_after_attempt": 1,
+    "issue_reads_per_validation": 2,
+    "mutation_attempts_maximum": 0,
+    "issue_reads_after_attempt": 0,
     "label_catalog": "complete bounded project and ancestor catalog, read twice when labels are requested",
-    "mutation_fields": ["title", "description", "add_labels", "remove_labels"]
+    "requested_fields": ["title", "description", "add_labels", "remove_labels"],
+    "provider_precondition": "GitLab accepts no expected issue revision and only label names, so every non-no-op live request is refused before mutation"
   },
   "excluded": [
     "generic API",

@@ -37,12 +37,15 @@ GitLab project (not Rune).
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before
    official-glab execution.
-9. In the disposable project only, run guarded issue edit with exact URL, state,
-   and `updated_at`, first using `--dry-run` and then live. Exercise title-only,
-   description-only, label-only, combined, no-op, stale evidence, changed target,
-   unavailable/ambiguous labels, rejection, and uncertain response cases. Audit
-   two adjacent issue reads before at most one PUT and one exact read after it;
-   preview and every refusal must send zero PUT, and unrelated labels must remain.
+9. Against read-only synthetic issue data, run issue-edit validation with exact
+   URL, state, and `updated_at`. Exercise `--dry-run` for title-only,
+   description-only, label-only, and combined proposals, plus no-op, stale
+   evidence, changed target, validation timeout/cancellation, and unavailable
+   or ambiguous labels. Then omit
+   `--dry-run` for each non-no-op shape and require `safety_violation` with a
+   bounded `refused`/`not_applied` receipt. Audit two exact issue reads, two
+   complete label catalogs when labels are requested, and zero PUTs or mutation
+   bodies on every path. Unrelated labels must remain in the preview.
 10. In the disposable project only, run MR ensure twice. The second invocation
    must replay/update the exact MR and never create a duplicate. Exercise an
    applied-but-ambiguous update whose exact official view carries the head in
@@ -72,10 +75,10 @@ GitLab project (not Rune).
     path.
 
 Pass: a new human reaches authenticated, repository-scoped useful reads,
-guarded issue edit, idempotent MR ensure, and guarded squash merge without
-manually discovering API bases on the default host, without an agent handling
-interactive credentials,
-and without plaintext fallback.
+exact issue-edit preview and fail-closed live refusal, idempotent MR ensure, and
+guarded squash merge without manually discovering API bases on the default
+host, without an agent handling interactive credentials, and without plaintext
+fallback.
 
 ## Safe read-only Rune MR/CI
 

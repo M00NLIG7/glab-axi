@@ -82,7 +82,7 @@ func TestCanonicalAndCompatibilityIssueEditHelpMatch(t *testing.T) {
 			t.Fatalf("program=%s help exit=%d output=%s", program, code, stdout.String())
 		}
 		output := stdout.String()
-		for _, required := range []string{program + " issue edit <iid>", "--expected-url URL", "--expected-state STATE", "--expected-updated-at TIMESTAMP", "--add-label NAME", "--remove-label NAME", "--dry-run"} {
+		for _, required := range []string{program + " issue edit <iid>", "--expected-url URL", "--expected-state STATE", "--expected-updated-at TIMESTAMP", "--add-label NAME", "--remove-label NAME", "--dry-run", "non-no-op live request returns a bounded safety refusal and sends no PUT"} {
 			if !strings.Contains(output, required) {
 				t.Fatalf("program=%s issue-edit help missing %q: %s", program, required, output)
 			}

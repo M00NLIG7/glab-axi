@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,13 +28,17 @@ var (
 	issueEditNextTime = time.Date(2026, 8, 15, 12, 0, 1, 0, time.UTC)
 )
 
-func TestIssueEditPhaseBudgetsReserveReadBack(t *testing.T) {
-	if got := limits.IssueEditPreflight + limits.IssueEditMutation + limits.IssueEditReconcile; got != limits.WriteOperation {
-		t.Fatalf("issue-edit phase budgets=%s, outer write budget=%s", got, limits.WriteOperation)
+func TestIssueEditValidationBudgetFitsReadOperation(t *testing.T) {
+	if limits.IssueEditPreflight <= 0 || limits.IssueEditPreflight > limits.ShortOperation {
+		t.Fatalf("issue-edit validation budget=%s, outer read budget=%s", limits.IssueEditPreflight, limits.ShortOperation)
+	}
+	definition, ok := lookupDefinition([]string{"issue", "edit"})
+	if !ok || definition.Write {
+		t.Fatalf("issue edit must remain a read-only validation surface: %#v", definition)
 	}
 }
 
-func TestIssueEditFieldCombinationsUseOnePrivateMutationAndExactReadBack(t *testing.T) {
+func TestIssueEditFieldCombinationsRefuseBeforeMutationWithDeterministicReceipt(t *testing.T) {
 	tests := []struct {
 		name        string
 		title       *string
@@ -43,77 +46,71 @@ func TestIssueEditFieldCombinationsUseOnePrivateMutationAndExactReadBack(t *test
 		add         []string
 		remove      []string
 		wantFields  []string
-		wantPayload map[string]any
-		mutate      func(*upstreamIssue)
 	}{
-		{
-			name: "title only", title: stringPointer("new title"), wantFields: []string{"title"},
-			wantPayload: map[string]any{"title": "new title"},
-			mutate:      func(issue *upstreamIssue) { issue.Title = "new title" },
-		},
-		{
-			name: "description only", description: stringPointer("new body"), wantFields: []string{"description"},
-			wantPayload: map[string]any{"description": "new body"},
-			mutate:      func(issue *upstreamIssue) { issue.Description = "new body" },
-		},
-		{
-			name: "description clear", description: stringPointer(""), wantFields: []string{"description"},
-			wantPayload: map[string]any{"description": ""},
-			mutate:      func(issue *upstreamIssue) { issue.Description = "" },
-		},
-		{
-			name: "labels only", add: []string{"triage"}, remove: []string{"bug"}, wantFields: []string{"labels"},
-			wantPayload: map[string]any{"add_labels": "triage", "remove_labels": "bug"},
-			mutate:      func(issue *upstreamIssue) { issue.Labels = []string{"keep", "triage"} },
-		},
-		{
-			name: "combined", title: stringPointer("combined title"), description: stringPointer("combined body"), add: []string{"triage"}, remove: []string{"bug"}, wantFields: []string{"title", "description", "labels"},
-			wantPayload: map[string]any{"title": "combined title", "description": "combined body", "add_labels": "triage", "remove_labels": "bug"},
-			mutate: func(issue *upstreamIssue) {
-				issue.Title = "combined title"
-				issue.Description = "combined body"
-				issue.Labels = []string{"triage", "keep"}
-			},
-		},
+		{name: "title only", title: stringPointer("new title"), wantFields: []string{"title"}},
+		{name: "description only", description: stringPointer("new body"), wantFields: []string{"description"}},
+		{name: "description clear", description: stringPointer(""), wantFields: []string{"description"}},
+		{name: "labels only", add: []string{"triage"}, remove: []string{"bug"}, wantFields: []string{"labels"}},
+		{name: "combined", title: stringPointer("combined title"), description: stringPointer("combined body"), add: []string{"triage"}, remove: []string{"bug"}, wantFields: []string{"title", "description", "labels"}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			before := issueEditFixture()
-			after := before
-			test.mutate(&after)
-			after.UpdatedAt = timePointer(issueEditNextTime)
-			delegate := issueEditDelegate(before, before, &after, issueEditCatalog())
-			delegate.responses[glab.OpIssueEdit] = []glab.Response{issueEditResponse(after)}
+			delegate := issueEditDelegate(before, before, issueEditCatalog())
 			stdout, stderr, deps := productTestDeps(t, delegate)
 			args := issueEditArgs(t, test.title, test.description, test.add, test.remove, false, "json")
-			if code := Run(context.Background(), args, deps); code != 0 || stderr.Len() != 0 {
+			if code := Run(context.Background(), args, deps); code != 9 || stderr.Len() != 0 {
 				t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 			}
-			assertOneIssueEditAndReadBack(t, delegate)
+			assertIssueEditNoMutation(t, delegate)
+			if got := countOperation(delegate.requests, glab.OpIssueEditView); got != 2 {
+				t.Fatalf("issue reads=%d requests=%#v", got, delegate.requests)
+			}
 			wantLabelReads := 0
 			if len(test.add)+len(test.remove) > 0 {
-				wantLabelReads = 3
+				wantLabelReads = 2
 			}
 			if got := countOperation(delegate.requests, glab.OpIssueEditLabelList); got != wantLabelReads {
 				t.Fatalf("label reads=%d want=%d requests=%#v", got, wantLabelReads, delegate.requests)
 			}
-			assertPrivateIssueEditPayload(t, delegate, test.wantPayload)
+			wantOperations := []glab.Operation{glab.OpIssueEditProject, glab.OpIssueEditView, glab.OpIssueEditView}
+			if wantLabelReads > 0 {
+				wantOperations = []glab.Operation{glab.OpIssueEditProject, glab.OpIssueEditView, glab.OpIssueEditLabelList, glab.OpIssueEditView, glab.OpIssueEditLabelList}
+			}
+			gotOperations := make([]glab.Operation, len(delegate.requests))
+			for index, request := range delegate.requests {
+				gotOperations[index] = request.Operation
+			}
+			if !reflect.DeepEqual(gotOperations, wantOperations) {
+				t.Fatalf("provider operation order=%v want=%v", gotOperations, wantOperations)
+			}
+			if len(delegate.inputBodies) != 0 {
+				t.Fatalf("refusal created a private mutation body: %q", delegate.inputBodies)
+			}
 
 			var envelope struct {
-				OK   bool            `json:"ok"`
-				Data issueEditOutput `json:"data"`
-				Meta uxv1.Meta       `json:"meta"`
+				OK    bool      `json:"ok"`
+				Meta  uxv1.Meta `json:"meta"`
+				Error struct {
+					Code      uxv1.Code       `json:"code"`
+					Message   string          `json:"message"`
+					Retryable bool            `json:"retryable"`
+					Receipt   issueEditOutput `json:"receipt"`
+				} `json:"error"`
 			}
 			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 				t.Fatal(err)
 			}
-			edit := envelope.Data.Edit
-			if !envelope.OK || edit.Action != "updated" || edit.Outcome != "applied" || edit.DryRun || fmt.Sprint(edit.ChangedFields) != fmt.Sprint(test.wantFields) || edit.Identity.ProjectID != 101 || edit.Identity.ProjectFullPath != "group/project" || edit.Identity.IssueID != 1001 || edit.Identity.IID != 42 || edit.Identity.WebURL != issueEditTestURL || edit.Expected.UpdatedAt != issueEditTestTimestamp || edit.ResultingUpdatedAt != issueEditNextTime.Format(time.RFC3339Nano) {
-				t.Fatalf("unexpected receipt: %#v", envelope)
+			if bytes.Contains(stdout.Bytes(), []byte(`"data":`)) {
+				t.Fatalf("refusal mixed success data into the strict failure envelope: %s", stdout.String())
 			}
-			if envelope.Meta.Backend != "official-glab" || envelope.Meta.Host != "gitlab.com" || envelope.Meta.Repo != "group/project" || !envelope.Meta.Complete || envelope.Meta.UpstreamVersion != glab.SupportedVersion {
-				t.Fatalf("unexpected metadata: %#v", envelope.Meta)
+			edit := envelope.Error.Receipt.Edit
+			if envelope.OK || envelope.Error.Code != uxv1.CodeSafety || envelope.Error.Message != issueEditProviderPreconditionMessage || envelope.Error.Retryable || edit.Action != "refused" || edit.Outcome != "not_applied" || edit.DryRun || edit.RefusalReason != issueEditProviderPreconditionReason || fmt.Sprint(edit.ChangedFields) != fmt.Sprint(test.wantFields) || edit.Identity.ProjectID != 101 || edit.Identity.ProjectFullPath != "group/project" || edit.Identity.IssueID != 1001 || edit.Identity.IID != 42 || edit.Identity.WebURL != issueEditTestURL || edit.Expected.UpdatedAt != issueEditTestTimestamp || edit.ResultingUpdatedAt != issueEditTestTimestamp {
+				t.Fatalf("unexpected refusal receipt: %#v", envelope)
+			}
+			if envelope.Meta.Backend != "official-glab" || envelope.Meta.Host != "gitlab.com" || envelope.Meta.Repo != "group/project" || envelope.Meta.Complete || envelope.Meta.Reason != issueEditProviderPreconditionReason || envelope.Meta.UpstreamVersion != glab.SupportedVersion {
+				t.Fatalf("unexpected refusal metadata: %#v", envelope.Meta)
 			}
 			if test.name == "labels only" || test.name == "combined" {
 				if edit.Changes.Labels == nil || edit.Changes.Labels.Before.Values == nil || edit.Changes.Labels.After.Values == nil || fmt.Sprint(*edit.Changes.Labels.Before.Values) != fmt.Sprint([]string{"bug", "keep"}) || fmt.Sprint(*edit.Changes.Labels.After.Values) != fmt.Sprint([]string{"keep", "triage"}) {
@@ -127,13 +124,13 @@ func TestIssueEditFieldCombinationsUseOnePrivateMutationAndExactReadBack(t *test
 func TestIssueEditNoOpAndPreviewPerformFullValidationWithoutMutation(t *testing.T) {
 	t.Run("no-op", func(t *testing.T) {
 		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, nil, issueEditCatalog())
+		delegate := issueEditDelegate(before, before, issueEditCatalog())
 		stdout, _, deps := productTestDeps(t, delegate)
 		if code := Run(context.Background(), issueEditArgs(t, stringPointer(before.Title), nil, []string{"bug"}, []string{"unused"}, false, "json"), deps); code != 0 {
 			t.Fatalf("exit=%d output=%s", code, stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
-		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 3 {
+		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 2 {
 			t.Fatalf("no-op skipped adjacent validation: %#v", delegate.requests)
 		}
 		var envelope struct {
@@ -149,13 +146,13 @@ func TestIssueEditNoOpAndPreviewPerformFullValidationWithoutMutation(t *testing.
 
 	t.Run("preview", func(t *testing.T) {
 		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, nil, issueEditCatalog())
+		delegate := issueEditDelegate(before, before, issueEditCatalog())
 		stdout, _, deps := productTestDeps(t, delegate)
 		if code := Run(context.Background(), issueEditArgs(t, stringPointer("preview title"), nil, []string{"triage"}, nil, true, "json"), deps); code != 0 {
 			t.Fatalf("exit=%d output=%s", code, stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
-		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 3 {
+		if countOperation(delegate.requests, glab.OpIssueEditView) != 2 || countOperation(delegate.requests, glab.OpIssueEditLabelList) != 2 {
 			t.Fatalf("preview skipped validation: %#v", delegate.requests)
 		}
 		var envelope struct {
@@ -190,25 +187,36 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 			PreviewFlag            string   `json:"preview_flag"`
 		} `json:"planned_invocation"`
 		SuccessContract struct {
-			DataSchema      string   `json:"data_schema"`
-			Actions         []string `json:"actions"`
-			Outcomes        []string `json:"outcomes"`
-			UnprovableError string   `json:"unprovable_error"`
+			DataSchema string   `json:"data_schema"`
+			Actions    []string `json:"actions"`
+			Outcomes   []string `json:"outcomes"`
 		} `json:"success_contract"`
+		RefusalContract struct {
+			Error         string `json:"error"`
+			Action        string `json:"action"`
+			Outcome       string `json:"outcome"`
+			Reason        string `json:"reason"`
+			ReceiptSchema string `json:"receipt_schema"`
+		} `json:"refusal_contract"`
 		ProviderContract struct {
-			MutationAttempts int `json:"mutation_attempts_maximum"`
-			PostReads        int `json:"issue_reads_after_attempt"`
+			IssueReads           int      `json:"issue_reads_per_validation"`
+			MutationAttempts     int      `json:"mutation_attempts_maximum"`
+			PostReads            int      `json:"issue_reads_after_attempt"`
+			LabelCatalog         string   `json:"label_catalog"`
+			RequestedFields      []string `json:"requested_fields"`
+			ProviderPrecondition string   `json:"provider_precondition"`
 		} `json:"provider_contract"`
 	}
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
-	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v1" || contract.Surface != "exact-identity GitLab issue editing" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "official-glab" || contract.GlabAXI.RequiredUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.SuccessContract.UnprovableError != string(uxv1.CodeAmbiguousIssueEdit) || contract.ProviderContract.MutationAttempts != 1 || contract.ProviderContract.PostReads != 1 {
+	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v1" || contract.Surface != "exact-identity GitLab issue edit validation" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "official-glab" || contract.GlabAXI.RequiredUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.RefusalContract.Error != string(uxv1.CodeSafety) || contract.RefusalContract.Action != "refused" || contract.RefusalContract.Outcome != "not_applied" || contract.RefusalContract.Reason != issueEditProviderPreconditionReason || contract.RefusalContract.ReceiptSchema != contract.SuccessContract.DataSchema || contract.ProviderContract.IssueReads != 2 || contract.ProviderContract.MutationAttempts != 0 || contract.ProviderContract.PostReads != 0 || contract.ProviderContract.LabelCatalog != "complete bounded project and ancestor catalog, read twice when labels are requested" || contract.ProviderContract.ProviderPrecondition == "" {
 		t.Fatalf("unexpected issue-edit contract: %#v", contract)
 	}
 	wantInputs := []string{"iid", "nested_project", "host", "canonical_issue_url", "expected_state", "expected_updated_at", "at_least_one_field_change"}
-	wantActions := []string{"updated", "reconciled_updated", "reconciled_not_applied", "preview", "unchanged"}
-	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || !reflect.DeepEqual(contract.SuccessContract.Outcomes, []string{"applied", "not_applied"}) || len(contract.PlannedInvocation.ForbiddenFields) != 9 {
+	wantActions := []string{"preview", "unchanged"}
+	wantFields := []string{"title", "description", "add_labels", "remove_labels"}
+	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || !reflect.DeepEqual(contract.SuccessContract.Outcomes, []string{"not_applied"}) || !reflect.DeepEqual(contract.ProviderContract.RequestedFields, wantFields) || len(contract.PlannedInvocation.ForbiddenFields) != 9 {
 		t.Fatalf("incomplete issue-edit contract: %#v", contract)
 	}
 	result, err := Parse([]string{
@@ -222,6 +230,68 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 	parsed := result.Command
 	if strings.Join(parsed.Definition.Path, " ") != "issue edit" || parsed.Positionals[0] != "42" || !parsed.Booleans["--dry-run"] || !reflect.DeepEqual(parsed.MultiValues["--add-label"], []string{"triage", "ready"}) {
 		t.Fatalf("contract invocation changed meaning: %#v", parsed)
+	}
+}
+
+func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "ux-v1", "issue-edit.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receiptSchema struct {
+		Properties struct {
+			Edit struct {
+				Properties struct {
+					Action struct {
+						Enum []string `json:"enum"`
+					} `json:"action"`
+					Outcome struct {
+						Const string `json:"const"`
+					} `json:"outcome"`
+					RefusalReason struct {
+						Const string `json:"const"`
+					} `json:"refusal_reason"`
+				} `json:"properties"`
+			} `json:"edit"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &receiptSchema); err != nil {
+		t.Fatal(err)
+	}
+	edit := receiptSchema.Properties.Edit.Properties
+	if !reflect.DeepEqual(edit.Action.Enum, []string{"preview", "unchanged", "refused"}) || edit.Outcome.Const != "not_applied" || edit.RefusalReason.Const != issueEditProviderPreconditionReason {
+		t.Fatalf("unexpected receipt schema: %#v", edit)
+	}
+
+	data, err = os.ReadFile(filepath.Join("..", "..", "schema", "glab-axi-ux-v1.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelopeSchema struct {
+		Properties struct {
+			Error struct {
+				Properties struct {
+					Receipt struct {
+						Ref        string `json:"$ref"`
+						Properties struct {
+							Edit struct {
+								Properties struct {
+									Action struct {
+										Const string `json:"const"`
+									} `json:"action"`
+								} `json:"properties"`
+							} `json:"edit"`
+						} `json:"properties"`
+					} `json:"receipt"`
+				} `json:"properties"`
+			} `json:"error"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &envelopeSchema); err != nil {
+		t.Fatal(err)
+	}
+	if envelopeSchema.Properties.Error.Properties.Receipt.Ref != "ux-v1/issue-edit.schema.json" || envelopeSchema.Properties.Error.Properties.Receipt.Properties.Edit.Properties.Action.Const != "refused" {
+		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }
 
@@ -341,7 +411,7 @@ func TestIssueEditRefusesWrongStaleOrChangingIdentityWithoutMutation(t *testing.
 			}(),
 		},
 		{
-			name:  "target changes between validation and mutation",
+			name:  "target changes between validation reads",
 			first: issueEditFixture(),
 			second: func() upstreamIssue {
 				issue := issueEditFixture()
@@ -350,7 +420,7 @@ func TestIssueEditRefusesWrongStaleOrChangingIdentityWithoutMutation(t *testing.
 			}(),
 		},
 		{
-			name:  "global issue identity changes between validation and mutation",
+			name:  "global issue identity changes between validation reads",
 			first: issueEditFixture(),
 			second: func() upstreamIssue {
 				issue := issueEditFixture()
@@ -369,7 +439,7 @@ func TestIssueEditRefusesWrongStaleOrChangingIdentityWithoutMutation(t *testing.
 			if second.ID == 0 {
 				second = first
 			}
-			delegate := issueEditDelegate(first, second, nil, nil)
+			delegate := issueEditDelegate(first, second, nil)
 			stdout, _, deps := productTestDeps(t, delegate)
 			if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code == 0 {
 				t.Fatalf("unsafe edit succeeded: %s", stdout.String())
@@ -379,7 +449,7 @@ func TestIssueEditRefusesWrongStaleOrChangingIdentityWithoutMutation(t *testing.
 	}
 
 	t.Run("wrong canonical project", func(t *testing.T) {
-		delegate := issueEditDelegate(issueEditFixture(), issueEditFixture(), nil, nil)
+		delegate := issueEditDelegate(issueEditFixture(), issueEditFixture(), nil)
 		delegate.responses[glab.OpIssueEditProject] = []glab.Response{issueEditResponse(issueEditProject{ID: 101, PathWithNamespace: "renamed/project", WebURL: "https://gitlab.com/renamed/project"})}
 		stdout, _, deps := productTestDeps(t, delegate)
 		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code == 0 {
@@ -396,9 +466,8 @@ func TestIssueEditLabelResolutionConsumesEveryPageInBothSnapshots(t *testing.T) 
 		pageOne[index] = issueEditLabel{ID: int64(index + 1), Name: fmt.Sprintf("other-%03d", index)}
 	}
 	pageTwo := []issueEditLabel{{ID: 200, Name: "triage"}}
-	delegate := issueEditDelegate(before, before, nil, nil)
+	delegate := issueEditDelegate(before, before, nil)
 	delegate.responses[glab.OpIssueEditLabelList] = []glab.Response{
-		issueEditResponse(pageOne), issueEditResponse(pageTwo),
 		issueEditResponse(pageOne), issueEditResponse(pageTwo),
 		issueEditResponse(pageOne), issueEditResponse(pageTwo),
 	}
@@ -413,7 +482,7 @@ func TestIssueEditLabelResolutionConsumesEveryPageInBothSnapshots(t *testing.T) 
 			pages = append(pages, request.Page)
 		}
 	}
-	if !reflect.DeepEqual(pages, []int{1, 2, 1, 2, 1, 2}) || !strings.Contains(stdout.String(), `"id":200`) {
+	if !reflect.DeepEqual(pages, []int{1, 2, 1, 2}) || !strings.Contains(stdout.String(), `"id":200`) {
 		t.Fatalf("label pagination=%v output=%s", pages, stdout.String())
 	}
 }
@@ -433,7 +502,7 @@ func TestIssueEditLabelResolutionRefusalsNeverMutate(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			before := issueEditFixture()
-			delegate := issueEditDelegate(before, before, nil, test.catalog)
+			delegate := issueEditDelegate(before, before, test.catalog)
 			stdout, _, deps := productTestDeps(t, delegate)
 			if code := Run(context.Background(), issueEditArgs(t, nil, nil, test.add, test.remove, false, "json"), deps); code == 0 {
 				t.Fatalf("unsafe label edit succeeded: %s", stdout.String())
@@ -442,29 +511,10 @@ func TestIssueEditLabelResolutionRefusalsNeverMutate(t *testing.T) {
 		})
 	}
 
-	t.Run("label identity changes before mutation", func(t *testing.T) {
-		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, nil, issueEditCatalog())
-		delegate.responses[glab.OpIssueEditLabelList] = []glab.Response{
-			issueEditResponse(issueEditCatalog()),
-			issueEditResponse([]issueEditLabel{{ID: 99, Name: "triage"}, {ID: 11, Name: "bug"}, {ID: 12, Name: "keep"}, {ID: 13, Name: "unused"}}),
-		}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, nil, nil, []string{"triage"}, nil, false, "json"), deps); code == 0 {
-			t.Fatalf("changed label identity succeeded: %s", stdout.String())
-		}
-		assertIssueEditNoMutation(t, delegate)
-	})
-
 	t.Run("label identity changes after exact issue revalidation", func(t *testing.T) {
 		before := issueEditFixture()
-		after := before
-		after.Title = "new title"
-		after.Labels = []string{"bug", "keep", "triage"}
-		after.UpdatedAt = timePointer(issueEditNextTime)
-		delegate := issueEditDelegate(before, before, &after, issueEditCatalog())
+		delegate := issueEditDelegate(before, before, issueEditCatalog())
 		delegate.responses[glab.OpIssueEditLabelList] = []glab.Response{
-			issueEditResponse(issueEditCatalog()),
 			issueEditResponse(issueEditCatalog()),
 			issueEditResponse([]issueEditLabel{{ID: 99, Name: "triage"}, {ID: 11, Name: "bug"}, {ID: 12, Name: "keep"}, {ID: 13, Name: "unused"}}),
 		}
@@ -473,7 +523,7 @@ func TestIssueEditLabelResolutionRefusalsNeverMutate(t *testing.T) {
 			t.Fatalf("changed final label identity succeeded: %s", stdout.String())
 		}
 		assertIssueEditNoMutation(t, delegate)
-		if got := countOperation(delegate.requests, glab.OpIssueEditLabelList); got != 3 {
+		if got := countOperation(delegate.requests, glab.OpIssueEditLabelList); got != 2 {
 			t.Fatalf("final label reads=%d requests=%#v", got, delegate.requests)
 		}
 	})
@@ -503,7 +553,7 @@ func TestIssueEditMalformedResponsesAndPrivateFilesRefuseBeforeMutation(t *testi
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			before := issueEditFixture()
-			delegate := issueEditDelegate(before, before, nil, issueEditCatalog())
+			delegate := issueEditDelegate(before, before, issueEditCatalog())
 			delegate.responses[test.operation] = []glab.Response{{Body: []byte(test.body), UpstreamVersion: glab.SupportedVersion}}
 			add := []string(nil)
 			if test.labels {
@@ -567,181 +617,55 @@ func TestIssueEditMalformedResponsesAndPrivateFilesRefuseBeforeMutation(t *testi
 	}
 }
 
-func TestIssueEditMutationReconciliationClassifiesEveryOutcome(t *testing.T) {
-	t.Run("ambiguous response applied read-back", func(t *testing.T) {
-		before := issueEditFixture()
-		after := before
-		after.Title = "new title"
-		after.UpdatedAt = timePointer(issueEditNextTime)
-		delegate := issueEditDelegate(before, before, &after, nil)
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {uxv1.NewError(uxv1.CodeUpstream, "provider-secret-applied")}}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 0 {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		if strings.Contains(stdout.String(), "provider-secret-applied") || !strings.Contains(stdout.String(), `"action":"reconciled_updated"`) || !strings.Contains(stdout.String(), `"outcome":"applied"`) {
-			t.Fatalf("reconciled output=%s", stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("malformed response applied read-back", func(t *testing.T) {
-		before := issueEditFixture()
-		after := before
-		after.Description = "new body"
-		after.UpdatedAt = timePointer(issueEditNextTime)
-		delegate := issueEditDelegate(before, before, &after, nil)
-		delegate.responses[glab.OpIssueEdit] = []glab.Response{{Body: []byte(`{"malformed":true}`), UpstreamVersion: glab.SupportedVersion}}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, nil, stringPointer("new body"), nil, nil, false, "json"), deps); code != 0 || !strings.Contains(stdout.String(), `"action":"reconciled_updated"`) {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("ambiguous response unapplied read-back", func(t *testing.T) {
-		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, &before, nil)
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {uxv1.NewError(uxv1.CodeUpstream, "provider-secret-unapplied")}}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 0 {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		if strings.Contains(stdout.String(), "provider-secret-unapplied") || !strings.Contains(stdout.String(), `"action":"reconciled_not_applied"`) || !strings.Contains(stdout.String(), `"outcome":"not_applied"`) {
-			t.Fatalf("unapplied output=%s", stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("provider rejection", func(t *testing.T) {
-		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, &before, nil)
-		rejection, ok := uxv1.NewHTTPRejection(403)
-		if !ok {
-			t.Fatal("missing rejection fixture")
-		}
-		rejection.Message = "provider-rejection-secret"
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {rejection}}
-		stdout, stderr, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 4 {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		if strings.Contains(stdout.String(), "provider-rejection-secret") || strings.Contains(stderr.String(), "provider-rejection-secret") || !strings.Contains(stdout.String(), `"code":"forbidden"`) {
-			t.Fatalf("unbounded rejection output stdout=%s stderr=%s", stdout.String(), stderr.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("unprovable post-write state", func(t *testing.T) {
-		before := issueEditFixture()
-		other := before
-		other.Title = "concurrent title"
-		other.UpdatedAt = timePointer(issueEditNextTime)
-		delegate := issueEditDelegate(before, before, &other, nil)
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {uxv1.NewError(uxv1.CodeUpstream, "provider-unprovable-secret")}}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 6 {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		if strings.Contains(stdout.String(), "provider-unprovable-secret") || !strings.Contains(stdout.String(), `"code":"ambiguous_issue_edit"`) {
-			t.Fatalf("unprovable output=%s", stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("post-write global issue identity drift is unprovable", func(t *testing.T) {
-		before := issueEditFixture()
-		after := before
-		after.ID = 1002
-		after.Title = "new title"
-		after.UpdatedAt = timePointer(issueEditNextTime)
-		delegate := issueEditDelegate(before, before, &after, nil)
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {uxv1.NewError(uxv1.CodeUpstream, "transport")}}
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 6 || !strings.Contains(stdout.String(), `"code":"ambiguous_issue_edit"`) {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-
-	t.Run("malformed read-back is unprovable", func(t *testing.T) {
-		before := issueEditFixture()
-		delegate := issueEditDelegate(before, before, nil, nil)
-		delegate.errors = map[glab.Operation][]error{glab.OpIssueEdit: {uxv1.NewError(uxv1.CodeUpstream, "transport")}}
-		delegate.responses[glab.OpIssueEditView] = append(delegate.responses[glab.OpIssueEditView], glab.Response{Body: []byte(`{"id":`), UpstreamVersion: glab.SupportedVersion})
-		stdout, _, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 6 || !strings.Contains(stdout.String(), `"code":"ambiguous_issue_edit"`) {
-			t.Fatalf("exit=%d output=%s", code, stdout.String())
-		}
-		assertOneIssueEditAndReadBack(t, delegate)
-	})
-}
-
-func TestIssueEditMutationTimeoutReconcilesWithoutRetry(t *testing.T) {
+func TestIssueEditCancellationAfterFinalValidationNeverMutates(t *testing.T) {
 	before := issueEditFixture()
-	delegate := issueEditDelegate(before, before, &before, nil)
-	delegate.doFunc = func(ctx context.Context, request glab.Request) (glab.Response, error, bool) {
-		if request.Operation != glab.OpIssueEdit {
-			return glab.Response{}, nil, false
-		}
-		deadline, bounded := ctx.Deadline()
-		remaining := time.Until(deadline)
-		if !bounded || remaining <= 0 || remaining > limits.IssueEditMutation {
-			t.Fatalf("mutation context bounded=%t remaining=%s", bounded, remaining)
-		}
-		return glab.Response{UpstreamVersion: glab.SupportedVersion, Write: true}, uxv1.Wrap(uxv1.CodeUpstream, "synthetic mutation timeout", context.DeadlineExceeded), true
-	}
-	stdout, _, deps := productTestDeps(t, delegate)
-	if code := Run(context.Background(), issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 0 {
-		t.Fatalf("exit=%d output=%s", code, stdout.String())
-	}
-	if countOperation(delegate.requests, glab.OpIssueEdit) != 1 || countOperation(delegate.requests, glab.OpIssueEditView) != 3 || !strings.Contains(stdout.String(), `"action":"reconciled_not_applied"`) || !strings.Contains(stdout.String(), `"outcome":"not_applied"`) {
-		t.Fatalf("timeout requests=%#v output=%s", delegate.requests, stdout.String())
-	}
-}
-
-func TestIssueEditCallerCancellationAfterAttemptDoesNotSuppressReadBack(t *testing.T) {
-	before := issueEditFixture()
-	delegate := issueEditDelegate(before, before, &before, nil)
+	delegate := issueEditDelegate(before, before, nil)
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	delegate.doFunc = func(ctx context.Context, request glab.Request) (glab.Response, error, bool) {
-		switch request.Operation {
-		case glab.OpIssueEdit:
+	delegate.doFunc = func(_ context.Context, request glab.Request) (glab.Response, error, bool) {
+		if request.Operation == glab.OpIssueEditView && countOperation(delegate.requests, glab.OpIssueEditView) == 2 {
 			cancel()
-			<-ctx.Done()
-			return glab.Response{UpstreamVersion: glab.SupportedVersion, Write: true}, uxv1.Wrap(uxv1.CodeUpstream, "synthetic mutation cancellation", ctx.Err()), true
-		case glab.OpIssueEditView:
-			if countOperation(delegate.requests, glab.OpIssueEditView) == 3 {
-				deadline, bounded := ctx.Deadline()
-				remaining := time.Until(deadline)
-				if ctx.Err() != nil || !bounded || remaining <= 0 || remaining > limits.IssueEditReconcile {
-					t.Fatalf("post-write read context error=%v bounded=%t remaining=%s", ctx.Err(), bounded, remaining)
-				}
-			}
+			return issueEditResponse(before), nil, true
 		}
 		return glab.Response{}, nil, false
 	}
 	stdout, _, deps := productTestDeps(t, delegate)
-	if code := Run(parent, issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 0 {
-		t.Fatalf("exit=%d output=%s", code, stdout.String())
+	if code := Run(parent, issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 130 || parent.Err() != context.Canceled || !strings.Contains(stdout.String(), `"code":"canceled"`) {
+		t.Fatalf("exit/output/cancellation mismatch: parent=%v output=%s", parent.Err(), stdout.String())
 	}
-	if !errors.Is(parent.Err(), context.Canceled) || countOperation(delegate.requests, glab.OpIssueEdit) != 1 || countOperation(delegate.requests, glab.OpIssueEditView) != 3 || !strings.Contains(stdout.String(), `"action":"reconciled_not_applied"`) {
-		t.Fatalf("canceled requests=%#v output=%s", delegate.requests, stdout.String())
+	assertIssueEditNoMutation(t, delegate)
+}
+
+func TestIssueEditValidationTimeoutNeverMutates(t *testing.T) {
+	before := issueEditFixture()
+	delegate := issueEditDelegate(before, before, nil)
+	parent, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	delegate.doFunc = func(ctx context.Context, request glab.Request) (glab.Response, error, bool) {
+		if request.Operation == glab.OpIssueEditView && countOperation(delegate.requests, glab.OpIssueEditView) == 2 {
+			<-ctx.Done()
+			return issueEditResponse(before), nil, true
+		}
+		return glab.Response{}, nil, false
 	}
+	stdout, _, deps := productTestDeps(t, delegate)
+	if code := Run(parent, issueEditArgs(t, stringPointer("new title"), nil, nil, nil, false, "json"), deps); code != 8 || parent.Err() != context.DeadlineExceeded || !strings.Contains(stdout.String(), `"code":"upstream_error"`) {
+		t.Fatalf("exit/output/timeout mismatch: parent=%v output=%s", parent.Err(), stdout.String())
+	}
+	assertIssueEditNoMutation(t, delegate)
 }
 
 func TestIssueEditTOONAndLargeEvidenceAreBounded(t *testing.T) {
 	t.Run("description", func(t *testing.T) {
 		before := issueEditFixture()
 		large := strings.Repeat("x", issueEditInlineTextBytes+1)
-		delegate := issueEditDelegate(before, before, nil, nil)
+		delegate := issueEditDelegate(before, before, nil)
 		stdout, stderr, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, nil, &large, nil, nil, true, "toon"), deps); code != 0 || stderr.Len() != 0 {
+		if code := Run(context.Background(), issueEditArgs(t, nil, &large, nil, nil, false, "toon"), deps); code != 9 || stderr.Len() != 0 {
 			t.Fatalf("exit=%d stderr=%s output=%s", code, stderr.String(), stdout.String())
 		}
 		output := stdout.String()
-		if !strings.Contains(output, `action: "preview"`) || !strings.Contains(output, "sha256:") || strings.Contains(output, large) || len(output) > 16<<10 {
+		if !strings.Contains(output, `action: "refused"`) || !strings.Contains(output, `outcome: "not_applied"`) || !strings.Contains(output, `refusal_reason: "provider_precondition_unavailable"`) || !strings.Contains(output, "sha256:") || strings.Contains(output, large) || len(output) > 16<<10 {
 			t.Fatalf("TOON evidence was not bounded: bytes=%d output=%s", len(output), output)
 		}
 		assertIssueEditNoMutation(t, delegate)
@@ -753,7 +677,7 @@ func TestIssueEditTOONAndLargeEvidenceAreBounded(t *testing.T) {
 		for index := range before.Labels {
 			before.Labels[index] = fmt.Sprintf("unrelated-label-%03d", index)
 		}
-		delegate := issueEditDelegate(before, before, nil, []issueEditLabel{{ID: 10, Name: "triage"}})
+		delegate := issueEditDelegate(before, before, []issueEditLabel{{ID: 10, Name: "triage"}})
 		stdout, stderr, deps := productTestDeps(t, delegate)
 		if code := Run(context.Background(), issueEditArgs(t, nil, nil, []string{"triage"}, nil, true, "json"), deps); code != 0 || stderr.Len() != 0 {
 			t.Fatalf("exit=%d stderr=%s output=%s", code, stderr.String(), stdout.String())
@@ -777,17 +701,14 @@ func issueEditCatalog() []issueEditLabel {
 	return []issueEditLabel{{ID: 10, Name: "triage"}, {ID: 11, Name: "bug"}, {ID: 12, Name: "keep"}, {ID: 13, Name: "unused"}}
 }
 
-func issueEditDelegate(first, second upstreamIssue, after *upstreamIssue, labels []issueEditLabel) *fakeDelegate {
+func issueEditDelegate(first, second upstreamIssue, labels []issueEditLabel) *fakeDelegate {
 	issueResponses := []glab.Response{issueEditResponse(first), issueEditResponse(second)}
-	if after != nil {
-		issueResponses = append(issueResponses, issueEditResponse(*after))
-	}
 	responses := map[glab.Operation][]glab.Response{
 		glab.OpIssueEditProject: {issueEditResponse(issueEditProject{ID: 101, PathWithNamespace: "group/project", WebURL: "https://gitlab.com/group/project"})},
 		glab.OpIssueEditView:    issueResponses,
 	}
 	if labels != nil {
-		responses[glab.OpIssueEditLabelList] = []glab.Response{issueEditResponse(labels), issueEditResponse(labels), issueEditResponse(labels)}
+		responses[glab.OpIssueEditLabelList] = []glab.Response{issueEditResponse(labels), issueEditResponse(labels)}
 	}
 	return &fakeDelegate{responses: responses}
 }
@@ -840,57 +761,20 @@ func issueEditArgs(t *testing.T, title, description *string, add, remove []strin
 	return args
 }
 
-func assertPrivateIssueEditPayload(t *testing.T, delegate *fakeDelegate, want map[string]any) {
-	t.Helper()
-	if delegate.inputErr != nil || len(delegate.inputBodies) != 1 || len(delegate.inputModes) != 1 {
-		t.Fatalf("private inputs bodies=%d modes=%d err=%v", len(delegate.inputBodies), len(delegate.inputModes), delegate.inputErr)
-	}
-	if delegate.inputModes[0].Perm() != 0o600 {
-		t.Fatalf("private input mode=%v", delegate.inputModes[0].Perm())
-	}
-	var got map[string]any
-	if err := json.Unmarshal(delegate.inputBodies[0], &got); err != nil {
-		t.Fatal(err)
-	}
-	if fmt.Sprint(got) != fmt.Sprint(want) || len(got) != len(want) {
-		t.Fatalf("payload=%v want=%v", got, want)
-	}
-	for _, request := range delegate.requests {
-		if request.Operation == glab.OpIssueEdit {
-			if _, err := os.Stat(request.InputFile); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("private issue-edit input still exists: %v", err)
-			}
-		}
-	}
-}
-
 func assertIssueEditNoMutation(t *testing.T, delegate *fakeDelegate) {
 	t.Helper()
-	if got := countOperation(delegate.requests, glab.OpIssueEdit); got != 0 {
-		t.Fatalf("issue mutations=%d requests=%#v", got, delegate.requests)
+	if len(delegate.inputBodies) != 0 || len(delegate.inputModes) != 0 || delegate.inputErr != nil {
+		t.Fatalf("issue edit constructed private mutation input: bodies=%d modes=%d err=%v", len(delegate.inputBodies), len(delegate.inputModes), delegate.inputErr)
 	}
-}
-
-func assertOneIssueEditAndReadBack(t *testing.T, delegate *fakeDelegate) {
-	t.Helper()
-	if countOperation(delegate.requests, glab.OpIssueEdit) != 1 || countOperation(delegate.requests, glab.OpIssueEditView) != 3 {
-		t.Fatalf("mutation/read-back counts changed: %#v", delegate.requests)
-	}
-	mutation := -1
-	for index, request := range delegate.requests {
-		if request.Operation == glab.OpIssueEdit {
-			mutation = index
+	for _, request := range delegate.requests {
+		if request.InputFile != "" {
+			t.Fatalf("issue edit sent mutation input: %#v", request)
 		}
-	}
-	if mutation < 1 || mutation+1 >= len(delegate.requests) || delegate.requests[mutation+1].Operation != glab.OpIssueEditView {
-		t.Fatalf("mutation did not have an exact read-back: %#v", delegate.requests)
-	}
-	prior := mutation - 1
-	for prior >= 0 && delegate.requests[prior].Operation == glab.OpIssueEditLabelList {
-		prior--
-	}
-	if prior < 0 || delegate.requests[prior].Operation != glab.OpIssueEditView {
-		t.Fatalf("mutation did not follow final issue and label validation: %#v", delegate.requests)
+		switch request.Operation {
+		case glab.OpIssueEditProject, glab.OpIssueEditView, glab.OpIssueEditLabelList:
+		default:
+			t.Fatalf("issue edit reached non-read operation: %#v", request)
+		}
 	}
 }
 

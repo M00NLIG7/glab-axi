@@ -8,15 +8,17 @@ Agent Skill use the `gl-axi` identity. The repository remains
 Two deliberately separate backends share one executable:
 
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
-  reads, guarded exact-identity issue edit, two MR write contracts, and human
+  reads, exact-identity issue-edit validation, two MR write contracts, and human
   login to **official `glab` 1.112.0 (`816e3a52`)**; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
-This is not `exec glab "$@"`. Unknown commands and prohibited mutations fail
-before executable discovery, credential resolution, child execution, or HTTP.
-Every delegated result is bounded and normalized into the stable
-`glab-axi/ux-v1` wire contract; raw official-glab JSON and stderr never pass
+This is not `exec glab "$@"`. Unknown commands and out-of-scope mutation
+shapes fail before executable discovery, credential resolution, child
+execution, or HTTP. A declared issue-edit request performs bounded read-only
+validation before refusing any non-no-op live change. Every delegated result
+is bounded and normalized into the stable `glab-axi/ux-v1` wire contract; raw
+official-glab JSON and stderr never pass
 through.
 
 > **Activation status:** v0.2 is a release candidate. Do not replace an
@@ -32,7 +34,7 @@ gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
 gl-axi issue list|view
-gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP
+gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # dry-run preview; live changes fail closed
 gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
@@ -133,22 +135,23 @@ glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 -
 }
 ```
 
-Guarded issue edit requires explicit host/project plus the issue's canonical
-URL, current `opened` or `closed` state, and exact `updated_at`. Title and
-description enter only through private regular non-symlink files. Repeatable
-`--add-label` and `--remove-label` values must resolve to one exact stable label
-identity in two complete bounded catalog reads; case aliases, missing labels,
-duplicates, overlap, and identity drift fail closed. Unrelated labels are
-preserved through add/remove semantics. `--dry-run` performs the same project,
-issue, stale-state, content, and label checks plus the adjacent exact-issue read
-without issuing a PUT.
+Exact issue-edit validation requires explicit host/project plus the issue's
+canonical URL, current `opened` or `closed` state, and exact `updated_at`. Title
+and description enter only through private regular non-symlink files.
+Repeatable `--add-label` and `--remove-label` values must resolve to one exact
+stable numeric label identity in two complete bounded catalog reads; case
+aliases, missing labels, duplicates, overlap, and identity drift fail closed.
+The preview computes add/remove semantics so unrelated labels remain present.
 
-A live edit reads the exact issue again as the final provider operation before
-one private-input PUT. Every attempt is followed by exactly one bounded
-exact-issue GET, even if the mutation context was canceled.
-The receipt reports `applied` or `not_applied`; identity drift, changed evidence,
-malformed read-back, or any state that proves neither result returns
-`ambiguous_issue_edit`. The approved surface and exclusions are pinned under
+`--dry-run` performs complete project, issue, stale-state, content, and label
+validation and returns a bounded `preview` receipt. An exact no-op returns
+`unchanged`. GitLab's issue PUT accepts no expected issue revision and only
+label names, so it cannot atomically bind the validated issue and label
+identities. Consequently,
+every non-no-op live request returns `safety_violation` with a deterministic
+`refused`/`not_applied` receipt under `error.receipt` before any PUT. The
+official-glab adapter exposes no issue-write operation. The approved surface
+and exclusions are pinned under
 [`contracts/issue-edit`](contracts/issue-edit/).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
@@ -163,11 +166,12 @@ accepts a custom message. The pinned Firstmate contract is
 under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 
-The permanent denial boundary includes generic API, unguarded issue editing or
-creation, unguarded or alternate merge, approve, comment/note/reply/resolve,
-merge-request and label-resource mutation, close/reopen/delete,
-repository/release writes, secrets/variables, and pipeline/job mutation. Issue
-labels can change only inside guarded exact-identity `issue edit`.
+The permanent denial boundary includes generic API, every live issue mutation,
+issue creation, unguarded or alternate merge, approve,
+comment/note/reply/resolve, merge-request and label-resource mutation,
+close/reopen/delete, repository/release writes, secrets/variables, and
+pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
+labels or issue fields.
 
 ## `glab-axi` compatibility alias
 
@@ -261,8 +265,8 @@ make build
 
 CI additionally downloads without installing the checksum-pinned official
 `glab` package and executes its version/help contract plus isolated TLS
-fake-server ensure, exact-MR-view normalization, guarded issue-edit, and
-guarded-merge contracts.
+fake-server ensure, exact-MR-view normalization, read-only issue-edit
+validation, and guarded-merge contracts.
 The authoritative evidence and MIT license are under
 [`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
 

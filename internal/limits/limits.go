@@ -38,8 +38,6 @@ const (
 	MergeMutationOperation   = 15 * time.Second
 	MergeReconcileOperation  = 10 * time.Second
 	IssueEditPreflight       = 20 * time.Second
-	IssueEditMutation        = 15 * time.Second
-	IssueEditReconcile       = 10 * time.Second
 	ConnectTimeout           = 5 * time.Second
 	TLSHandshake             = 5 * time.Second
 	HeaderTimeout            = 10 * time.Second

@@ -20,12 +20,26 @@
             "interactive_required", "dependency_missing", "dependency_unsupported",
             "authentication_error", "forbidden", "not_found", "conflict",
             "rate_limited", "upstream_error", "safety_violation", "canceled",
-            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_issue_edit", "ambiguous_merge"
+            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge"
           ]
         },
         "message": {"type": "string", "maxLength": 4096},
-        "retryable": {"type": "boolean"}
-      }
+        "retryable": {"type": "boolean"},
+        "receipt": {
+          "$ref": "ux-v1/issue-edit.schema.json",
+          "properties": {
+            "edit": {
+              "properties": {"action": {"const": "refused"}}
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["receipt"]},
+          "then": {"properties": {"code": {"const": "safety_violation"}}}
+        }
+      ]
     },
     "help": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 512}},
     "meta": {

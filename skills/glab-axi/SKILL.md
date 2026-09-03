@@ -1,6 +1,6 @@
 ---
 name: glab-axi
-description: Use bounded GitLab reads, guarded exact-identity issue edit, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.
+description: Use bounded GitLab reads, exact-identity issue-edit preview, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.
 ---
 
 # glab-axi compatibility alias
@@ -14,7 +14,7 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `glab-axi issue list [global flags]` - List project issues.
 - `glab-axi issue view <iid> [global flags]` - View one project issue.
-- `glab-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Edit one exact project issue with stale-state guards.
+- `glab-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Validate one exact project issue edit without mutation.
 - `glab-axi mr list [global flags]` - List project merge requests.
 - `glab-axi mr view <iid> [global flags]` - View one merge request.
 - `glab-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.
@@ -42,9 +42,9 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 ## Safety
 
 - Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.
-- Use explicit `-R namespace/project --hostname host` for guarded issue edit and merge.
-- Do not attempt generic API, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.
-- `issue edit` requires exact URL/state/updated-at evidence and private content files; use `--dry-run` to validate without mutation.
+- Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.
+- Do not attempt generic API, live issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.
+- `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.
 - `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.
 - Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.
 - Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.

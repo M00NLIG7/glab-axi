@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://glab-axi.invalid/schema/ux-v1/issue-edit.schema.json",
-  "title": "glab-axi/ux-v1 guarded issue-edit data",
+  "title": "glab-axi/ux-v1 exact issue-edit validation receipt",
   "type": "object",
   "additionalProperties": false,
   "required": ["edit"],
@@ -73,11 +73,10 @@
         "resulting_updated_at"
       ],
       "properties": {
-        "action": {
-          "enum": ["updated", "reconciled_updated", "reconciled_not_applied", "preview", "unchanged"]
-        },
-        "outcome": {"enum": ["applied", "not_applied"]},
+        "action": {"enum": ["preview", "unchanged", "refused"]},
+        "outcome": {"const": "not_applied"},
         "dry_run": {"type": "boolean"},
+        "refusal_reason": {"const": "provider_precondition_unavailable"},
         "identity": {
           "type": "object",
           "additionalProperties": false,
@@ -131,12 +130,12 @@
       },
       "allOf": [
         {
-          "if": {"properties": {"action": {"enum": ["updated", "reconciled_updated"]}}},
-          "then": {"properties": {"outcome": {"const": "applied"}, "dry_run": {"const": false}}},
-          "else": {"properties": {"outcome": {"const": "not_applied"}}}
+          "if": {"properties": {"action": {"const": "refused"}}, "required": ["action"]},
+          "then": {"required": ["refusal_reason"], "properties": {"dry_run": {"const": false}}},
+          "else": {"not": {"required": ["refusal_reason"]}}
         },
         {
-          "if": {"properties": {"action": {"const": "preview"}}},
+          "if": {"properties": {"action": {"const": "preview"}}, "required": ["action"]},
           "then": {"properties": {"dry_run": {"const": true}}},
           "else": {"properties": {"dry_run": {"const": false}}}
         }
