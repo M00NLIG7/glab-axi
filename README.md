@@ -67,8 +67,8 @@ through `same_project` and distinct project identities.
 
 Threads repeat target-project and MR IDs for citation and substitution safety,
 and include stable discussion/note IDs, authors, timestamps, bodies, canonical
-resolution state, resolver details, and supplied diff position metadata. A
-an omitted or `null` resolution is accepted only for a note explicitly marked
+resolution state, resolver details, and supplied diff position metadata. An
+omitted or `null` resolution is accepted only for a note explicitly marked
 non-resolvable. The command never invents note URLs and never exposes a reply or
 resolve operation. Pagination remains within 10 pages and 1,000 threads; nested
 output keeps at most 1,000 notes, 128 KiB per body, and 2 MiB across bodies.
