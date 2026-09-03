@@ -408,7 +408,7 @@ func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &normalized); err != nil {
 		t.Fatal(err)
 	}
-	if normalized["sha"] != expectedHead || normalized["id"] != float64(1011) || normalized["source_project_id"] != float64(101) || normalized["target_project_id"] != float64(101) {
+	if normalized["sha"] != expectedHead || normalized["base_sha"] != "1123456789012345678901234567890123456789" || normalized["id"] != float64(1011) || normalized["source_project_id"] != float64(101) || normalized["target_project_id"] != float64(101) {
 		t.Fatalf("normalized official view=%s", response.Body)
 	}
 	requestMu.Lock()
@@ -431,8 +431,8 @@ func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
 	}
 }
 
-// TestPinnedOfficialGlabMRDiscussionsTLS proves that the fixed discussion-page
-// operation reaches only the selected merge request through one GET. It uses a
+// TestPinnedOfficialGlabMRDiscussionsTLS proves that discussion pages and both
+// canonical project-identity lookups use only their fixed GET routes. It uses a
 // synthetic runtime token and an isolated local TLS endpoint.
 func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	binary := officialGlabTestBinary()
@@ -447,14 +447,24 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	logicalHost := "gitlab.discussions-contract.example"
 	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
 	records := make(chan capturedOfficialGlabMutation, 4)
+	responses := map[string]string{
+		"/api/v4/projects/group%2Fproject/merge_requests/42/discussions?page=2&per_page=31": `[{"id":"thread-1","individual_note":true,"notes":[]}]`,
+		"/api/v4/projects/group%2Fproject":                                                  `{"id":99,"path_with_namespace":"group/project","web_url":"https://gitlab.discussions-contract.example/group/project"}`,
+		"/api/v4/projects/199":                                                              `{"id":199,"path_with_namespace":"fork/project","web_url":"https://gitlab.discussions-contract.example/fork/project"}`,
+	}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
 		records <- capturedOfficialGlabMutation{
 			method: r.Method, host: r.Host, requestURI: r.RequestURI,
 			contentType: r.Header.Get("Content-Type"), body: body, readErr: readErr,
 		}
+		response, ok := responses[r.RequestURI]
+		if !ok {
+			http.Error(w, "unexpected request", http.StatusNotFound)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"id":"thread-1","individual_note":true,"notes":[]}]`))
+		_, _ = w.Write([]byte(response))
 	}))
 	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
 	server.StartTLS()
@@ -479,31 +489,48 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	}})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	response, err := client.Do(ctx, Request{
-		Operation: OpMRDiscussions, Host: logicalHost, Repo: "group/project",
-		IID: 42, Page: 2, PerPage: 31,
-	})
-	if err != nil || response.Write || response.UpstreamVersion != SupportedVersion {
-		t.Fatalf("response=%#v error=%v", response, err)
+
+	tests := []struct {
+		request  Request
+		wantURI  string
+		wantBody string
+	}{
+		{
+			request:  Request{Operation: OpMRDiscussions, Host: logicalHost, Repo: "group/project", IID: 42, Page: 2, PerPage: 31},
+			wantURI:  "/api/v4/projects/group%2Fproject/merge_requests/42/discussions?page=2&per_page=31",
+			wantBody: `[{"id":"thread-1","individual_note":true,"notes":[]}]`,
+		},
+		{
+			request:  Request{Operation: OpMRDiscussionsTargetProject, Host: logicalHost, Repo: "group/project"},
+			wantURI:  "/api/v4/projects/group%2Fproject",
+			wantBody: responses["/api/v4/projects/group%2Fproject"],
+		},
+		{
+			request:  Request{Operation: OpMRDiscussionsSourceProject, Host: logicalHost, ID: 199},
+			wantURI:  "/api/v4/projects/199",
+			wantBody: responses["/api/v4/projects/199"],
+		},
 	}
-	if got := string(response.Body); got != `[{"id":"thread-1","individual_note":true,"notes":[]}]` {
-		t.Fatalf("response body=%q", got)
-	}
-	select {
-	case captured := <-records:
-		wantURI := "/api/v4/projects/group%2Fproject/merge_requests/42/discussions?page=2&per_page=31"
-		if captured.readErr != nil || captured.method != http.MethodGet || captured.host != logicalHost || captured.requestURI != wantURI || len(captured.body) != 0 {
-			t.Fatalf("discussion request=%#v", captured)
+	for _, test := range tests {
+		response, err := client.Do(ctx, test.request)
+		if err != nil || response.Write || response.UpstreamVersion != SupportedVersion || string(response.Body) != test.wantBody {
+			t.Fatalf("operation=%s response=%#v error=%v", test.request.Operation, response, err)
 		}
-		if strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
-			t.Fatal("discussion request exposed its credential outside the authorization header")
+		select {
+		case captured := <-records:
+			if captured.readErr != nil || captured.method != http.MethodGet || captured.host != logicalHost || captured.requestURI != test.wantURI || len(captured.body) != 0 {
+				t.Fatalf("operation=%s request=%#v", test.request.Operation, captured)
+			}
+			if strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
+				t.Fatal("discussion evidence request exposed its credential outside the authorization header")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("operation=%s did not reach the TLS fake server", test.request.Operation)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("discussion GET did not reach the TLS fake server")
 	}
 	select {
 	case extra := <-records:
-		t.Fatalf("discussion operation made an extra request: %#v", extra)
+		t.Fatalf("discussion evidence operation made an extra request: %#v", extra)
 	case <-time.After(100 * time.Millisecond):
 	}
 }

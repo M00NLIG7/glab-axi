@@ -31,18 +31,28 @@ native HTTP transport.
   stdout/stderr, and human login governed by caller/process cancellation;
 - malformed, duplicate, ANSI-prefixed, trailing, non-UTF-8, or oversized
   data-command child output rejected;
-- official MR-view `diff_refs.head_sha` normalized to the canonical `sha` field
-  only when valid; dual values must match and no missing head is invented;
+- official MR-view `diff_refs.head_sha` and `diff_refs.base_sha` normalized to
+  canonical `sha` and `base_sha` fields only when valid; dual values must match
+  and missing identity is never invented;
 - controlled exit/error mapping without raw stderr or server body;
 - typed normalization and per-command JSON schemas;
 - HTTPS host and selected repository path validation on returned URLs;
 - item/field/page/display caps with explicit completeness/truncation metadata;
 - unknown CI/merge states normalize pending-compatible, never green;
 - fixed internal API routes only where official v1.112.0 lacks safe JSON
-  commands; the MR discussion route is GET-only and public `api` remains denied;
-- MR discussion notes must repeat the selected MR/project global identities,
-  preserve provider ordering, omit note/author URLs, and remain within thread,
-  nested-note, field, aggregate-body, page, and operation limits.
+  commands; MR discussion and canonical project-identity routes are GET-only,
+  the fork route accepts only a provider-bound positive project ID, and public
+  `api` remains denied;
+- MR discussion evidence binds canonical source and target project IDs, paths,
+  and URLs to MR global/project IDs, IID, branches, base/head SHAs, URL, and
+  `updated_at`, then rechecks those identities after pagination;
+- MR discussion notes must repeat the selected MR/project global identities;
+  normalized threads repeat that binding, preserve provider ordering, expose
+  explicit resolution state, omit note/author URLs, and remain within thread,
+  nested-note, field, aggregate-body, page, and operation limits;
+- a display, page, nested-record, or field truncation always sets
+  `complete:false`; malformed, unsupported, unavailable, or drifting identity
+  returns a controlled incomplete error instead of partial trusted evidence.
 
 Approved environment credentials pass directly to official glab for headless
 product operations but are never placed in AXI argv/output; login removes them

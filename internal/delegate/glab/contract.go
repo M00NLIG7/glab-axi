@@ -23,33 +23,35 @@ const (
 type Operation string
 
 const (
-	OpIssueList       Operation = "issue-list"
-	OpIssueView       Operation = "issue-view"
-	OpMRList          Operation = "mr-list"
-	OpMRView          Operation = "mr-view"
-	OpMRDiff          Operation = "mr-diff"
-	OpMRChecks        Operation = "mr-checks"
-	OpMRDiscussions   Operation = "mr-discussions"
-	OpPipelineList    Operation = "pipeline-list"
-	OpPipelineView    Operation = "pipeline-view"
-	OpJobList         Operation = "job-list"
-	OpJobView         Operation = "job-view"
-	OpJobTrace        Operation = "job-trace"
-	OpReleaseList     Operation = "release-list"
-	OpReleaseView     Operation = "release-view"
-	OpRepoList        Operation = "repo-list"
-	OpRepoView        Operation = "repo-view"
-	OpLabelList       Operation = "label-list"
-	OpSearch          Operation = "search"
-	OpEnsureProject   Operation = "mr-ensure-project"
-	OpEnsureList      Operation = "mr-ensure-list"
-	OpEnsureCreate    Operation = "mr-ensure-create"
-	OpEnsureUpdate    Operation = "mr-ensure-update"
-	OpMergeProject    Operation = "mr-merge-project"
-	OpMergeMRView     Operation = "mr-merge-view"
-	OpMergeJobList    Operation = "mr-merge-job-list"
-	OpMergeBridgeList Operation = "mr-merge-bridge-list"
-	OpMRMerge         Operation = "mr-merge"
+	OpIssueList                  Operation = "issue-list"
+	OpIssueView                  Operation = "issue-view"
+	OpMRList                     Operation = "mr-list"
+	OpMRView                     Operation = "mr-view"
+	OpMRDiff                     Operation = "mr-diff"
+	OpMRChecks                   Operation = "mr-checks"
+	OpMRDiscussions              Operation = "mr-discussions"
+	OpMRDiscussionsTargetProject Operation = "mr-discussions-target-project"
+	OpMRDiscussionsSourceProject Operation = "mr-discussions-source-project"
+	OpPipelineList               Operation = "pipeline-list"
+	OpPipelineView               Operation = "pipeline-view"
+	OpJobList                    Operation = "job-list"
+	OpJobView                    Operation = "job-view"
+	OpJobTrace                   Operation = "job-trace"
+	OpReleaseList                Operation = "release-list"
+	OpReleaseView                Operation = "release-view"
+	OpRepoList                   Operation = "repo-list"
+	OpRepoView                   Operation = "repo-view"
+	OpLabelList                  Operation = "label-list"
+	OpSearch                     Operation = "search"
+	OpEnsureProject              Operation = "mr-ensure-project"
+	OpEnsureList                 Operation = "mr-ensure-list"
+	OpEnsureCreate               Operation = "mr-ensure-create"
+	OpEnsureUpdate               Operation = "mr-ensure-update"
+	OpMergeProject               Operation = "mr-merge-project"
+	OpMergeMRView                Operation = "mr-merge-view"
+	OpMergeJobList               Operation = "mr-merge-job-list"
+	OpMergeBridgeList            Operation = "mr-merge-bridge-list"
+	OpMRMerge                    Operation = "mr-merge"
 )
 
 type Request struct {
@@ -163,6 +165,13 @@ func build(request Request) (invocation, error) {
 		}
 		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?page=%d&per_page=%d", escapedRepo, request.IID, request.Page, request.PerPage)
 		return jsonPage(append(apiPrefix(), endpoint)), nil
+	case OpMRDiscussionsTargetProject:
+		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
+	case OpMRDiscussionsSourceProject:
+		if request.ID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "source project ID must be a positive integer")
+		}
+		return jsonObject(append(apiPrefix(), "projects/"+strconv.FormatInt(request.ID, 10))), nil
 	case OpPipelineView:
 		if request.ID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "pipeline ID must be a positive integer")
@@ -288,7 +297,7 @@ func build(request Request) (invocation, error) {
 
 func operationNeedsRepo(op Operation) bool {
 	switch op {
-	case OpRepoList:
+	case OpRepoList, OpMRDiscussionsSourceProject:
 		return false
 	case OpSearch:
 		return false // validated after the scope is known

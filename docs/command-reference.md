@@ -88,9 +88,11 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-checks.schema.json`.
 gl-axi mr discussions <iid> [global flags]
 ```
 
-View bounded, read-only discussion threads for one merge request.
+View bounded, read-only discussion evidence for one merge request.
 
+Includes canonical source/target project identity and exact base/head binding.
 The limit counts threads. Provider thread/note order is preserved.
+Completeness is fail-closed and identity is rechecked around pagination.
 No reply, resolve, or other mutation is exposed.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-discussions.schema.json`.
@@ -98,7 +100,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-discussions.schema.json`.
 Examples:
 
 ```text
-gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --format json
+gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 --format json
 ```
 
 ## `mr diff`

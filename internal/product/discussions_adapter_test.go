@@ -50,7 +50,7 @@ func TestMRDiscussionsOfficialAdapterEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if !envelope.OK || envelope.Data.MR.IID != discussionTestIID || len(envelope.Data.Discussions) != 1 || envelope.Data.Discussions[0].Notes[0].Body != "adapter note" || !envelope.Meta.Complete || envelope.Meta.Count != 1 {
+	if !envelope.OK || envelope.Data.MR.IID != discussionTestIID || !envelope.Data.MR.SameProject || envelope.Data.MR.SourceProject.ID != discussionTestProjectID || envelope.Data.MR.SourceProject.FullPath != "group/project" || envelope.Data.MR.BaseSHA != discussionTestBaseSHA || envelope.Data.MR.HeadSHA != discussionTestHeadSHA || len(envelope.Data.Discussions) != 1 || envelope.Data.Discussions[0].Notes[0].Body != "adapter note" || !envelope.Meta.Complete || envelope.Meta.Count != 1 {
 		t.Fatalf("unexpected output: %s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), secret) {
@@ -64,8 +64,11 @@ func TestMRDiscussionsOfficialAdapterEndToEnd(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	want := []string{
 		"version",
+		"api --method GET --hostname gitlab.com projects/group%2Fproject",
 		"mr view 7 --output json -R group/project",
 		"api --method GET --hostname gitlab.com projects/group%2Fproject/merge_requests/7/discussions?page=1&per_page=2",
+		"mr view 7 --output json -R group/project",
+		"api --method GET --hostname gitlab.com projects/group%2Fproject",
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("child argv=%q", lines)
@@ -89,8 +92,11 @@ case "$*" in
   "version")
     printf 'glab 1.112.0 (816e3a52)\n'
     ;;
+  "api --method GET --hostname gitlab.com projects/group%2Fproject")
+    printf '%s' '{"id":99,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}'
+    ;;
   "mr view 7 --output json -R group/project")
-    printf '%s' '{"id":7007,"iid":7,"project_id":99,"target_project_id":99,"web_url":"https://gitlab.com/group/project/-/merge_requests/7"}'
+    printf '%s' '{"id":7007,"iid":7,"project_id":99,"source_project_id":99,"target_project_id":99,"source_branch":"feature","target_branch":"main","web_url":"https://gitlab.com/group/project/-/merge_requests/7","updated_at":"2024-02-03T04:05:06Z","diff_refs":{"base_sha":"1123456789012345678901234567890123456789","head_sha":"3123456789012345678901234567890123456789","start_sha":"2123456789012345678901234567890123456789"}}'
     ;;
   "api --method GET --hostname gitlab.com projects/group%2Fproject/merge_requests/7/discussions?page=1&per_page=2")
     printf '%s' '[{"id":"adapter-thread","individual_note":true,"notes":[{"id":501,"type":null,"body":"adapter note","author":{"id":17,"username":"reviewer","name":"Reviewer"},"created_at":"2024-01-02T03:04:05Z","updated_at":"2024-01-02T03:04:06Z","system":false,"noteable_id":7007,"noteable_type":"MergeRequest","project_id":99,"noteable_iid":null,"resolvable":false,"resolved":false,"resolved_by":null,"resolved_at":null}]}]'

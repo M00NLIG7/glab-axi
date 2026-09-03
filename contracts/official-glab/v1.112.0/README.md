@@ -21,11 +21,13 @@ establish keyring probing and the documented plaintext fallback. The adapter
 never parses official `glab` config or credentials.
 
 `capabilities.json` is the implementation boundary. Its `mr-view` entry also
-pins the response normalization: the official client's `diff_refs.head_sha`
-becomes canonical `sha` only when valid, and two supplied values must match.
-Missing identity is never invented and cannot prove a post-write result. Public
-`gl-axi` input is never appended to an upstream argv. The MR discussion
-capability is one fixed paginated GET route and exposes no note mutation. Each
+pins response normalization: the official client's `diff_refs.head_sha` and
+`diff_refs.base_sha` become canonical `sha` and `base_sha` only when valid, and
+two supplied representations must match. Missing identity is never invented
+and cannot prove a post-write result. Public `gl-axi` input is never appended
+to an upstream argv. MR discussion evidence uses fixed project-identity and
+paginated discussion GET routes and exposes no note mutation. The source-project
+route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
 schema. The guarded merge entries pin four fixed reads and one fixed PUT; the

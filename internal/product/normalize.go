@@ -63,6 +63,7 @@ type upstreamMR struct {
 	SourceProjectID             int64             `json:"source_project_id"`
 	TargetProjectID             int64             `json:"target_project_id"`
 	SHA                         string            `json:"sha"`
+	BaseSHA                     string            `json:"base_sha"`
 	HasConflicts                bool              `json:"has_conflicts"`
 	DetailedMergeStatus         string            `json:"detailed_merge_status"`
 	MergeStatus                 string            `json:"merge_status"`
@@ -175,6 +176,7 @@ type MergeRequest struct {
 	WebURL         string     `json:"web_url"`
 	SourceBranch   string     `json:"source_branch"`
 	TargetBranch   string     `json:"target_branch"`
+	BaseSHA        string     `json:"base_sha,omitempty"`
 	HeadSHA        string     `json:"head_sha,omitempty"`
 	HasConflicts   bool       `json:"has_conflicts"`
 	MergeStatus    string     `json:"merge_status"`
@@ -351,7 +353,7 @@ func normalizeMR(item upstreamMR, host, repo string, includeDescription bool) (M
 		mergeRaw = item.MergeStatus
 	}
 	mergeStatus := gitlab.NormalizeMergeStatus(mergeRaw, item.HasConflicts)
-	out := MergeRequest{IID: item.IID, Title: title, State: boundedEnum(item.State), Draft: item.Draft, WebURL: web, SourceBranch: item.SourceBranch, TargetBranch: item.TargetBranch, HeadSHA: validSHAOrEmpty(item.SHA), HasConflicts: item.HasConflicts, MergeStatus: mergeStatus, Author: boundedIdentity(item.Author.Username), Labels: boundedLabels(item.Labels), CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}
+	out := MergeRequest{IID: item.IID, Title: title, State: boundedEnum(item.State), Draft: item.Draft, WebURL: web, SourceBranch: item.SourceBranch, TargetBranch: item.TargetBranch, BaseSHA: validSHAOrEmpty(item.BaseSHA), HeadSHA: validSHAOrEmpty(item.SHA), HasConflicts: item.HasConflicts, MergeStatus: mergeStatus, Author: boundedIdentity(item.Author.Username), Labels: boundedLabels(item.Labels), CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}
 	if mergeRaw != "" && mergeStatus == "checking" && mergeRaw != "checking" {
 		out.RawMergeStatus = boundedEnum(mergeRaw)
 	}

@@ -67,9 +67,10 @@ argv function. Each operation has one fixed builder in
 6. bounds stdout/stderr and noninteractive operation time;
 7. rejects malformed, duplicate, prefixed, trailing, oversized, or non-UTF-8 output;
 8. at the `mr view` adapter boundary, reconciles the pinned client's
-   `diff_refs.head_sha` with the REST-shaped `sha` field, requiring equality
-   when both are present and refusing invalid, missing, or conflicting identity
-   during post-write proof; and
+   `diff_refs.head_sha` and `diff_refs.base_sha` with REST-shaped `sha` and
+   `base_sha` fields, requiring equality when both representations are present
+   and refusing invalid, missing, or conflicting identity during evidence or
+   post-write proof; and
 9. maps child failures to controlled errors without rendering upstream stderr.
 
 Most reads use official commands with documented JSON output. Operations for
@@ -83,12 +84,23 @@ method, query, header, or body field.
 
 List adapters request a one-item probe beyond the display limit, use at most 100
 items/page and 10 pages, and never claim completeness when a display/provider
-hard limit is reached. MR discussions first bind the requested IID to its
-provider MR/project identity, then accept only notes that repeat those global
-identities. They preserve provider thread/note order, cap nested notes at 1,000,
+hard limit is reached. MR discussions resolve the selected target project to a
+canonical numeric ID, full path, and validated URL, then bind the requested IID
+to its provider MR ID, source/target project IDs, branches, authoritative
+base/head SHAs, URL, and `updated_at`. A fork source project is resolved through
+a fixed GET whose positive numeric ID comes only from that bound MR. Project and
+MR identities are re-read after pagination; any drift rejects the evidence
+window. Discussion notes must repeat the bound MR and target-project global IDs,
+and each normalized thread repeats them to prevent cross-request substitution.
+Threads expose explicit `resolved`, `unresolved`, or `not_resolvable` state. A
+missing or null note-resolution value is accepted only when the provider
+explicitly marks the note non-resolvable.
+
+Discussion reads preserve provider thread/note order, cap nested notes at 1,000,
 cap each body at the description bound and all emitted note bodies at 2 MiB,
-and omit provider fields such as author-profile and note URLs. Normalizers keep
-documented fields only, normalize
+and omit provider fields such as author-profile and note URLs. Any page,
+display, nested-record, or field truncation makes the evidence incomplete with
+a machine-readable reason. Normalizers keep documented fields only, normalize
 unknown CI/merge states to pending-compatible values, validate HTTPS host and
 repository URL paths, cap individual fields, and set backend/completeness/
 truncation metadata. Raw official documents never cross the product envelope.

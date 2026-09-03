@@ -29,8 +29,10 @@ GitLab project (not Rune).
 7. Run auth status, dashboard, issue list/view, MR
    list/view/checks/diff/discussions, pipeline list/view, job list/view/trace,
    release list/view, repo list/view, label list, and bounded search against
-   synthetic non-secret data. Discussion fixtures must include multi-note,
-   system, resolved, unresolved, and positioned threads.
+   synthetic non-secret data. Discussion fixtures must include same-project and
+   fork identity, exact base/head binding, multi-page, multi-note, system,
+   resolved, unresolved, non-resolvable missing/null, and positioned threads. Confirm
+   MR/project drift and every page/display/nested/field bound is incomplete.
 8. Repeat target selection inside the checkout and with
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before

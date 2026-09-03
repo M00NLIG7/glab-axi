@@ -16,14 +16,27 @@ import (
 	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
 	"gl-axi/internal/output"
+	"gl-axi/internal/safeurl"
 )
 
 type upstreamMRDiscussionIdentity struct {
-	ID              int64  `json:"id"`
-	IID             int64  `json:"iid"`
-	ProjectID       int64  `json:"project_id"`
-	TargetProjectID int64  `json:"target_project_id"`
-	WebURL          string `json:"web_url"`
+	ID              int64      `json:"id"`
+	IID             int64      `json:"iid"`
+	ProjectID       int64      `json:"project_id"`
+	SourceProjectID int64      `json:"source_project_id"`
+	TargetProjectID int64      `json:"target_project_id"`
+	SourceBranch    string     `json:"source_branch"`
+	TargetBranch    string     `json:"target_branch"`
+	BaseSHA         string     `json:"base_sha"`
+	HeadSHA         string     `json:"sha"`
+	WebURL          string     `json:"web_url"`
+	UpdatedAt       *time.Time `json:"updated_at"`
+}
+
+type upstreamMRDiscussionProjectIdentity struct {
+	ID                int64  `json:"id"`
+	PathWithNamespace string `json:"path_with_namespace"`
+	WebURL            string `json:"web_url"`
 }
 
 type upstreamDiscussionUser struct {
@@ -56,6 +69,21 @@ type upstreamDiscussionPosition struct {
 	LineRange    *upstreamDiscussionLineRange `json:"line_range"`
 }
 
+type upstreamNullableBool struct {
+	Present bool
+	Null    bool
+	Value   bool
+}
+
+func (value *upstreamNullableBool) UnmarshalJSON(body []byte) error {
+	*value = upstreamNullableBool{Present: true}
+	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
+		value.Null = true
+		return nil
+	}
+	return json.Unmarshal(body, &value.Value)
+}
+
 type upstreamDiscussionNote struct {
 	ID           int64                       `json:"id"`
 	Type         string                      `json:"type"`
@@ -69,7 +97,7 @@ type upstreamDiscussionNote struct {
 	ProjectID    int64                       `json:"project_id"`
 	NoteableIID  *int64                      `json:"noteable_iid"`
 	Resolvable   *bool                       `json:"resolvable"`
-	Resolved     *bool                       `json:"resolved"`
+	Resolved     upstreamNullableBool        `json:"resolved"`
 	ResolvedBy   *upstreamDiscussionUser     `json:"resolved_by"`
 	ResolvedAt   *time.Time                  `json:"resolved_at"`
 	Position     *upstreamDiscussionPosition `json:"position"`
@@ -81,14 +109,43 @@ type upstreamDiscussion struct {
 	Notes          []upstreamDiscussionNote `json:"notes"`
 }
 
-// MRDiscussionIdentity binds every returned thread to one canonical merge
-// request. Project and merge-request global IDs are provider identities, while
-// the IID and URL are the human-facing project-local identity.
+// MRDiscussionProjectIdentity is a canonical provider project identity. The
+// numeric ID remains stable across renames, while FullPath and WebURL make the
+// observed project directly citable.
+type MRDiscussionProjectIdentity struct {
+	ID       int64  `json:"id"`
+	FullPath string `json:"full_path"`
+	WebURL   string `json:"web_url"`
+}
+
+// MRDiscussionIdentity binds every returned thread to one stable merge-request
+// evidence window. ProjectID remains the target-project ID for compatibility.
 type MRDiscussionIdentity struct {
-	ID        int64  `json:"id"`
-	IID       int64  `json:"iid"`
-	ProjectID int64  `json:"project_id"`
-	WebURL    string `json:"web_url"`
+	ID            int64                       `json:"id"`
+	IID           int64                       `json:"iid"`
+	ProjectID     int64                       `json:"project_id"`
+	WebURL        string                      `json:"web_url"`
+	SameProject   bool                        `json:"same_project"`
+	SourceProject MRDiscussionProjectIdentity `json:"source_project"`
+	TargetProject MRDiscussionProjectIdentity `json:"target_project"`
+	SourceBranch  string                      `json:"source_branch"`
+	TargetBranch  string                      `json:"target_branch"`
+	BaseSHA       string                      `json:"base_sha"`
+	HeadSHA       string                      `json:"head_sha"`
+	UpdatedAt     time.Time                   `json:"updated_at"`
+}
+
+type mrDiscussionSnapshotIdentity struct {
+	ID              int64
+	IID             int64
+	SourceProjectID int64
+	TargetProjectID int64
+	WebURL          string
+	SourceBranch    string
+	TargetBranch    string
+	BaseSHA         string
+	HeadSHA         string
+	UpdatedAt       time.Time
 }
 
 type DiscussionUser struct {
@@ -137,9 +194,15 @@ type DiscussionNote struct {
 }
 
 type MRDiscussion struct {
-	ID             string           `json:"id"`
-	IndividualNote bool             `json:"individual_note"`
-	Notes          []DiscussionNote `json:"notes"`
+	ID              string           `json:"id"`
+	TargetProjectID int64            `json:"target_project_id"`
+	MergeRequestID  int64            `json:"merge_request_id"`
+	MergeRequestIID int64            `json:"merge_request_iid"`
+	IndividualNote  bool             `json:"individual_note"`
+	Resolvable      bool             `json:"resolvable"`
+	Resolved        bool             `json:"resolved"`
+	ResolutionState string           `json:"resolution_state"`
+	Notes           []DiscussionNote `json:"notes"`
 }
 
 type discussionPageNormalizer struct {
@@ -156,20 +219,38 @@ func executeMRDiscussions(ctx context.Context, client delegateClient, target Tar
 		return commandOutput{meta: meta}, err
 	}
 
+	targetProject, version, err := readMRDiscussionProject(ctx, client, target, glab.OpMRDiscussionsTargetProject, 0, target.Repo)
+	meta.UpstreamVersion = version
+	if err != nil {
+		meta.Reason = mrDiscussionIdentityFailureReason(err)
+		return commandOutput{meta: meta}, err
+	}
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpMRView, Host: target.Host, Repo: target.Repo, IID: iid})
 	meta.UpstreamVersion = response.UpstreamVersion
 	if err != nil {
+		meta.Reason = "identity_unavailable"
 		return commandOutput{meta: meta}, err
 	}
-	mr, err := normalizeMRDiscussionIdentity(response.Body, target, iid)
+	initial, err := normalizeMRDiscussionSnapshot(response.Body, target, targetProject.ID, iid)
 	if err != nil {
+		meta.Reason = mrDiscussionIdentityFailureReason(err)
 		return commandOutput{meta: meta}, err
 	}
 
+	sourceProject := targetProject
+	if initial.SourceProjectID != initial.TargetProjectID {
+		sourceProject, version, err = readMRDiscussionProject(ctx, client, target, glab.OpMRDiscussionsSourceProject, initial.SourceProjectID, "")
+		meta.UpstreamVersion = version
+		if err != nil {
+			meta.Reason = mrDiscussionIdentityFailureReason(err)
+			return commandOutput{meta: meta}, err
+		}
+	}
+
 	normalizer := &discussionPageNormalizer{
-		mrID:              mr.ID,
-		iid:               mr.IID,
-		projectID:         mr.ProjectID,
+		mrID:              initial.ID,
+		iid:               initial.IID,
+		projectID:         initial.TargetProjectID,
 		seenDiscussionIDs: make(map[string]bool),
 		seenNoteIDs:       make(map[int64]bool),
 	}
@@ -181,15 +262,19 @@ func executeMRDiscussions(ctx context.Context, client delegateClient, target Tar
 	}, parsed.Limit, normalizer.normalize)
 	meta = mergeMeta(meta, state)
 	if err != nil {
+		if meta.Reason == "" {
+			meta.Reason = "provider_response"
+		}
 		return commandOutput{meta: meta}, err
 	}
 
 	discussions, recordTruncated, bodyTruncated, err := boundDiscussionOutput(discussions)
 	if err != nil {
+		meta.Complete = false
+		meta.Reason = "evidence_limit"
 		return commandOutput{meta: meta}, err
 	}
 	if recordTruncated {
-		meta.Complete = false
 		meta.Truncated = true
 		if meta.Reason == "" || meta.Reason == "field_limit" {
 			meta.Reason = "nested_record_limit"
@@ -201,6 +286,57 @@ func executeMRDiscussions(ctx context.Context, client delegateClient, target Tar
 			meta.Reason = "field_limit"
 		}
 	}
+	if meta.Truncated {
+		meta.Complete = false
+	}
+
+	response, err = client.Do(ctx, glab.Request{Operation: glab.OpMRView, Host: target.Host, Repo: target.Repo, IID: iid})
+	meta.UpstreamVersion = response.UpstreamVersion
+	if err != nil {
+		meta.Complete = false
+		meta.Reason = "snapshot_recheck_failed"
+		return commandOutput{meta: meta}, err
+	}
+	final, err := normalizeMRDiscussionSnapshot(response.Body, target, targetProject.ID, iid)
+	if err != nil {
+		meta.Complete = false
+		meta.Reason = "identity_inconsistent"
+		return commandOutput{meta: meta}, err
+	}
+	if !sameMRDiscussionSnapshot(initial, final) {
+		meta.Complete = false
+		meta.Reason = "snapshot_changed"
+		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "merge request identity changed while discussion evidence was collected")
+	}
+
+	finalTargetProject, version, err := readMRDiscussionProject(ctx, client, target, glab.OpMRDiscussionsTargetProject, 0, target.Repo)
+	meta.UpstreamVersion = version
+	if err != nil {
+		meta.Complete = false
+		meta.Reason = "snapshot_recheck_failed"
+		return commandOutput{meta: meta}, err
+	}
+	if finalTargetProject != targetProject {
+		meta.Complete = false
+		meta.Reason = "snapshot_changed"
+		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "target project identity changed while discussion evidence was collected")
+	}
+	if initial.SourceProjectID != initial.TargetProjectID {
+		finalSourceProject, finalVersion, sourceErr := readMRDiscussionProject(ctx, client, target, glab.OpMRDiscussionsSourceProject, initial.SourceProjectID, "")
+		meta.UpstreamVersion = finalVersion
+		if sourceErr != nil {
+			meta.Complete = false
+			meta.Reason = "snapshot_recheck_failed"
+			return commandOutput{meta: meta}, sourceErr
+		}
+		if finalSourceProject != sourceProject {
+			meta.Complete = false
+			meta.Reason = "snapshot_changed"
+			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "source project identity changed while discussion evidence was collected")
+		}
+	}
+
+	mr := materializeMRDiscussionIdentity(initial, sourceProject, targetProject)
 	data := map[string]any{"mr": mr, "discussions": discussions}
 	if err := output.WriteValue(io.Discard, parsed.Format, uxv1.Success(data, meta)); err != nil {
 		meta.Complete = false
@@ -211,43 +347,105 @@ func executeMRDiscussions(ctx context.Context, client delegateClient, target Tar
 	return commandOutput{data: data, meta: meta}, nil
 }
 
-func normalizeMRDiscussionIdentity(body []byte, target Target, expectedIID int64) (MRDiscussionIdentity, error) {
-	if err := validateDiscussionJSON(body, '{'); err != nil {
-		return MRDiscussionIdentity{}, err
+func sameMRDiscussionSnapshot(left, right mrDiscussionSnapshotIdentity) bool {
+	return left.ID == right.ID && left.IID == right.IID &&
+		left.SourceProjectID == right.SourceProjectID && left.TargetProjectID == right.TargetProjectID &&
+		left.WebURL == right.WebURL && left.SourceBranch == right.SourceBranch && left.TargetBranch == right.TargetBranch &&
+		left.BaseSHA == right.BaseSHA && left.HeadSHA == right.HeadSHA && left.UpdatedAt.Equal(right.UpdatedAt)
+}
+
+func mrDiscussionIdentityFailureReason(err error) string {
+	code := uxv1.AsError(err).Code
+	if code == uxv1.CodeSafety || code == uxv1.CodeConflict {
+		return "identity_inconsistent"
+	}
+	return "identity_unavailable"
+}
+
+func readMRDiscussionProject(ctx context.Context, client delegateClient, target Target, operation glab.Operation, id int64, expectedPath string) (MRDiscussionProjectIdentity, string, error) {
+	request := glab.Request{Operation: operation, Host: target.Host, Repo: target.Repo, ID: id}
+	response, err := client.Do(ctx, request)
+	if err != nil {
+		return MRDiscussionProjectIdentity{}, response.UpstreamVersion, err
+	}
+	project, err := normalizeMRDiscussionProject(response.Body, target.Host, id, expectedPath)
+	return project, response.UpstreamVersion, err
+}
+
+func normalizeMRDiscussionProject(body []byte, host string, expectedID int64, expectedPath string) (MRDiscussionProjectIdentity, error) {
+	if err := validateUniqueJSON(body, '{', "merge request project"); err != nil {
+		return MRDiscussionProjectIdentity{}, err
+	}
+	var source upstreamMRDiscussionProjectIdentity
+	if err := decodeStrict(body, &source); err != nil {
+		return MRDiscussionProjectIdentity{}, err
+	}
+	if source.ID < 1 || safeurl.ValidateProject(source.PathWithNamespace) != nil {
+		return MRDiscussionProjectIdentity{}, malformed("merge request project identity")
+	}
+	if (expectedID > 0 && source.ID != expectedID) || (expectedPath != "" && source.PathWithNamespace != expectedPath) {
+		return MRDiscussionProjectIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request project identity")
+	}
+	web, err := authorityRepoURL(source.WebURL, host, source.PathWithNamespace, true)
+	if err != nil {
+		return MRDiscussionProjectIdentity{}, err
+	}
+	return MRDiscussionProjectIdentity{ID: source.ID, FullPath: source.PathWithNamespace, WebURL: web}, nil
+}
+
+func normalizeMRDiscussionSnapshot(body []byte, target Target, targetProjectID, expectedIID int64) (mrDiscussionSnapshotIdentity, error) {
+	if err := validateUniqueJSON(body, '{', "merge request"); err != nil {
+		return mrDiscussionSnapshotIdentity{}, err
 	}
 	var source upstreamMRDiscussionIdentity
 	if err := decodeStrict(body, &source); err != nil {
-		return MRDiscussionIdentity{}, err
+		return mrDiscussionSnapshotIdentity{}, err
 	}
-	if source.ID < 1 || source.IID < 1 || source.ProjectID < 1 {
-		return MRDiscussionIdentity{}, malformed("merge request discussion identity")
+	if source.ID < 1 || source.IID < 1 || source.SourceProjectID < 1 || source.TargetProjectID < 1 || source.UpdatedAt == nil || source.UpdatedAt.IsZero() || !validMergeSHA(source.BaseSHA) || !validMergeSHA(source.HeadSHA) {
+		return mrDiscussionSnapshotIdentity{}, uxv1.NewError(uxv1.CodeUpstream, "official glab did not supply complete merge request evidence identity")
 	}
 	if source.IID != expectedIID {
-		return MRDiscussionIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request than requested")
+		return mrDiscussionSnapshotIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request than requested")
 	}
-	if source.TargetProjectID < 0 {
-		return MRDiscussionIdentity{}, malformed("merge request target project identity")
+	if (source.ProjectID != 0 && source.ProjectID != source.TargetProjectID) || source.TargetProjectID != targetProjectID {
+		return mrDiscussionSnapshotIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned conflicting merge request project identities")
 	}
-	if source.TargetProjectID != 0 && source.TargetProjectID != source.ProjectID {
-		return MRDiscussionIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned conflicting merge request project identities")
+	if err := validBranch(source.SourceBranch); err != nil {
+		return mrDiscussionSnapshotIdentity{}, err
+	}
+	if err := validBranch(source.TargetBranch); err != nil {
+		return mrDiscussionSnapshotIdentity{}, err
 	}
 	web, err := authorityRepoURL(source.WebURL, target.Host, target.Repo, true)
 	if err != nil {
-		return MRDiscussionIdentity{}, err
+		return mrDiscussionSnapshotIdentity{}, err
 	}
 	parsed, _ := url.Parse(web)
 	expectedSuffix := (&url.URL{Path: "/" + target.Repo + "/-/merge_requests/" + strconv.FormatInt(expectedIID, 10)}).EscapedPath()
 	if parsed.EscapedPath() != expectedSuffix && !strings.HasSuffix(parsed.EscapedPath(), expectedSuffix) {
-		return MRDiscussionIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a URL for a different merge request")
+		return mrDiscussionSnapshotIdentity{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a URL for a different merge request")
 	}
-	return MRDiscussionIdentity{ID: source.ID, IID: source.IID, ProjectID: source.ProjectID, WebURL: web}, nil
+	return mrDiscussionSnapshotIdentity{
+		ID: source.ID, IID: source.IID, SourceProjectID: source.SourceProjectID, TargetProjectID: source.TargetProjectID,
+		WebURL: web, SourceBranch: source.SourceBranch, TargetBranch: source.TargetBranch,
+		BaseSHA: source.BaseSHA, HeadSHA: source.HeadSHA, UpdatedAt: *source.UpdatedAt,
+	}, nil
+}
+
+func materializeMRDiscussionIdentity(snapshot mrDiscussionSnapshotIdentity, sourceProject, targetProject MRDiscussionProjectIdentity) MRDiscussionIdentity {
+	return MRDiscussionIdentity{
+		ID: snapshot.ID, IID: snapshot.IID, ProjectID: snapshot.TargetProjectID, WebURL: snapshot.WebURL,
+		SameProject: snapshot.SourceProjectID == snapshot.TargetProjectID, SourceProject: sourceProject, TargetProject: targetProject,
+		SourceBranch: snapshot.SourceBranch, TargetBranch: snapshot.TargetBranch, BaseSHA: snapshot.BaseSHA, HeadSHA: snapshot.HeadSHA,
+		UpdatedAt: snapshot.UpdatedAt,
+	}
 }
 
 func (n *discussionPageNormalizer) normalize(body []byte) ([]MRDiscussion, bool, error) {
 	if len(body) > limits.MaxJSONPageBytes {
 		return nil, false, uxv1.NewError(uxv1.CodeUpstream, "official glab output exceeded the safety limit")
 	}
-	if err := validateDiscussionJSON(body, '['); err != nil {
+	if err := validateUniqueJSON(body, '[', "discussion"); err != nil {
 		return nil, false, err
 	}
 	var source []upstreamDiscussion
@@ -285,15 +483,32 @@ func (n *discussionPageNormalizer) normalizeDiscussion(source upstreamDiscussion
 
 	notes := make([]DiscussionNote, 0, len(source.Notes))
 	truncated := false
+	resolvable, resolved := false, false
 	for _, item := range source.Notes {
 		note, cut, err := n.normalizeNote(item)
 		if err != nil {
 			return MRDiscussion{}, false, err
 		}
+		if note.Resolvable {
+			if resolvable && note.Resolved != resolved {
+				return MRDiscussion{}, false, malformed("conflicting discussion resolution")
+			}
+			resolvable, resolved = true, note.Resolved
+		}
 		truncated = truncated || cut
 		notes = append(notes, note)
 	}
-	return MRDiscussion{ID: id, IndividualNote: *source.IndividualNote, Notes: notes}, truncated, nil
+	resolutionState := "not_resolvable"
+	if resolvable && resolved {
+		resolutionState = "resolved"
+	} else if resolvable {
+		resolutionState = "unresolved"
+	}
+	return MRDiscussion{
+		ID: id, TargetProjectID: n.projectID, MergeRequestID: n.mrID, MergeRequestIID: n.iid,
+		IndividualNote: *source.IndividualNote, Resolvable: resolvable, Resolved: resolved,
+		ResolutionState: resolutionState, Notes: notes,
+	}, truncated, nil
 }
 
 func (n *discussionPageNormalizer) normalizeNote(source upstreamDiscussionNote) (DiscussionNote, bool, error) {
@@ -307,8 +522,17 @@ func (n *discussionPageNormalizer) normalizeNote(source upstreamDiscussionNote) 
 	if source.Author == nil || source.CreatedAt == nil || source.UpdatedAt == nil || source.CreatedAt.IsZero() || source.UpdatedAt.IsZero() {
 		return DiscussionNote{}, false, malformed("discussion note attribution")
 	}
-	if source.System == nil || source.Resolvable == nil || source.Resolved == nil {
-		return DiscussionNote{}, false, malformed("discussion note flags")
+	if source.System == nil || source.Resolvable == nil {
+		return DiscussionNote{}, false, uxv1.NewError(uxv1.CodeUpstream, "official glab did not supply supported discussion note flags")
+	}
+	resolved := false
+	if *source.Resolvable {
+		if !source.Resolved.Present || source.Resolved.Null {
+			return DiscussionNote{}, false, uxv1.NewError(uxv1.CodeUpstream, "official glab did not supply supported discussion resolution state")
+		}
+		resolved = source.Resolved.Value
+	} else if source.Resolved.Present && !source.Resolved.Null && source.Resolved.Value {
+		return DiscussionNote{}, false, malformed("discussion note resolution")
 	}
 	if source.NoteableID < 1 || source.ProjectID < 1 || source.NoteableType == "" || source.NoteableIID != nil && *source.NoteableIID < 1 {
 		return DiscussionNote{}, false, malformed("discussion note resource identity")
@@ -316,7 +540,7 @@ func (n *discussionPageNormalizer) normalizeNote(source upstreamDiscussionNote) 
 	if source.NoteableID != n.mrID || source.ProjectID != n.projectID || source.NoteableType != "MergeRequest" || source.NoteableIID != nil && *source.NoteableIID != n.iid {
 		return DiscussionNote{}, false, uxv1.NewError(uxv1.CodeSafety, "official glab returned a discussion note outside the selected merge request")
 	}
-	if *source.Resolved && !*source.Resolvable || !*source.Resolved && (source.ResolvedBy != nil || source.ResolvedAt != nil) {
+	if !resolved && (source.ResolvedBy != nil || source.ResolvedAt != nil) {
 		return DiscussionNote{}, false, malformed("discussion note resolution")
 	}
 
@@ -350,7 +574,7 @@ func (n *discussionPageNormalizer) normalizeNote(source upstreamDiscussionNote) 
 		Body:       *source.Body,
 		System:     *source.System,
 		Resolvable: *source.Resolvable,
-		Resolved:   *source.Resolved,
+		Resolved:   resolved,
 		ResolvedBy: resolvedBy,
 		ResolvedAt: source.ResolvedAt,
 		Position:   position,
@@ -461,22 +685,23 @@ func normalizeDiscussionLine(source upstreamDiscussionLine) (DiscussionLine, boo
 	return DiscussionLine{Type: lineType, OldLine: source.OldLine, NewLine: source.NewLine, LineCode: lineCode}, cut, nil
 }
 
-// validateDiscussionJSON rejects duplicate fields before typed decoding. This
+// validateUniqueJSON rejects duplicate fields before typed decoding. This
 // matters for identity and boolean policy fields where last-value-wins decoding
 // would otherwise make malformed provider output ambiguous.
-func validateDiscussionJSON(body []byte, root byte) error {
+func validateUniqueJSON(body []byte, root byte, label string) error {
+	malformedMessage := "official glab returned malformed " + label + " JSON"
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 || trimmed[0] != root || !utf8.Valid(body) {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned malformed discussion JSON")
+		return uxv1.NewError(uxv1.CodeUpstream, malformedMessage)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	if err := consumeUniqueJSONValue(decoder); err != nil {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned malformed discussion JSON")
+		return uxv1.NewError(uxv1.CodeUpstream, malformedMessage)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned malformed discussion JSON")
+		return uxv1.NewError(uxv1.CodeUpstream, malformedMessage)
 	}
 	return nil
 }

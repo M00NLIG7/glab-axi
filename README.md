@@ -56,18 +56,27 @@ TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
 
-`mr discussions` gives agents bounded, read-only access to the conversation on
-one merge request without a browser. `--limit` counts discussion threads;
-provider thread and note order is preserved. Each result includes the canonical
-MR identity, stable discussion and note IDs, authors, timestamps, bodies,
-resolution/system flags, resolver details, and supplied diff position metadata.
-It never invents note URLs and never exposes a reply or resolve operation.
-Pagination remains within 10 pages and 1,000 threads; nested output keeps at
-most 1,000 notes, 128 KiB per body, and 2 MiB across bodies. `meta` reports
-result-set completeness plus display, nested-record, or field truncation.
+`mr discussions` gives agents bounded, read-only evidence for one merge request
+without a browser. `--limit` counts discussion threads; provider thread and note
+order is preserved. Each successful result binds the MR global ID and IID,
+source/target branches, authoritative base/head SHAs, and canonical source and
+target projects by numeric ID, full path, and validated URL. The MR and project
+identities are read again after pagination, and an identity or `updated_at`
+change rejects the snapshot instead of mixing observations. Forks are explicit
+through `same_project` and distinct project identities.
+
+Threads repeat target-project and MR IDs for citation and substitution safety,
+and include stable discussion/note IDs, authors, timestamps, bodies, canonical
+resolution state, resolver details, and supplied diff position metadata. A
+an omitted or `null` resolution is accepted only for a note explicitly marked
+non-resolvable. The command never invents note URLs and never exposes a reply or
+resolve operation. Pagination remains within 10 pages and 1,000 threads; nested
+output keeps at most 1,000 notes, 128 KiB per body, and 2 MiB across bodies.
+Any display, page, nested-record, or field truncation makes `meta.complete`
+false with a machine-readable reason.
 
 ```sh
-glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --format json
+glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 --format json
 ```
 
 ```json
@@ -77,7 +86,13 @@ glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --f
   "data": {
     "discussions": [{
       "id": "thread-id",
+      "target_project_id": 99,
+      "merge_request_id": 7007,
+      "merge_request_iid": 42,
       "individual_note": false,
+      "resolvable": true,
+      "resolved": false,
+      "resolution_state": "unresolved",
       "notes": [{
         "id": 9001,
         "author": {"id": 17, "username": "reviewer", "name": "Reviewer"},
@@ -93,7 +108,15 @@ glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --f
       "id": 7007,
       "iid": 42,
       "project_id": 99,
-      "web_url": "https://gitlab.com/group/project/-/merge_requests/42"
+      "web_url": "https://gitlab.com/group/project/-/merge_requests/42",
+      "same_project": true,
+      "source_project": {"id": 99, "full_path": "group/project", "web_url": "https://gitlab.com/group/project"},
+      "target_project": {"id": 99, "full_path": "group/project", "web_url": "https://gitlab.com/group/project"},
+      "source_branch": "feature",
+      "target_branch": "main",
+      "base_sha": "1123456789012345678901234567890123456789",
+      "head_sha": "3123456789012345678901234567890123456789",
+      "updated_at": "2024-02-03T04:05:06Z"
     }
   },
   "meta": {
@@ -103,7 +126,7 @@ glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 30 --f
     "complete": true,
     "truncated": false,
     "count": 1,
-    "limit": 30,
+    "limit": 1000,
     "upstream_version": "1.112.0"
   }
 }
