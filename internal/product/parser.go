@@ -12,6 +12,7 @@ import (
 type Parsed struct {
 	Definition  Definition
 	Values      map[string]string
+	MultiValues map[string][]string
 	Booleans    map[string]bool
 	Positionals []string
 	Format      output.Format
@@ -41,7 +42,7 @@ var deniedNested = map[string]map[string]string{
 		"close": "closing", "reopen": "reopening", "delete": "deletion",
 	},
 	"issue": {
-		"create": "issue creation", "edit": "issue editing", "update": "issue editing", "comment": "commenting",
+		"create": "issue creation", "update": "unguarded issue editing", "comment": "commenting",
 		"note": "commenting", "close": "closing", "reopen": "reopening", "delete": "deletion",
 	},
 	"pipeline": {
@@ -145,17 +146,19 @@ func deniedReason(path []string) string {
 
 func parseFlags(definition Definition, args []string) (Parsed, error) {
 	parsed := Parsed{
-		Definition: definition,
-		Values:     map[string]string{},
-		Booleans:   map[string]bool{},
-		Format:     output.TOON,
+		Definition:  definition,
+		Values:      map[string]string{},
+		MultiValues: map[string][]string{},
+		Booleans:    map[string]bool{},
+		Format:      output.TOON,
 	}
 	if !definition.NoLimit {
 		parsed.Limit = 30
 	}
 	type flagSpec struct {
-		canonical string
-		value     bool
+		canonical  string
+		value      bool
+		repeatable bool
 	}
 	specs := map[string]flagSpec{
 		"--hostname": {canonical: "--hostname", value: true},
@@ -171,7 +174,7 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		specs["--repo"] = flagSpec{canonical: "--repo", value: true}
 	}
 	for _, flag := range definition.Flags {
-		specs[flag.Name] = flagSpec{canonical: flag.Name, value: !flag.Boolean}
+		specs[flag.Name] = flagSpec{canonical: flag.Name, value: !flag.Boolean, repeatable: flag.Repeatable}
 	}
 	seen := map[string]bool{}
 	for i := 0; i < len(args); i++ {
@@ -188,7 +191,7 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 			if !ok {
 				return Parsed{}, uxv1.NewError(uxv1.CodeUnsupported, "unsupported flag: "+name)
 			}
-			if seen[spec.canonical] {
+			if seen[spec.canonical] && !spec.repeatable {
 				return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "duplicate flag: "+spec.canonical)
 			}
 			seen[spec.canonical] = true
@@ -210,7 +213,11 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 			if !validArgument(value) {
 				return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "invalid value for "+name)
 			}
-			parsed.Values[spec.canonical] = value
+			if spec.repeatable {
+				parsed.MultiValues[spec.canonical] = append(parsed.MultiValues[spec.canonical], value)
+			} else {
+				parsed.Values[spec.canonical] = value
+			}
 			continue
 		}
 		if !validArgument(arg) {
@@ -245,7 +252,7 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: --repo")
 	}
 	for _, flag := range definition.Flags {
-		if flag.Required && parsed.Values[flag.Name] == "" && !parsed.Booleans[flag.Name] {
+		if flag.Required && parsed.Values[flag.Name] == "" && len(parsed.MultiValues[flag.Name]) == 0 && !parsed.Booleans[flag.Name] {
 			return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag.Name)
 		}
 	}
@@ -264,6 +271,15 @@ func deniedFlag(definition Definition, name string) string {
 		switch name {
 		case "--token", "-t", "--job-token", "-j", "--stdin", "--insecure-storage", "--device", "--web":
 			return "credential-bearing or policy-bypassing login flags"
+		}
+	}
+	if path == "issue edit" {
+		switch name {
+		case "--title", "--description", "--body", "--body-file", "--label", "--state", "--state-event",
+			"--close", "--reopen", "--assignee", "--assignee-id", "--assignee-ids", "--milestone",
+			"--milestone-id", "--weight", "--confidential", "--issue-type", "--epic", "--epic-id",
+			"--health-status", "--discussion-locked", "--due-date":
+			return "unguarded or out-of-scope issue mutation"
 		}
 	}
 	if path == "mr merge" {

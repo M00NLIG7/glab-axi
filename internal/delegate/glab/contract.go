@@ -25,6 +25,9 @@ type Operation string
 const (
 	OpIssueList                  Operation = "issue-list"
 	OpIssueView                  Operation = "issue-view"
+	OpIssueEditProject           Operation = "issue-edit-project"
+	OpIssueEditView              Operation = "issue-edit-view"
+	OpIssueEditLabelList         Operation = "issue-edit-label-list"
 	OpMRList                     Operation = "mr-list"
 	OpMRView                     Operation = "mr-view"
 	OpMRDiff                     Operation = "mr-diff"
@@ -144,6 +147,23 @@ func build(request Request) (invocation, error) {
 		}
 		args := []string{group, "view", strconv.FormatInt(id, 10), "--output", "json"}
 		return jsonObject(append(args, repoArgs()...)), nil
+	case OpIssueEditView:
+		if request.IID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "issue IID must be a positive integer")
+		}
+		endpoint := fmt.Sprintf("projects/%s/issues/%d", escapedRepo, request.IID)
+		return jsonObject(append(apiPrefix(), endpoint)), nil
+	case OpIssueEditLabelList:
+		if _, err := pageArgs(); err != nil {
+			return invocation{}, err
+		}
+		query := url.Values{
+			"include_ancestor_groups": {"true"},
+			"page":                    {strconv.Itoa(request.Page)},
+			"per_page":                {strconv.Itoa(request.PerPage)},
+		}.Encode()
+		endpoint := "projects/" + escapedRepo + "/labels?" + query
+		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpMRDiff:
 		if request.IID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
@@ -234,7 +254,7 @@ func build(request Request) (invocation, error) {
 			endpoint = "projects/" + escapedRepo + "/search?" + query
 		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureProject, OpMergeProject:
+	case OpEnsureProject, OpMergeProject, OpIssueEditProject:
 		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
 	case OpMergeMRView:
 		if request.IID < 1 {

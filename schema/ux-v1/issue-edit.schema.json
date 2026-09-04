@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/issue-edit.schema.json",
+  "title": "glab-axi/ux-v1 exact issue-edit validation receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["edit"],
+  "$defs": {
+    "text_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes"],
+      "properties": {
+        "bytes": {"type": "integer", "minimum": 0, "maximum": 131072},
+        "value": {"type": "string", "maxLength": 4096},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "oneOf": [
+        {"required": ["value"], "not": {"required": ["sha256"]}},
+        {"required": ["sha256"], "not": {"required": ["value"]}}
+      ]
+    },
+    "text_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": {"$ref": "#/$defs/text_evidence"},
+        "after": {"$ref": "#/$defs/text_evidence"}
+      }
+    },
+    "label_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1, "maxLength": 1024}
+      }
+    },
+    "label_set_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "bytes"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "bytes": {"type": "integer", "minimum": 2, "maximum": 8388608},
+        "values": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+        },
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "oneOf": [
+        {"required": ["values"], "not": {"required": ["sha256"]}},
+        {"required": ["sha256"], "not": {"required": ["values"]}}
+      ]
+    }
+  },
+  "properties": {
+    "edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "outcome",
+        "dry_run",
+        "identity",
+        "expected",
+        "changed_fields",
+        "changes",
+        "resulting_updated_at"
+      ],
+      "properties": {
+        "action": {"enum": ["preview", "unchanged", "refused"]},
+        "outcome": {"const": "not_applied"},
+        "dry_run": {"type": "boolean"},
+        "refusal_reason": {"const": "provider_precondition_unavailable"},
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "project_id", "project_full_path", "project_web_url", "issue_id", "iid", "web_url"],
+          "properties": {
+            "host": {"type": "string", "minLength": 1, "maxLength": 253},
+            "project_id": {"type": "integer", "minimum": 1},
+            "project_full_path": {"type": "string", "minLength": 3, "maxLength": 1024},
+            "project_web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+            "issue_id": {"type": "integer", "minimum": 1},
+            "iid": {"type": "integer", "minimum": 1},
+            "web_url": {"type": "string", "format": "uri", "pattern": "^https://"}
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["web_url", "state", "updated_at"],
+          "properties": {
+            "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+            "state": {"enum": ["opened", "closed"]},
+            "updated_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        "changed_fields": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"enum": ["title", "description", "labels"]}
+        },
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {"$ref": "#/$defs/text_change"},
+            "description": {"$ref": "#/$defs/text_change"},
+            "labels": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["add", "remove", "before", "after"],
+              "properties": {
+                "add": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/label_identity"}},
+                "remove": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/label_identity"}},
+                "before": {"$ref": "#/$defs/label_set_evidence"},
+                "after": {"$ref": "#/$defs/label_set_evidence"}
+              }
+            }
+          }
+        },
+        "resulting_updated_at": {"type": "string", "format": "date-time"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"action": {"const": "refused"}}, "required": ["action"]},
+          "then": {"required": ["refusal_reason"], "properties": {"dry_run": {"const": false}}},
+          "else": {"not": {"required": ["refusal_reason"]}}
+        },
+        {
+          "if": {"properties": {"action": {"const": "preview"}}, "required": ["action"]},
+          "then": {"properties": {"dry_run": {"const": true}}},
+          "else": {"properties": {"dry_run": {"const": false}}}
+        }
+      ]
+    }
+  }
+}

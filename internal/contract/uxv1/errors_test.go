@@ -22,6 +22,22 @@ func TestAmbiguousMergeUsesConflictExitWithoutSerializingCause(t *testing.T) {
 	}
 }
 
+func TestSafetyRefusalSerializesOnlyExplicitReceipt(t *testing.T) {
+	raw := "provider-controlled-refusal-sentinel"
+	err := Wrap(CodeSafety, "mutation refused before provider write", errors.New(raw))
+	err.Receipt = struct {
+		Action  string `json:"action"`
+		Outcome string `json:"outcome"`
+	}{Action: "refused", Outcome: "not_applied"}
+	encoded, marshalErr := json.Marshal(Failure(err, Meta{Complete: false}))
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if ExitCode(err) != 9 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"refused","outcome":"not_applied"}`) {
+		t.Fatalf("safety refusal envelope=%s exit=%d", encoded, ExitCode(err))
+	}
+}
+
 func TestHTTPRejectionsAreBoundedAndKeepControlMetadataPrivate(t *testing.T) {
 	for _, test := range []struct {
 		status    int

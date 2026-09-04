@@ -232,6 +232,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 		return listOutput("issues", items, meta, listMeta), err
 	case "issue view":
 		return executeIssueView(ctx, client, target, parsed, meta)
+	case "issue edit":
+		return executeIssueEdit(ctx, client, target, parsed, meta)
 	case "mr list":
 		items, listMeta, err := fetchMRs(ctx, client, target, parsed.Limit)
 		return listOutput("mrs", items, meta, listMeta), err

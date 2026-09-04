@@ -24,8 +24,22 @@
           ]
         },
         "message": {"type": "string", "maxLength": 4096},
-        "retryable": {"type": "boolean"}
-      }
+        "retryable": {"type": "boolean"},
+        "receipt": {
+          "$ref": "ux-v1/issue-edit.schema.json",
+          "properties": {
+            "edit": {
+              "properties": {"action": {"const": "refused"}}
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["receipt"]},
+          "then": {"properties": {"code": {"const": "safety_violation"}}}
+        }
+      ]
     },
     "help": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 512}},
     "meta": {

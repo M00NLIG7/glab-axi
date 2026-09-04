@@ -30,11 +30,13 @@ const (
 )
 
 // Error is the stable product failure. Cause and StatusCode are retained only
-// for control flow and are never serialized.
+// for control flow and are never serialized. Receipt is reserved for bounded,
+// product-normalized evidence that proves a requested mutation was refused.
 type Error struct {
 	Code       Code   `json:"code"`
 	Message    string `json:"message"`
 	Retryable  bool   `json:"retryable"`
+	Receipt    any    `json:"receipt,omitempty"`
 	StatusCode int    `json:"-"`
 	Cause      error  `json:"-"`
 }

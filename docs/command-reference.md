@@ -52,6 +52,21 @@ View one project issue.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/issue-view.schema.json`.
 
+## `issue edit`
+
+```text
+gl-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]
+```
+
+Validate one exact project issue edit without mutation.
+
+Requires caller-bound URL, state, and updated-at evidence.
+Title and description are accepted only through private files.
+Labels are resolved exactly and unrelated labels are previewed as preserved.
+Dry-run returns the complete validated preview. GitLab accepts no expected issue revision and only label names, so a non-no-op live request returns a bounded safety refusal and sends no PUT.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-edit.schema.json`.
+
 ## `mr list`
 
 ```text
@@ -315,4 +330,4 @@ Backend: `local`. Schema: `schema/ux-v1/update.schema.json`.
 
 ## Permanent denials
 
-Generic API, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve/label mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are rejected before child execution.
+Generic API, every live issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT.

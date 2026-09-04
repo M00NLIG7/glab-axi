@@ -25,6 +25,9 @@ const (
 	MaxDiscussionUserFieldBytes  = 256
 	MaxDiscussionPathBytes       = 1024
 	MaxDiscussionLineCodeBytes   = 256
+	MaxIssueEditLabels           = 100
+	MaxIssueLabels               = 1000
+	MaxLabelNameBytes            = 1024
 )
 
 const (
@@ -34,6 +37,7 @@ const (
 	MergePreflightOperation  = 20 * time.Second
 	MergeMutationOperation   = 15 * time.Second
 	MergeReconcileOperation  = 10 * time.Second
+	IssueEditPreflight       = 20 * time.Second
 	ConnectTimeout           = 5 * time.Second
 	TLSHandshake             = 5 * time.Second
 	HeaderTimeout            = 10 * time.Second

@@ -75,8 +75,8 @@ argv function. Each operation has one fixed builder in
 
 Most reads use official commands with documented JSON output. Operations for
 which v1.112.0 has no safe dedicated JSON command, including job detail/trace,
-bounded search, MR discussions, MR ensure, and guarded MR merge, use internal
-fixed `glab api` routes.
+bounded search, MR discussions, exact issue-edit validation, MR ensure, and
+guarded MR merge, use internal fixed `glab api` routes.
 The public AXI has no `api` command, endpoint/method/header/body authority, or
 passthrough. Every fixed API argv is represented in the upstream capability
 fixture and exact-argv tests. Guarded merge callers cannot choose any route,
@@ -136,6 +136,50 @@ stdin import is transactional: validation occurs first, keyring state is saved,
 config is atomically written, and a config failure restores the prior keyring
 entry. Private MR files are opened with no-follow semantics and validated from
 the descriptor to prevent path-swap reads.
+
+## Issue edit: exact-identity validation and refusal
+
+Product `issue edit` validates the captain-approved field surface but does not
+mutate GitLab. Its parser requires an explicit host and nested project,
+canonical positive IID and issue URL, `opened` or `closed` expected state, exact
+RFC 3339 `updated_at`, and at least one title, description, or label request.
+It validates these values before target or child discovery. Content comes only
+from descriptor-validated private regular non-symlink files at the established
+title and description bounds. A title cannot be blank; an empty description
+represents a proposed clear.
+
+Label arguments are repeatable and comma-free. The command rejects empty,
+duplicate, case-colliding, overlapping, missing, ambiguous, or case-substituted
+names. It consumes every bounded page of project and inherited labels, resolves
+requested names to numeric identities, repeats that complete lookup after the
+second issue read, and rejects identity drift. Previewed add/remove semantics
+preserve unrelated labels without sending a replacement set.
+
+The state machine is:
+
+1. resolve and validate project numeric ID, exact full path, and canonical URL;
+2. read the exact issue and bind global ID, project ID, IID, URL, state,
+   `updated_at`, title, description, and the complete issue-label set;
+3. resolve requested labels when needed, read the exact issue again, then repeat
+   label resolution and reject stale issue evidence, snapshot drift, or label
+   identity drift;
+4. return `preview` for `--dry-run` or `unchanged` for an exact no-op, with zero
+   mutation; and
+5. for every non-no-op live request, return `safety_violation` with a bounded
+   `refused`/`not_applied` receipt before any PUT.
+
+GitLab's issue PUT accepts no expected issue revision and only label names, so
+it cannot atomically bind the validated issue and requested numeric label
+identities. Any sequence of separate reads leaves a TOCTOU window, so the
+official-glab adapter exposes no issue PUT. Refusals carry the same bounded
+receipt shape under `error.receipt`. Receipts include canonical project/issue
+identity, caller evidence, ordered proposed fields, before/after values or
+SHA-256 evidence at output bounds, label IDs, observed `updated_at`,
+action, outcome, and a machine-readable refusal reason. Validation has a
+20-second phase budget inside the ordinary 30-second read operation budget. The
+approved v1 surface is pinned in `contracts/issue-edit/v1.json`; creation,
+comments, state changes, assignment, milestones, hierarchy, boards, approvals,
+credentials, and pipelines remain outside it.
 
 ## MR ensure: bounded create/update write
 
@@ -214,7 +258,8 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. All other provider mutations remain denied.
+modify or integrate Firstmate. All provider mutations outside the two MR write
+contracts remain denied; issue edit is validation-only.
 
 ## Native authority and CI semantics
 
@@ -256,6 +301,10 @@ symlink/package-managed installs, and Windows self-replacement fail closed.
 - `glab-axi/ux-v1` has a separate envelope and one closed data schema per
   product command under `schema/ux-v1/`.
 - TOON and JSON use the same normalized fields and deterministic ordering.
+- Issue-edit preview and refusal receipts hash text over 4 KiB and label sets
+  over 100 names or 16 KiB while retaining exact byte/count evidence. Text
+  hashes cover exact UTF-8 bytes; label hashes cover the compact JSON encoding
+  of sorted names.
 - Output is capped at 8 MiB; discussion bodies share a 2 MiB budget, traces are
   a redacted 256 KiB tail, and diffs are 1 MiB.
 - Errors never include causes, server HTML, headers, cookies, tokens, proxy URLs,

@@ -26,6 +26,7 @@ type upstreamUser struct {
 type upstreamIssue struct {
 	ID             int64        `json:"id"`
 	IID            int64        `json:"iid"`
+	ProjectID      int64        `json:"project_id"`
 	Title          string       `json:"title"`
 	Description    string       `json:"description"`
 	State          string       `json:"state"`

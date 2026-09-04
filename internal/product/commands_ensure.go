@@ -273,36 +273,36 @@ func decodeAndValidateEnsureMR(body []byte, target Target, projectID int64, sour
 }
 
 func writePrivateJSON(value any) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "gl-axi-mr-")
+	dir, err := os.MkdirTemp("", "gl-axi-input-")
 	if err != nil {
-		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot create private MR input directory", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot create private JSON input directory", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	if err := os.Chmod(dir, 0o700); err != nil {
 		cleanup()
-		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot secure private MR input directory", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot secure private JSON input directory", err)
 	}
 	path := filepath.Join(dir, "request.json")
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		cleanup()
-		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot create private MR input", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot create private JSON input", err)
 	}
 	encoder := json.NewEncoder(file)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(value); err != nil {
 		file.Close()
 		cleanup()
-		return "", func() {}, uxv1.Wrap(uxv1.CodeInternal, "cannot encode private MR input", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeInternal, "cannot encode private JSON input", err)
 	}
 	if err := file.Sync(); err != nil {
 		file.Close()
 		cleanup()
-		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot sync private MR input", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot sync private JSON input", err)
 	}
 	if err := file.Close(); err != nil {
 		cleanup()
-		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot close private MR input", err)
+		return "", func() {}, uxv1.Wrap(uxv1.CodeUpstream, "cannot close private JSON input", err)
 	}
 	return path, cleanup, nil
 }

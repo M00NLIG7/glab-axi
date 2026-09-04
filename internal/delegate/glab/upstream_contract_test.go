@@ -535,6 +535,94 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	}
 }
 
+// TestPinnedOfficialGlabIssueEditTLS proves that exact issue-edit validation
+// delegates only its fixed project, issue, and label GET routes. No synthetic
+// credential reaches a URI or body, and no issue PUT exists in the adapter.
+func TestPinnedOfficialGlabIssueEditTLS(t *testing.T) {
+	binary := officialGlabTestBinary()
+	if binary == "" {
+		t.Skip("official-glab package fixture not supplied")
+	}
+	binary, err := filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logicalHost := "gitlab.issue-edit-contract.example"
+	certificate, caPEM := selfManagedTestCertificate(t, logicalHost)
+	records := make(chan capturedOfficialGlabMutation, 3)
+	const issueBefore = `{"id":1001,"iid":42,"project_id":101,"title":"old","description":"body","state":"opened","web_url":"https://gitlab.issue-edit-contract.example/group/project/-/issues/42","labels":["keep"],"updated_at":"2026-08-15T12:00:00Z"}`
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		records <- capturedOfficialGlabMutation{
+			method: r.Method, host: r.Host, requestURI: r.RequestURI,
+			contentType: r.Header.Get("Content-Type"), body: body, readErr: readErr,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.RequestURI {
+		case "GET /api/v4/projects/group%2Fproject":
+			_, _ = w.Write([]byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.issue-edit-contract.example/group/project"}`))
+		case "GET /api/v4/projects/group%2Fproject/issues/42":
+			_, _ = w.Write([]byte(issueBefore))
+		case "GET /api/v4/projects/group%2Fproject/labels?include_ancestor_groups=true&page=2&per_page=100":
+			_, _ = w.Write([]byte(`[{"id":10,"name":"triage"}]`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	server.StartTLS()
+	defer server.Close()
+	proxy := newTestTLSTunnelProxy(logicalHost+":443", server.Listener.Addr().String())
+	defer proxy.Close()
+
+	home := t.TempDir()
+	caBundle := filepath.Join(home, "fake-gitlab-ca.pem")
+	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	syntheticToken := strings.Join([]string{"synthetic", "issue", "edit", "token"}, "-")
+	client := NewClient(ClientConfig{Path: binary, Env: []string{
+		"HOME=" + home,
+		"GLAB_CONFIG_DIR=" + filepath.Join(home, "config"),
+		"GITLAB_TOKEN=" + syntheticToken,
+		"HTTPS_PROXY=" + proxy.URL,
+		"NO_PROXY=",
+		"SSL_CERT_FILE=" + caBundle,
+		"PATH=/usr/bin:/bin",
+	}})
+	requests := []struct {
+		request  Request
+		wantURI  string
+		wantBody string
+	}{
+		{request: Request{Operation: OpIssueEditProject, Host: logicalHost, Repo: "group/project"}, wantURI: "/api/v4/projects/group%2Fproject", wantBody: `{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.issue-edit-contract.example/group/project"}`},
+		{request: Request{Operation: OpIssueEditView, Host: logicalHost, Repo: "group/project", IID: 42}, wantURI: "/api/v4/projects/group%2Fproject/issues/42", wantBody: issueBefore},
+		{request: Request{Operation: OpIssueEditLabelList, Host: logicalHost, Repo: "group/project", Page: 2, PerPage: 100}, wantURI: "/api/v4/projects/group%2Fproject/labels?include_ancestor_groups=true&page=2&per_page=100", wantBody: `[{"id":10,"name":"triage"}]`},
+	}
+	for _, test := range requests {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		response, requestErr := client.Do(ctx, test.request)
+		cancel()
+		if requestErr != nil || response.Write || response.UpstreamVersion != SupportedVersion || string(response.Body) != test.wantBody {
+			t.Fatalf("operation=%s response=%#v error=%v", test.request.Operation, response, requestErr)
+		}
+		select {
+		case captured := <-records:
+			if captured.readErr != nil || captured.host != logicalHost || captured.requestURI != test.wantURI || captured.method != http.MethodGet || len(captured.body) != 0 || strings.Contains(captured.requestURI, syntheticToken) || bytes.Contains(captured.body, []byte(syntheticToken)) {
+				t.Fatalf("operation=%s unsafe request=%#v", test.request.Operation, captured)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("operation=%s did not reach TLS fake server", test.request.Operation)
+		}
+	}
+	select {
+	case extra := <-records:
+		t.Fatalf("issue-edit operation made an extra request: %#v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 // TestPinnedOfficialGlabMRMergeTLS proves that the exact fixed merge argv sends
 // one PUT with the four-key private payload for success and rejection paths.
 // It uses only a synthetic runtime token and an isolated local TLS endpoint.
