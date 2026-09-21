@@ -39,6 +39,10 @@
             {
               "$ref": "ux-v1/resource-delete.schema.json",
               "properties": {"deletion": {"properties": {"action": {"enum": ["not_applied", "rejected", "ambiguous"]}}}}
+            },
+            {
+              "$ref": "ux-v1/issue-write.schema.json",
+              "properties": {"write": {"properties": {"outcome": {"enum": ["rejected", "ambiguous", "conflict"]}}}}
             }
           ]
         }
@@ -51,6 +55,10 @@
         {
           "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["variable"]}}},
           "then": {"properties": {"code": {"enum": ["validation_error", "authentication_error", "forbidden", "not_found", "conflict", "rate_limited", "ambiguous_variable"]}}}
+        },
+        {
+          "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["write"]}}},
+          "then": {"properties": {"code": {"enum": ["validation_error", "authentication_error", "forbidden", "not_found", "conflict", "rate_limited", "ambiguous_create", "ambiguous_update"]}}}
         }
       ]
     },

@@ -38,16 +38,22 @@ route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
 schema. Exact issue-edit validation pins only project, issue, and label-catalog
-GET routes. No issue PUT is exposed because GitLab accepts no expected issue
-revision and only label names. Guarded merge
+GET routes. No issue content/label PUT is exposed because GitLab accepts no
+expected issue revision and only label names. Separate typed issue create,
+plain note and reversible state-event operations are pinned by
+`issue-writes.json`; state changes explicitly do not claim compare-and-swap.
+Their identity, payload fields, quick-action denials and ambiguity semantics are
+exercised through the executable consumer fixture and actual pinned CLI against
+local TLS. Mutations use numeric project IDs after path/URL verification and
+never retry or reconcile by title/latest-comment search. Guarded merge
 pins four fixed reads and one fixed PUT; the PUT consumes only a private
 four-key JSON file, is invoked once, and is never delegated through interactive
 `glab mr merge` behavior.
 
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
-ensure, exact-MR-view normalization, read-only issue-edit validation, and
-guarded-merge requests with synthetic credentials; it never contacts a live
+ensure, exact-MR-view normalization, read-only issue-edit validation, typed
+issue writes and guarded-merge requests with synthetic credentials; it never contacts a live
 GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter

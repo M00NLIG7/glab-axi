@@ -160,6 +160,11 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 
 func writeFailure(stdout, stderr io.Writer, programName string, format output.Format, err error, meta uxv1.Meta) int {
 	failure := uxv1.Failure(err, meta)
+	if failure.Error != nil {
+		if receipt, ok := failure.Error.Receipt.(issueWriteOutput); ok && receipt.Write.Outcome == "ambiguous" {
+			failure.Help = []string{"inspect the selected project/issue and receipt before any new attempt; never infer deduplication from title or latest-comment matches"}
+		}
+	}
 	if programName == buildinfo.LegacyName {
 		if failure.Error != nil {
 			cloned := *failure.Error
@@ -248,6 +253,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 		return executeIssueView(ctx, client, target, parsed, meta)
 	case "issue edit":
 		return executeIssueEdit(ctx, client, target, parsed, meta)
+	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
+		return executeIssueWrite(ctx, client, target, parsed, meta)
 	case "mr list":
 		items, listMeta, err := fetchMRs(ctx, client, target, parsed.Limit)
 		return listOutput("mrs", items, meta, listMeta), err

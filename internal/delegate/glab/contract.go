@@ -64,6 +64,7 @@ type Request struct {
 	ID                          int64
 	IID                         int64
 	PipelineID                  int64
+	ProjectID                   int64
 	Page                        int
 	PerPage                     int
 	Tag                         string
@@ -122,6 +123,8 @@ func build(request Request) (invocation, error) {
 	}
 
 	switch request.Operation {
+	case OpIssueWriteView, OpIssueCreate, OpIssueNoteCreate, OpIssueState:
+		return buildIssueWrite(request)
 	case OpIssueList, OpMRList, OpPipelineList, OpReleaseList, OpLabelList:
 		page, err := pageArgs()
 		if err != nil {
@@ -261,7 +264,7 @@ func build(request Request) (invocation, error) {
 			endpoint = "projects/" + escapedRepo + "/search?" + query
 		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureProject, OpMergeProject, OpIssueEditProject:
+	case OpEnsureProject, OpMergeProject, OpIssueEditProject, OpIssueWriteProject:
 		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
 	case OpMergeMRView:
 		if request.IID < 1 {

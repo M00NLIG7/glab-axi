@@ -66,6 +66,37 @@
       "input_policy": "HIERARCHY widget only; parent plus paginated authorized direct children; no recursive or issue-link equivalence"
     },
     {
+      "name": "issue-write-project",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]
+    },
+    {
+      "name": "issue-write-view",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{project_id}/issues/{iid}"]
+    },
+    {
+      "name": "issue-create",
+      "kind": "fixed-api-write-json-object-one-attempt",
+      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{project_id}/issues", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
+      "input_fields": ["title", "description", "issue_type"],
+      "semantics": "issue-writes.json"
+    },
+    {
+      "name": "issue-note-create",
+      "kind": "fixed-api-write-json-object-one-attempt",
+      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{project_id}/issues/{iid}/notes", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
+      "input_fields": ["body"],
+      "semantics": "issue-writes.json"
+    },
+    {
+      "name": "issue-state",
+      "kind": "fixed-api-write-json-object-one-attempt",
+      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{project_id}/issues/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
+      "input_fields": ["state_event"],
+      "semantics": "issue-writes.json"
+    },
+    {
       "name": "issue-list",
       "kind": "read-json-page",
       "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
@@ -239,11 +270,11 @@
     "public api passthrough",
     "unguarded or alternate-strategy merge",
     "approve",
-    "comment, note, reply, or discussion resolution mutation",
-    "issue field or label mutation and issue creation",
+    "MR comment, note, reply, or discussion resolution mutation",
+    "existing issue title, description, label, assignment or hierarchy mutation",
     "merge request label or edit mutation",
     "label-resource mutation",
-    "close, reopen, or delete",
+    "MR close or reopen, and issue or MR delete",
     "repository mutation",
     "release mutation",
     "pipeline trigger, retry, cancel, or delete",

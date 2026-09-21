@@ -161,7 +161,8 @@ label names, so it cannot atomically bind the validated issue and label
 identities. Consequently,
 every non-no-op live request returns `safety_violation` with a deterministic
 `refused`/`not_applied` receipt under `error.receipt` before any PUT. The
-approved issue-edit surface and exclusions are pinned under
+issue-edit command exposes no content/label write operation. Its approved surface
+and exclusions are pinned under
 [`contracts/issue-edit`](contracts/issue-edit/).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
@@ -186,11 +187,23 @@ provider acknowledgment and bounded reconciliation. GitLab hidden/masked/
 protected semantics are distinct. No actual secret access or live acceptance
 is implied by the isolated tests.
 
-The current denial boundary includes generic API, direct issue editing,
-issue creation, unguarded or alternate merge, approve,
-comment/note/reply/resolve, merge-request and label-resource mutation,
-close/reopen, repository writes, and other release/pipeline/job writes.
-`issue edit --dry-run` is validation-only and changes no labels or issue fields.
+Typed `issue create`, `issue comment` (`note` alias), `issue close`, and
+`issue reopen` are separate one-attempt writes. They require explicit host,
+project, numeric project identity and canonical URL; existing issues also require
+their global ID and IID. Create takes private title/description files, comments
+private body files. Quick-action-shaped lines are refused before child work.
+State commands check the caller's observed state and read it back, but GitLab
+cannot enforce an atomic expected revision. Lost responses remain ambiguous,
+including when a later state read matches. Another invocation is a new attempt,
+not an exactly-once or deduplicated replay. No GitHub close reason, bundled
+comment, attachments, labels, assignees or milestone writes are included.
+See [`contracts/issue-writes`](contracts/issue-writes/) and leaf help.
+
+The denial boundary includes generic API, existing-issue content/label mutation,
+unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,
+merge-request and label-resource mutation, MR delete, repository writes,
+and other release/pipeline/job writes. `issue edit --dry-run` is validation-only and changes no
+labels or issue fields.
 
 ### Guarded native resource deletion
 

@@ -213,7 +213,7 @@ The state machine is:
 GitLab's issue PUT accepts no expected issue revision and only label names, so
 it cannot atomically bind the validated issue and requested numeric label
 identities. Any sequence of separate reads leaves a TOCTOU window, so the
-official-glab adapter exposes no issue PUT. Refusals carry the same bounded
+issue-edit command exposes no content/label PUT. Refusals carry the same bounded
 receipt shape under `error.receipt`. Receipts include canonical project/issue
 identity, caller evidence, ordered proposed fields, before/after values or
 SHA-256 evidence at output bounds, label IDs, observed `updated_at`,
@@ -222,6 +222,20 @@ action, outcome, and a machine-readable refusal reason. Validation has a
 approved v1 surface is pinned in `contracts/issue-edit/v1.json`; creation,
 comments, state changes, assignment, milestones, hierarchy, boards, approvals,
 credentials, and pipelines remain outside it.
+
+## Typed issue create, note and state writes
+
+`contracts/issue-writes/v1.json` is a separate contract, not an expansion of
+issue-edit concurrency guarantees. `commands_issue_write.go` sends one fixed
+private payload via the pinned adapter, after caller-bound numeric identity and
+canonical URL validation. The schema separates attempts, accepted response
+evidence, observed postconditions, ambiguity and no-write no-ops. Create and note
+never search for reconciliation. State readback never converts an unconfirmed
+mutation into success. No atomic expected revision or exclusive attribution is
+claimed. Preflight, mutation and readback budgets are 10/20/10 seconds inside the
+45-second write deadline. Fixed reads need no pagination; each response and the
+aggregate retain the standard byte caps. Body quick actions are denied before
+any child, preserving the intended single-operation boundary.
 
 ## MR ensure: bounded create/update write
 

@@ -2,6 +2,90 @@
 
 This file is generated from the executable command registry.
 
+## `issue create`
+
+```text
+gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE [--format toon|json]
+```
+
+Create one ordinary issue from private title and description files.
+
+One mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+No title search or replay inference: a lost response is ambiguous, and another invocation can create a duplicate.
+Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue comment`
+
+```text
+gl-axi issue comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE [--format toon|json]
+```
+
+Create one plain issue note (comment and note are aliases).
+
+One mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Only the direct create response can identify this note. Never searches the latest comment as proof.
+A lost response is ambiguous; another invocation can create a duplicate.
+Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue note`
+
+```text
+gl-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE [--format toon|json]
+```
+
+Create one plain issue note (comment and note are aliases).
+
+One mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Only the direct create response can identify this note. Never searches the latest comment as proof.
+A lost response is ambiguous; another invocation can create a duplicate.
+Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue close`
+
+```text
+gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed [--format toon|json]
+```
+
+Request one reversible GitLab issue state transition.
+
+One mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Returns unchanged only if the bound preflight state already matches.
+Success reports the desired state observed after an accepted response, not exclusive authorship.
+No GitHub close reason and no bundled comment. A lost response stays ambiguous even when the desired state is observed.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue reopen`
+
+```text
+gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed [--format toon|json]
+```
+
+Request one reversible GitLab issue state transition.
+
+One mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Returns unchanged only if the bound preflight state already matches.
+Success reports the desired state observed after an accepted response, not exclusive authorship.
+No GitHub close reason and no bundled comment. A lost response stays ambiguous even when the desired state is observed.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
 ## Dashboard
 
 ```text
@@ -626,4 +710,4 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, issue creation/editing/state/comment mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed issue create/comment/close/reopen are separate one-attempt contracts; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

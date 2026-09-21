@@ -83,6 +83,27 @@ is attempted. Default `board list` and `board view` never select issues; all
 query documents and tier differences are pinned in
 `contracts/gitlab-planning/v19.3.0/`.
 
+Issue create/note/state are pinned in `contracts/issue-writes/v1.json` and the
+provider's `issue-writes.json`. Explicit caller-bound numeric project and issue
+identities are checked against canonical HTTPS URLs. Mutations use numeric
+project routes, preventing a project-path rename from redirecting a write to a
+replacement project. Private descriptor-validated content is bounded before any
+child work. Slash-leading description/comment lines are denied even inside code
+fences because GitLab quick actions can perform additional mutations.
+
+There is one mutation attempt per invocation, without retry. No latest-note or
+title search can establish write authorship. Create/note success requires the
+direct response's exact identity and content. State commands validate two
+preflight observations and make one state-event PUT, followed by one exact
+readback. These are observations, NOT an atomic expected-revision guarantee or
+exclusive authorship. An unconfirmed mutation remains ambiguous even if the
+state readback matches. A confirmed response followed by state drift is a
+conflict. Already-matching bound states return a no-write receipt. Error receipts
+disclose attempt count, response evidence and observed state without raw provider
+errors. `retry_safe` and `atomic_precondition` are always false. Reinvoking create
+or comment can duplicate the resource. No comments are bundled with state changes,
+and GitHub close reasons are not translated into invented GitLab properties.
+
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
 project ID, full path, and URL plus issue global/project IDs. Title and
@@ -100,7 +121,7 @@ GitLab's issue PUT accepts no expected issue revision and only label names, so
 it cannot atomically bind the validated issue and requested numeric label
 identities. A non-no-op live request therefore
 returns `safety_violation` with a deterministic `refused`/`not_applied` receipt
-under `error.receipt` before mutation. The adapter has no issue PUT operation,
+under `error.receipt` before mutation. Issue edit has no content/label PUT operation,
 creates no mutation body, performs no post-write reconciliation, and cannot
 expose residual TOCTOU
 as a supported write.
@@ -143,10 +164,11 @@ additionally requires:
   preserves only a recognized framed rejection, and otherwise
   `ambiguous_merge` prevents a blind retry.
 
-Generic API, direct issue editing or creation, alternate/unguarded merge,
-approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-close/reopen, repository mutation, and other release/pipeline/job writes remain
-denied. Issue-edit preview changes no issue field or label. The exact native
+Generic API, existing-issue content/label mutation, alternate/unguarded merge,
+approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
+mutation, MR delete, repository mutation, and other release/pipeline/job writes
+remain denied. Issue-edit preview
+changes no issue field or label. The exact native
 deletion exception below grants no broader write authority.
 
 ## Guarded native resource deletion
