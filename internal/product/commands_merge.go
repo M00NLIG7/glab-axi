@@ -100,6 +100,14 @@ func validateParsedCommand(parsed Parsed) error {
 	if isIssueWrite(parsed) {
 		return validateIssueWriteParsed(parsed)
 	}
+	if path == "issue discussions" || path == "mr approvals" {
+		if _, err := positivePosition(parsed, "resource IID"); err != nil {
+			return err
+		}
+		if head := parsed.Values["--expected-head"]; head != "" && !validMergeSHA(head) {
+			return uxv1.NewError(uxv1.CodeValidation, "--expected-head must be a lowercase 40- or 64-hex SHA")
+		}
+	}
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}

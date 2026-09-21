@@ -206,6 +206,8 @@ type MRDiscussion struct {
 }
 
 type discussionPageNormalizer struct {
+	// Empty retains the shipped MR contract. Issue discussions select Issue.
+	noteableType      string
 	mrID              int64
 	iid               int64
 	projectID         int64
@@ -537,8 +539,15 @@ func (n *discussionPageNormalizer) normalizeNote(source upstreamDiscussionNote) 
 	if source.NoteableID < 1 || source.ProjectID < 1 || source.NoteableType == "" || source.NoteableIID != nil && *source.NoteableIID < 1 {
 		return DiscussionNote{}, false, malformed("discussion note resource identity")
 	}
-	if source.NoteableID != n.mrID || source.ProjectID != n.projectID || source.NoteableType != "MergeRequest" || source.NoteableIID != nil && *source.NoteableIID != n.iid {
-		return DiscussionNote{}, false, uxv1.NewError(uxv1.CodeSafety, "official glab returned a discussion note outside the selected merge request")
+	noteableType := n.noteableType
+	if noteableType == "" {
+		noteableType = "MergeRequest"
+	}
+	if source.NoteableID != n.mrID || source.ProjectID != n.projectID || source.NoteableType != noteableType || source.NoteableIID != nil && *source.NoteableIID != n.iid {
+		return DiscussionNote{}, false, uxv1.NewError(uxv1.CodeSafety, "official glab returned a discussion note outside the selected resource")
+	}
+	if noteableType == "Issue" && source.Position != nil {
+		return DiscussionNote{}, false, malformed("issue note diff position")
 	}
 	if !resolved && (source.ResolvedBy != nil || source.ResolvedAt != nil) {
 		return DiscussionNote{}, false, malformed("discussion note resolution")

@@ -260,6 +260,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		return listOutput("issues", items, meta, listMeta), err
 	case "issue view":
 		return executeIssueView(ctx, client, target, parsed, meta)
+	case "issue discussions":
+		return executeIssueDiscussions(ctx, client, target, parsed, meta)
 	case "issue edit":
 		return executeIssueEdit(ctx, client, target, parsed, meta)
 	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
@@ -271,6 +273,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		return executeMRView(ctx, client, target, parsed, meta)
 	case "mr checks":
 		return executeMRChecks(ctx, client, target, parsed, meta)
+	case "mr approvals":
+		return executeMRApprovals(ctx, client, target, parsed, meta)
 	case "mr discussions":
 		return executeMRDiscussions(ctx, client, target, parsed, meta)
 	case "mr diff":

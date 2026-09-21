@@ -307,7 +307,9 @@ func classifyChildFailure(stderr []byte, cause error, write bool, operation Oper
 	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 2 {
 		status, parseErr := strconv.Atoi(string(match[1]))
 		if parseErr == nil {
-			if write {
+			// Approval availability needs a definite provider rejection, not
+			// a category guessed from arbitrary provider response text.
+			if write || operation == OpMRApprovals {
 				if rejection, ok := operationHTTPRejection(operation, status); ok {
 					rejection.Cause = cause
 					return rejection

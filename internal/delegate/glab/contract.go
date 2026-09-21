@@ -32,6 +32,8 @@ const (
 	OpMRView                     Operation = "mr-view"
 	OpMRDiff                     Operation = "mr-diff"
 	OpMRChecks                   Operation = "mr-checks"
+	OpIssueDiscussions           Operation = "issue-discussions"
+	OpMRApprovals                Operation = "mr-approvals"
 	OpMRDiscussions              Operation = "mr-discussions"
 	OpMRDiscussionsTargetProject Operation = "mr-discussions-target-project"
 	OpMRDiscussionsSourceProject Operation = "mr-discussions-source-project"
@@ -193,14 +195,24 @@ func build(request Request) (invocation, error) {
 		}
 		args := []string{"ci", "get", "--merge-request", strconv.FormatInt(request.IID, 10), "--output", "json"}
 		return invocation{args: append(args, repoArgs()...), host: request.Host, maxStdout: limits.MaxOperationBytes, outputKind: outputJSON}, nil
-	case OpMRDiscussions:
+	case OpMRApprovals:
 		if request.IID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
+		}
+		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d/approvals", escapedRepo, request.IID)
+		return jsonObject(append(apiPrefix(), endpoint)), nil
+	case OpMRDiscussions, OpIssueDiscussions:
+		if request.IID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "resource IID must be a positive integer")
 		}
 		if _, err := pageArgs(); err != nil {
 			return invocation{}, err
 		}
-		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?page=%d&per_page=%d", escapedRepo, request.IID, request.Page, request.PerPage)
+		resource := "merge_requests"
+		if request.Operation == OpIssueDiscussions {
+			resource = "issues"
+		}
+		endpoint := fmt.Sprintf("projects/%s/%s/%d/discussions?page=%d&per_page=%d", escapedRepo, resource, request.IID, request.Page, request.PerPage)
 		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpMRDiscussionsTargetProject:
 		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil

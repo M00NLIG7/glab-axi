@@ -71,6 +71,15 @@ TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
 
+Collaboration read equivalents also include `issue discussions <iid>` for
+comments/threaded notes and `mr approvals <iid> [--expected-head SHA]` for
+assigned reviewers and current GitLab approval state. They use separate closed
+schemas without changing default issue/MR views. Assigned reviewers and notes
+are not GitHub review submissions. Unknown/denied approval state never becomes
+approval or zero required approvals; edition/license remains unknown. See the
+[versioned collaboration contract](contracts/collaboration-reads/README.md) for
+bounds, identity rechecks, uncertainty and exact scope.
+
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note
 order is preserved. Each successful result binds the MR global ID and IID,

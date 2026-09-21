@@ -1,0 +1,65 @@
+{
+  "schema": "glab-axi/collaboration-reads/v1",
+  "reference": {
+    "repository": "https://github.com/kunchenguid/gh-axi",
+    "commit": "2bffd9a5b60ded64d6c9851683b27a480173a7ee",
+    "issue_view_comments": "issue discussions <iid>",
+    "pr_view_reviews": "mr approvals <iid> for assigned reviewers and current approval summary; existing mr discussions <iid> for threaded/inline notes, not GitHub review submissions"
+  },
+  "provider": {
+    "glab": "1.112.0",
+    "commit": "816e3a52411aba73d90237859fdc6ecbc86bd169",
+    "client": "gitlab.com/gitlab-org/api/client-go/v2 v2.53.0",
+    "source_sha256": {
+      "discussions.go": "62bc26000cfdb664f7bb918dea0d9fc8bda5161739440ec3429720d9ae3c537e",
+      "notes.go": "78ee05764f68759f42b6b10e9bbf7852012db352c84c482a9fbd429c8e867ef6",
+      "merge_requests.go": "7c76bdba9032e196c6fe28424597fdf066a2ac5623a237c2291d5f55a70b73d5",
+      "merge_request_approvals.go": "d109e353dfea00fb70795402bc7886120a499e9d11ecf28bd65f48987ee4e187"
+    },
+    "sources": [
+      "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/discussions.go#L252-267",
+      "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/notes.go#L64-91",
+      "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/merge_requests.go#L64-145",
+      "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/merge_request_approvals.go#L52-85",
+      "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/merge_request_approvals.go#L199-209"
+    ]
+  },
+  "operations": [
+    {
+      "name": "issue-discussions",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/issues/{iid}/discussions?page={page}&per_page={per_page}"],
+      "identity_reads": ["issue-edit-project", "issue-edit-view"],
+      "limit_unit": "threads",
+      "noteable_type": "Issue",
+      "empty": "complete empty array, never inferred from a provider error"
+    },
+    {
+      "name": "mr-approvals",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/approvals"],
+      "identity_reads": ["mr-discussions-target-project", "mr-view", "mr-discussions-source-project"],
+      "reviewers": "mr-view reviewers are assigned users, not submitted reviews or approvals",
+      "state": "approved and not_approved only from an explicit provider approved boolean; missing/null is unknown, never inferred from approvals_left or approved_by",
+      "unavailable": "only a definite HTTP 403 or 404 on approvals becomes unavailable with incomplete metadata; authentication, cancellation and all other errors fail",
+      "tier": "unknown: edition, license and rule availability cannot be inferred from approval counts, HTTP 403 or HTTP 404",
+      "limit_unit": "each embedded user array; validate all records before trimming",
+      "rules": "not exposed: the shipped official mr-view internally attempts approval_state and tolerates failure; this command never interprets that as approval or tier evidence. Explicit approvals GET supplies the summary."
+    }
+  ],
+  "bounds": {
+    "limit": [1, 1000],
+    "default_limit": 30,
+    "pages": 10,
+    "page_bytes": 2097152,
+    "operation_bytes": 8388608,
+    "deadline_seconds": 30,
+    "note_records": 1000,
+    "note_body_bytes_each": 131072,
+    "note_bodies_bytes_total": 2097152
+  },
+  "guarantees": [
+    "exact host/project/global ID/IID and canonical resource URL binding",
+    "MR source/target projects, branches and base/head snapshot binding reused from discussions",
+    "identity rechecked after collection; observational window, not an atomic or merge-authorization receipt",
+    "no provider mutation, credential change, arbitrary API surface or native-v1/default-view schema change"
+  ]
+}
