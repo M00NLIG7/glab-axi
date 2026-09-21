@@ -66,6 +66,15 @@ ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
 read-only issue-edit validation, test-only issue-write characterization and
 guarded-merge requests with synthetic credentials; it never contacts a live
 GitLab API.
+Issue/MR list filter variants are pinned in `capabilities.json` and
+`TestPinnedOfficialGlabReadFiltersTLS`. The existing help transcript proves
+state, labels, author/assignee, milestone, issue ordering, MR branches and draft
+flags. The TLS fixture proves exact query encoding, username-to-ID GET reads,
+and `wip=yes|no` draft semantics. Local `--fields` and `--body-limit` selection
+never changes upstream argv or raises provider bounds. The fixture uses only a
+synthetic per-host `ca_cert` profile so it also runs on macOS without system trust
+or credential-store changes.
+
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter
 tests before changing the runtime pin.

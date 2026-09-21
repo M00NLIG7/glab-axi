@@ -63,7 +63,7 @@ jobs:
         run: |
           go test ./internal/compat -run '^TestNoMistakesV1454Contract$' -count=1
           go test ./internal/product \
-            -run '^(TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar|TestPinnedIssueEditConsumerContractDrivesGrammar|TestPinnedIssueWritesConsumerContract)$' \
+            -run '^(TestPinnedFirstmateConsumerContractDrivesExactMergeGrammar|TestPinnedIssueEditConsumerContractDrivesGrammar|TestPinnedIssueWritesConsumerContract|TestPinnedReadParityConsumerContract)$' \
             -count=1
 
       - name: Verify GitLab protocol and security behavior
@@ -198,4 +198,4 @@ jobs:
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS)$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS|TestPinnedOfficialGlabReadFiltersTLS)$' -count=1

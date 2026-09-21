@@ -68,7 +68,9 @@
     {
       "name": "issue-list",
       "kind": "read-json-page",
-      "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+      "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"],
+      "optional_argv_before_page": ["--all|--closed", "--label={exact_label} (repeatable, maximum 20)", "--author={username}", "--assignee={username}", "--milestone={title}", "--order=created_at|updated_at with --sort=desc"],
+      "filter_evidence": "help.txt issue list; TestPinnedOfficialGlabReadFiltersTLS: exact AND labels and milestone query, username GET resolution to author_id/assignee_id, state and ordering. Unknown/duplicate/special selectors fail before child work."
     },
     {
       "name": "issue-view",
@@ -93,7 +95,9 @@
     {
       "name": "mr-list",
       "kind": "read-json-page",
-      "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+      "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"],
+      "optional_argv_before_page": ["--all|--closed|--merged", "--label={exact_label} (repeatable, maximum 20)", "--author={username}", "--assignee={username}", "--milestone={title}", "--source-branch={branch}", "--target-branch={branch}", "--draft|--not-draft"],
+      "filter_evidence": "help.txt mr list; TestPinnedOfficialGlabReadFiltersTLS: exact source_branch/target_branch, username IDs, labels/milestone/state and wip=yes|no. Field/body selection is local and never forwarded."
     },
     {
       "name": "mr-view",

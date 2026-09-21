@@ -100,6 +100,9 @@ func validateParsedCommand(parsed Parsed) error {
 	if isIssueWrite(parsed) {
 		return validateIssueWriteParsed(parsed)
 	}
+	if path == "issue list" || path == "issue view" || path == "mr list" || path == "mr view" {
+		return validateReadParsed(parsed)
+	}
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}

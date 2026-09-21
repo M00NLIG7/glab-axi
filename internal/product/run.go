@@ -256,7 +256,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		}
 		return commandOutput{data: map[string]any{"authenticated": true, "host": target.Host}, meta: meta}, nil
 	case "issue list":
-		items, listMeta, err := fetchIssues(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchSelectedIssues(ctx, client, target, parsed)
 		return listOutput("issues", items, meta, listMeta), err
 	case "issue view":
 		return executeIssueView(ctx, client, target, parsed, meta)
@@ -265,7 +265,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
 		return executeIssueWrite(ctx, target, parsed, deps, meta)
 	case "mr list":
-		items, listMeta, err := fetchMRs(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchSelectedMRs(ctx, client, target, parsed)
 		return listOutput("mrs", items, meta, listMeta), err
 	case "mr view":
 		return executeMRView(ctx, client, target, parsed, meta)

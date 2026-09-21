@@ -15,11 +15,11 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - `gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
 - `gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
 - `gl-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
-- `gl-axi issue list [global flags]` - List project issues.
-- `gl-axi issue view <iid> [global flags]` - View one project issue.
+- `gl-axi issue list [filter/selection flags] [global flags]` - List project issues with typed filters and bounded field selection.
+- `gl-axi issue view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]` - View one project issue with bounded field/body selection.
 - `gl-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Validate one exact project issue edit without mutation.
-- `gl-axi mr list [global flags]` - List project merge requests.
-- `gl-axi mr view <iid> [global flags]` - View one merge request.
+- `gl-axi mr list [filter/selection flags] [global flags]` - List project merge requests with typed filters and bounded field selection.
+- `gl-axi mr view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]` - View one merge request with bounded field/body selection.
 - `gl-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.
 - `gl-axi mr discussions <iid> [global flags]` - View bounded, read-only discussion evidence for one merge request.
 - `gl-axi mr diff <iid> [global flags]` - View a bounded, color-free merge-request diff.
