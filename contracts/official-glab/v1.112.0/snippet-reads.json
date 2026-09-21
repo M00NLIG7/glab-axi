@@ -1,0 +1,37 @@
+{
+  "schema": "glab-axi/snippet-read-contract/v1",
+  "official_glab": "1.112.0 (816e3a52)",
+  "client_go": "v2.53.0",
+  "gitlab_source_tag": "v18.0.0-ee",
+  "sources": [
+    "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/users.go",
+    "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/snippets.go",
+    "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/project_snippets.go",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/doc/api/snippets.md",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/doc/api/project_snippets.md",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/lib/api/snippets.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/lib/api/entities/snippet.rb"
+  ],
+  "routes": {
+    "snippet-user": "user",
+    "snippet-project": "projects/{escaped_repo}",
+    "snippet-list-personal": "snippets?page={page}&per_page={per_page}",
+    "snippet-list-project": "projects/{escaped_repo}/snippets?page={page}&per_page={per_page}",
+    "snippet-view-personal": "snippets/{id}",
+    "snippet-view-project": "projects/{escaped_repo}/snippets/{id}",
+    "snippet-file-personal": "snippets/{id}/files/{escaped_ref}/{escaped_filename}/raw",
+    "snippet-file-project": "projects/{escaped_repo}/snippets/{id}/files/{escaped_ref}/{escaped_filename}/raw"
+  },
+  "argv_prefix": ["api", "--method", "GET", "--hostname", "{host}"],
+  "fields": ["id", "title", "description", "visibility", "author.id", "author.username", "project_id", "web_url", "raw_url", "files.path", "files.raw_url", "created_at", "updated_at"],
+  "semantics": {
+    "personal_list": "GET snippets is authenticated and author-scoped but can include project snippets; exclude project_id != null locally, retaining page scan completeness.",
+    "personal_view": "Exact personal snippet, any owner visible to the authenticated identity; never claim own-only view.",
+    "project": "Bind numeric project identity and exact project path before snippet reads.",
+    "visibility": "Local exact public/internal/private filter, not an undocumented provider query. Private personal means creator-only; private project means project members. No secret/unlisted equivalence.",
+    "files": "Current entity exposes files.path and root-ref raw URLs. Never follow returned URLs. Validate host, scope, ID, filename and ref, then construct the fixed API file route. Missing file inventory is unavailable, not an empty inventory.",
+    "authentication": "GET user must succeed before listing/viewing; no anonymous fallback or credential inspection.",
+    "bounds": "30 second deadline, 10 pages of at most 100, 2 MiB response, 8 MiB operation; content defaults to 32768 UTF-8 bytes and can be lowered or raised only up to 131072. No raw/full escape."
+  },
+  "reference": "https://github.com/kunchenguid/gh-axi/blob/2bffd9a5b60ded64d6c9851683b27a480173a7ee/src/commands/gist.ts"
+}

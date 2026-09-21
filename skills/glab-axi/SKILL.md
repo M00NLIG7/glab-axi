@@ -16,6 +16,8 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]` - Create one plain issue note (comment and note are aliases).
 - `glab-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
 - `glab-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
+- `glab-axi snippet list --scope personal|project [-R NAMESPACE/PROJECT] [--visibility public|internal|private] [--fields FIELD,...] [global flags]` - List authenticated personal or project snippets.
+- `glab-axi snippet view <id|url> --scope personal|project [-R NAMESPACE/PROJECT] [--files | --filename PATH [--content-limit BYTES]] [--fields FIELD,...] [--hostname HOST] [--format toon|json]` - View snippet metadata, file names, or one bounded file.
 - `glab-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `glab-axi issue list [global flags]` - List project issues.
 - `glab-axi issue view <iid> [global flags]` - View one project issue.

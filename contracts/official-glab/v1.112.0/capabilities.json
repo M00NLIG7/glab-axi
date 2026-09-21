@@ -29,7 +29,13 @@
     "login_environment_credentials": "removed before child execution; approved token variables remain available only to headless reads",
     "glab_axi_policy": "require a real human TTY, preflight a non-secret secure-store probe, and abort on the pinned fallback warning before token acquisition"
   },
+  "snippet_read_evidence": "snippet-reads.json",
   "operations": [
+    {"name": "snippet-user", "kind": "fixed-api-read-json-object", "argv": ["api", "--method", "GET", "--hostname", "{host}", "user"]},
+    {"name": "snippet-project", "kind": "fixed-api-read-json-object", "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]},
+    {"name": "snippet-list", "kind": "fixed-api-read-json-page", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets?page={page}&per_page={per_page}"], "input_policy": "scope_prefix is empty for personal or projects/{escaped_repo}/ for project; explicit closed scope required"},
+    {"name": "snippet-view", "kind": "fixed-api-read-json-object", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets/{id}"]},
+    {"name": "snippet-file", "kind": "fixed-api-read-text", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets/{id}/files/{escaped_ref}/{escaped_filename}/raw"], "input_policy": "positive ID, exact validated inventory filename and root ref; never execute provider raw_url"},
     {
       "name": "board-list",
       "kind": "fixed-graphql-query-page",

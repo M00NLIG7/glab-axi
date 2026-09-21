@@ -106,6 +106,9 @@ func validateParsedCommand(parsed Parsed) error {
 	if path == "job artifacts" || path == "job download" || path == "release download" {
 		return validateDownloadParsed(parsed)
 	}
+	if path == "snippet list" || path == "snippet view" {
+		return validateSnippetParsed(parsed)
+	}
 	if path != "mr merge" {
 		return nil
 	}

@@ -23,6 +23,11 @@ const (
 type Operation string
 
 const (
+	OpSnippetUser                Operation = "snippet-user"
+	OpSnippetProject             Operation = "snippet-project"
+	OpSnippetList                Operation = "snippet-list"
+	OpSnippetView                Operation = "snippet-view"
+	OpSnippetFile                Operation = "snippet-file"
 	OpIssueList                  Operation = "issue-list"
 	OpIssueView                  Operation = "issue-view"
 	OpIssueEditProject           Operation = "issue-edit-project"
@@ -72,6 +77,8 @@ type Request struct {
 	Source                      string
 	Target                      string
 	InputFile                   string
+	Filename                    string
+	Ref                         string
 	Group                       string
 	ListID                      int64
 	Cursor                      string
@@ -126,6 +133,47 @@ func build(request Request) (invocation, error) {
 	}
 
 	switch request.Operation {
+	case OpSnippetUser:
+		return jsonObject(append(apiPrefix(), "user")), nil
+	case OpSnippetProject:
+		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
+	case OpSnippetList, OpSnippetView, OpSnippetFile:
+		endpoint := "snippets"
+		switch request.Scope {
+		case "personal":
+			if request.Repo != "" {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "personal snippets cannot select a project")
+			}
+		case "project":
+			if err := safeurl.ValidateProject(request.Repo); err != nil {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "project snippets require a valid project")
+			}
+			endpoint = "projects/" + escapedRepo + "/snippets"
+		default:
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "snippet scope must be personal or project")
+		}
+		if request.Operation == OpSnippetList {
+			if _, err := pageArgs(); err != nil {
+				return invocation{}, err
+			}
+			endpoint += fmt.Sprintf("?page=%d&per_page=%d", request.Page, request.PerPage)
+			return jsonPage(append(apiPrefix(), endpoint)), nil
+		}
+		if request.ID < 1 {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "snippet ID must be positive")
+		}
+		endpoint += "/" + strconv.FormatInt(request.ID, 10)
+		if request.Operation == OpSnippetFile {
+			if err := ValidateSnippetFilename(request.Filename); err != nil {
+				return invocation{}, err
+			}
+			if err := safeurl.ValidateBranch(request.Ref); err != nil {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "invalid snippet file ref")
+			}
+			endpoint += "/files/" + url.PathEscape(request.Ref) + "/" + url.PathEscape(request.Filename) + "/raw"
+			return invocation{args: append(apiPrefix(), endpoint), host: request.Host, maxStdout: limits.MaxJSONPageBytes, outputKind: outputText}, nil
+		}
+		return jsonObject(append(apiPrefix(), endpoint)), nil
 	case OpIssueList, OpMRList, OpPipelineList, OpReleaseList, OpLabelList:
 		page, err := pageArgs()
 		if err != nil {
@@ -340,7 +388,7 @@ func build(request Request) (invocation, error) {
 
 func operationNeedsRepo(op Operation) bool {
 	switch op {
-	case OpRepoList, OpMRDiscussionsSourceProject:
+	case OpSnippetUser, OpSnippetList, OpSnippetView, OpSnippetFile, OpRepoList, OpMRDiscussionsSourceProject:
 		return false
 	case OpSearch:
 		return false // validated after the scope is known

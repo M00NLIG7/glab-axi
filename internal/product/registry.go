@@ -46,6 +46,8 @@ type FlagDefinition struct {
 }
 
 var definitions = append(issueWriteDefinitions(), append(append([]Definition{
+	{Path: []string{"snippet", "list"}, Summary: "List authenticated personal or project snippets.", Details: snippetDetails, Usage: "gl-axi snippet list --scope personal|project [-R NAMESPACE/PROJECT] [--visibility public|internal|private] [--fields FIELD,...] [global flags]", RepoMode: RepoOptional, Flags: snippetFlags(false), Schema: "snippet-list", Backend: "official-glab"},
+	{Path: []string{"snippet", "view"}, Summary: "View snippet metadata, file names, or one bounded file.", Details: snippetDetails, Usage: "gl-axi snippet view <id|url> --scope personal|project [-R NAMESPACE/PROJECT] [--files | --filename PATH [--content-limit BYTES]] [--fields FIELD,...] [--hostname HOST] [--format toon|json]", RepoMode: RepoOptional, Positionals: 1, Flags: snippetFlags(true), Schema: "snippet-view", Backend: "official-glab", NoLimit: true},
 	{Path: nil, Summary: "Show a bounded current-project dashboard.", Usage: "gl-axi [global flags]", RepoMode: RepoRequired, Schema: "dashboard", Backend: "official-glab"},
 	{Path: []string{"auth", "login"}, Summary: "Authenticate through official glab in a human TTY.", Usage: "gl-axi auth login [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-login", Backend: "official-glab"},
 	{Path: []string{"auth", "status"}, Summary: "Check official-glab authentication without displaying a token.", Usage: "gl-axi auth status [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-status", Backend: "official-glab"},
