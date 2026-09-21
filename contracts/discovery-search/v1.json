@@ -1,0 +1,47 @@
+{
+  "schema": "glab-axi/discovery-search/v1",
+  "reference": {"repository": "kunchenguid/gh-axi", "revision": "2bffd9a5b60ded64d6c9851683b27a480173a7ee", "files": ["src/commands/repo.ts", "src/commands/search.ts"]},
+  "provider": {"cli": "1.112.0", "cli_revision": "816e3a52411aba73d90237859fdc6ecbc86bd169", "client": "gitlab.com/gitlab-org/api/client-go/v2@v2.53.0"},
+  "sources": [
+    {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/projects.go", "sha256": "a828ce24d7268fd01a113e596c9d3cfc2bf4af2ecc192e30870614733dc8ceaf", "symbols": ["ListProjectsOptions", "ListProjects", "ListUserProjects", "Project", "ProjectNamespace"]},
+    {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/groups.go", "sha256": "339b48565c427fda20843c7f42be20c3fc3d62a2aabad33925f9a95f826299d5", "symbols": ["ListGroupProjectsOptions", "ListGroupProjects", "GetGroup"]},
+    {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/search.go", "sha256": "1c906d4697ecd063359257d56b5df01cd6d37bd5c38dae3a3e9efabec66222e1", "symbols": ["SearchOptions", "Issues", "IssuesByGroup", "IssuesByProject", "Projects", "ProjectsByGroup"]},
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/search.rb", "sha256": "6f434692f1f1d1fdf795a569b02c7385c0edbaf84c63e21cd6d853ee9267e568", "symbols": ["search_service", "get :search"]},
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/helpers/search_helpers.rb", "sha256": "6951f90b2b1ca7b4e891e7d3d3b7af3c3e89dd8f72f0ee7712527d32fbb6cfde", "symbols": ["global_search_scopes", "group_search_scopes", "project_search_scopes", "search_states"]},
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/doc/api/search.md", "sha256": "9e34d90b5dff7447a5e07ef127d367daa536a4d55e5ec209669c8ab0398444aa", "symbols": ["order_by", "sort", "state", "Tier"]}
+  ],
+  "routes": [
+    {"operation": "repo-discovery", "method": "GET", "path": "projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "users/{username}/projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "groups/{escaped_full_path}/projects", "query": ["page", "per_page", "visibility", "archived", "search", "order_by", "sort", "with_shared=false", "include_subgroups"]},
+    {"operation": "discovery-group", "method": "GET", "path": "groups/{escaped_full_path}", "query": ["with_projects=false"]},
+    {"operation": "discovery-project", "method": "GET", "path": "projects/{escaped_repo_or_positive_id}", "query": []},
+    {"operation": "search", "method": "GET", "path": "search", "query": ["scope=projects|issues|merge_requests", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]},
+    {"operation": "search", "method": "GET", "path": "groups/{escaped_full_path}/search", "query": ["scope=projects|issues|merge_requests", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]},
+    {"operation": "search", "method": "GET", "path": "projects/{escaped_repo}/search", "query": ["scope=issues|merge_requests|commits|blobs", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]}
+  ],
+  "fields": {
+    "repository": ["id", "name", "path_with_namespace", "web_url", "namespace.kind", "namespace.full_path", "namespace.id", "visibility", "archived", "http_url_to_repo", "ssh_url_to_repo"],
+    "group": ["id", "full_path", "web_url"],
+    "search": ["id", "iid", "project_id", "web_url", "path_with_namespace", "state"]
+  },
+  "selectors": {
+    "repo list": ["--owner USER (or positional USER)", "--group FULL_PATH", "--include-subgroups", "--visibility public|internal|private", "--archived", "--active", "--language LANGUAGE (host/user only)", "--fields clone_urls"],
+    "repo view": ["--fields clone_urls"],
+    "search issues": ["--scope project|host", "--group FULL_PATH", "--state opened|closed|all", "--sort created"],
+    "search mrs": ["--scope project|host", "--group FULL_PATH", "--state opened|closed|merged|all", "--sort created"],
+    "search repos": ["--group FULL_PATH", "--owner USER", "--language LANGUAGE (host/user only)", "--sort created"],
+    "search commits": [],
+    "search code": []
+  },
+  "residuals": [
+    "GitHub owner is ambiguous between user and organization; explicit user --owner and GitLab --group are distinct",
+    "GitLab language means uses programming language, not GitHub primary language; unavailable for group discovery",
+    "Search labels, assignee, author, draft, review and arbitrary sort are not supported by the pinned search routes; never encoded as guessed query qualifiers",
+    "GitHub stars comparisons and code language have no faithful mapping in this slice",
+    "Commit author login and author-date/committer-date sorting have no faithful search mapping in this slice",
+    "Host/group code and commit search require advanced-search/tier and per-result identity contracts not exposed in this slice",
+    "No filter-only search or arbitrary GitHub qualifier parser is added; the existing query remains GitLab-native search text",
+    "Clone URLs are optional identity metadata only; SSH alternate hosts/users/ports and insecure HTTP are refused, never cloned"
+  ]
+}

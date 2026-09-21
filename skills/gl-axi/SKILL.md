@@ -37,12 +37,12 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - `gl-axi release list [global flags]` - List project releases and bounded download metadata.
 - `gl-axi release download <tag> --auth-source native --hostname HOST -R PROJECT --expected-sha SHA --asset-id ID --asset-name NAME --destination ABSOLUTE_NEW_DIRECTORY` - Download one exact release asset into a new private directory.
 - `gl-axi release view [tag] [global flags]` - View a release and project-bound download metadata (latest when omitted).
-- `gl-axi repo list [--hostname HOST] [--limit N]` - List repositories visible to the official profile.
-- `gl-axi repo view [namespace/project] [global flags]` - View a project/repository.
+- `gl-axi repo list [USER] [--owner USER | --group FULL_PATH] [global flags]` - Discover repositories with explicit user/group ownership.
+- `gl-axi repo view [namespace/project] [--fields clone_urls] [global flags]` - View a project/repository.
 - `gl-axi label list [global flags]` - List project labels.
-- `gl-axi search issues <query> [global flags]` - Search issues in one project.
-- `gl-axi search mrs <query> [global flags]` - Search merge requests in one project.
-- `gl-axi search repos <query> [--hostname HOST] [--limit N]` - Search projects/repositories on one host.
+- `gl-axi search issues <query> [--scope project|host | --group FULL_PATH] [global flags]` - Search issues in a project, group, or explicit host scope.
+- `gl-axi search mrs <query> [--scope project|host | --group FULL_PATH] [global flags]` - Search merge requests in a project, group, or explicit host scope.
+- `gl-axi search repos <query> [--group FULL_PATH | --owner USER] [--language LANGUAGE] [--hostname HOST] [--limit N]` - Search projects/repositories on one host or within a group/user namespace.
 - `gl-axi search commits <query> [global flags]` - Search commits in one project.
 - `gl-axi search code <query> [global flags]` - Search code blobs in one project.
 - `gl-axi board list (-R PROJECT | --group GROUP) [global flags]` - List GitLab issue boards in one project or group.

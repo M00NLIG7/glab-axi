@@ -270,6 +270,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 			return Parsed{}, err
 		}
 	}
+	if err := validateDiscoveryParsed(parsed); err != nil {
+		return Parsed{}, err
+	}
 	if err := validateParsedCommand(parsed); err != nil {
 		return Parsed{}, err
 	}

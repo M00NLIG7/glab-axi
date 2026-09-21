@@ -305,7 +305,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 	case "release view":
 		return executeReleaseView(ctx, client, target, parsed, meta)
 	case "repo list":
-		items, listMeta, err := fetchRepos(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchDiscoveryRepos(ctx, client, target, parsed)
 		return listOutput("repositories", items, meta, listMeta), err
 	case "repo view":
 		return executeRepoView(ctx, client, target, parsed, meta)
@@ -313,7 +313,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		items, listMeta, err := fetchLabels(ctx, client, target, parsed.Limit)
 		return listOutput("labels", items, meta, listMeta), err
 	case "search issues", "search mrs", "search repos", "search commits", "search code":
-		items, listMeta, err := fetchSearch(ctx, client, target, parsed)
+		items, listMeta, err := fetchScopedSearch(ctx, client, target, parsed)
 		return listOutput("results", items, meta, listMeta), err
 	case "":
 		return executeDashboard(ctx, client, target, parsed, meta)

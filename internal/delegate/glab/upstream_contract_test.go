@@ -275,6 +275,7 @@ func TestPinnedOfficialGlabEnsureCreateTLS(t *testing.T) {
 	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	payload := map[string]string{
 		"description":   "body",
 		"source_branch": "fm/test/slash",
@@ -695,6 +696,7 @@ func TestPinnedOfficialGlabMRMergeTLS(t *testing.T) {
 	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	expectedHead := "0123456789abcdef0123456789abcdef01234567"
 	payload := map[string]any{
 		"sha": expectedHead, "squash": true,

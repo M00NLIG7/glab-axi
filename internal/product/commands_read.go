@@ -104,23 +104,9 @@ func fetchReleases(ctx context.Context, client delegateClient, target Target, li
 	})
 }
 
-func fetchRepos(ctx context.Context, client delegateClient, target Target, limit int) ([]Repository, listState, error) {
-	return fetchList(ctx, client, glab.Request{Operation: glab.OpRepoList, Host: target.Host}, limit, func(body []byte) ([]Repository, bool, error) {
-		return normalizeRepos(body, target.Host)
-	})
-}
-
 func fetchLabels(ctx context.Context, client delegateClient, target Target, limit int) ([]Label, listState, error) {
 	return fetchList(ctx, client, glab.Request{Operation: glab.OpLabelList, Host: target.Host, Repo: target.Repo}, limit, func(body []byte) ([]Label, bool, error) {
 		return normalizeLabels(body)
-	})
-}
-
-func fetchSearch(ctx context.Context, client delegateClient, target Target, parsed Parsed) ([]map[string]any, listState, error) {
-	scope := parsed.Definition.Path[1]
-	query := parsed.Positionals[0]
-	return fetchList(ctx, client, glab.Request{Operation: glab.OpSearch, Host: target.Host, Repo: target.Repo, Scope: scope, Query: query}, parsed.Limit, func(body []byte) ([]map[string]any, bool, error) {
-		return normalizeSearch(body, scope, target.Host, target.Repo)
 	})
 }
 
@@ -255,13 +241,13 @@ func executeReleaseView(ctx context.Context, client delegateClient, target Targe
 	return commandOutput{data: map[string]any{"release": release}, meta: meta}, err
 }
 
-func executeRepoView(ctx context.Context, client delegateClient, target Target, _ Parsed, meta uxv1.Meta) (commandOutput, error) {
+func executeRepoView(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpRepoView, Host: target.Host, Repo: target.Repo})
 	meta.UpstreamVersion = response.UpstreamVersion
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	repository, truncated, err := normalizeRepoObject(response.Body, target.Host)
+	repository, truncated, err := normalizeSelectedRepo(response.Body, target, parsed.Values["--fields"] == "clone_urls")
 	meta.Truncated = truncated
 	if truncated {
 		meta.Reason = "field_limit"
@@ -275,7 +261,7 @@ func executeDashboard(ctx context.Context, client delegateClient, target Target,
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	repository, repoTruncated, err := normalizeRepoObject(repoResponse.Body, target.Host)
+	repository, repoTruncated, err := normalizeSelectedRepo(repoResponse.Body, target, false)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}

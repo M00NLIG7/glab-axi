@@ -140,8 +140,15 @@ type upstreamRepo struct {
 	WebURL            string `json:"web_url"`
 	DefaultBranch     string `json:"default_branch"`
 	Visibility        string `json:"visibility"`
-	Archived          bool   `json:"archived"`
+	Archived          *bool  `json:"archived"`
 	LastActivityAt    string `json:"last_activity_at"`
+	HTTPURLToRepo     string `json:"http_url_to_repo"`
+	SSHURLToRepo      string `json:"ssh_url_to_repo"`
+	Namespace         struct {
+		ID       int64  `json:"id"`
+		Kind     string `json:"kind"`
+		FullPath string `json:"full_path"`
+	} `json:"namespace"`
 }
 
 type upstreamLabel struct {
@@ -246,6 +253,8 @@ type Repository struct {
 	Visibility        string `json:"visibility,omitempty"`
 	Archived          bool   `json:"archived"`
 	LastActivityAt    string `json:"last_activity_at,omitempty"`
+	HTTPURLToRepo     string `json:"http_url_to_repo,omitempty"`
+	SSHURLToRepo      string `json:"ssh_url_to_repo,omitempty"`
 }
 
 type Label struct {
@@ -619,7 +628,7 @@ func normalizeRepo(item upstreamRepo, host string) (Repository, bool, error) {
 	if err != nil {
 		return Repository{}, false, err
 	}
-	return Repository{ID: item.ID, Name: name, PathWithNamespace: item.PathWithNamespace, Description: description, WebURL: web, DefaultBranch: boundedIdentity(item.DefaultBranch), Visibility: boundedEnum(item.Visibility), Archived: item.Archived, LastActivityAt: boundedIdentity(item.LastActivityAt)}, cut || descriptionCut, nil
+	return Repository{ID: item.ID, Name: name, PathWithNamespace: item.PathWithNamespace, Description: description, WebURL: web, DefaultBranch: boundedIdentity(item.DefaultBranch), Visibility: boundedEnum(item.Visibility), Archived: item.Archived != nil && *item.Archived, LastActivityAt: boundedIdentity(item.LastActivityAt)}, cut || descriptionCut, nil
 }
 
 func normalizeLabels(body []byte) ([]Label, bool, error) {
