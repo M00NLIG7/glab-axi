@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/safeurl"
@@ -22,8 +24,7 @@ type SearchSelectors struct {
 	Area, Group, State, Sort string
 }
 
-var usernamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,254}$`)
-var languagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 +#._-]{0,63}$`)
+var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`)
 
 func ValidateGroup(group string) error {
 	if safeurl.ValidateProject(group+"/project") != nil || len(group) > 512 {
@@ -37,7 +38,7 @@ func ValidateGroup(group string) error {
 }
 
 func (s DiscoverySelectors) Validate() error {
-	if s.Owner != "" && (!usernamePattern.MatchString(s.Owner) || strings.Contains(s.Owner, "..")) {
+	if s.Owner != "" && (!usernamePattern.MatchString(s.Owner) || strings.Contains(s.Owner, "..") || strings.Trim(s.Owner, "0123456789") == "") {
 		return uxv1.NewError(uxv1.CodeValidation, "owner must be a literal GitLab username, not a group or @me")
 	}
 	if s.Group != "" {
@@ -57,7 +58,7 @@ func (s DiscoverySelectors) Validate() error {
 	if s.Archived != "" && s.Archived != "true" && s.Archived != "false" {
 		return uxv1.NewError(uxv1.CodeValidation, "archive selector must be true or false")
 	}
-	if s.Language != "" && (!languagePattern.MatchString(s.Language) || strings.TrimSpace(s.Language) != s.Language) {
+	if s.Language != "" && (validateText(s.Language, "language", 64) != nil || strings.TrimSpace(s.Language) != s.Language || strings.ContainsFunc(s.Language, unicode.IsControl)) {
 		return uxv1.NewError(uxv1.CodeValidation, "language must be a literal programming language name (1..64 bytes)")
 	}
 	return nil
@@ -118,6 +119,12 @@ func discoveryEndpoint(r Request) (string, error) {
 			return "", err
 		}
 	}
+	if r.Operation == OpSearch {
+		if err := ValidateCreatedProjectQuery(r.Query); err != nil {
+			return "", err
+		}
+		q.Set("search_namespaces", "true")
+	}
 	if r.Search.Sort != "" {
 		if r.Search.Sort != "created" {
 			return "", uxv1.NewError(uxv1.CodeValidation, "unsupported discovery sort")
@@ -126,4 +133,17 @@ func discoveryEndpoint(r Request) (string, error) {
 		q.Set("sort", "desc")
 	}
 	return path + "?" + q.Encode(), nil
+}
+
+func ValidateCreatedProjectQuery(query string) error {
+	terms := strings.FieldsFunc(query, func(r rune) bool { return unicode.IsSpace(r) || r == '"' })
+	if len(terms) == 0 {
+		return uxv1.NewError(uxv1.CodeUnsupported, "created repository sorting requires query terms of at least three characters")
+	}
+	for _, term := range terms {
+		if utf8.RuneCountInString(term) < 3 {
+			return uxv1.NewError(uxv1.CodeUnsupported, "created repository sorting requires query terms of at least three characters")
+		}
+	}
+	return nil
 }

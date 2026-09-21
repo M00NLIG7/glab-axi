@@ -8,25 +8,21 @@ allowlists, accepted selectors, and residuals. No live account data is evidence.
 
 ## Supported behavior
 
-- `repo list [USER]` or `--owner USER` selects a **user**, never an inferred group.
+- `repo list [USER]` selects a **user**, never an inferred group.
   `--group FULL_PATH` selects a group, including nested GitLab namespaces.
   Group discovery excludes shared projects and includes descendants only with
   `--include-subgroups`. The returned namespace kind, path, ID, and repository
   identity must agree with the selector. Group identity is checked before listing.
-- `--visibility public|internal|private`, `--archived`, and `--active` select
-  provider visibility and archive state. Here `--active` means only non-archived,
-  not GitLab's separate active/deletion-state filter. Unfiltered listing retains
+- `--visibility public|internal|private` and `--archived` select
+  provider visibility and archived projects. Unfiltered listing retains
   the existing official-profile command; filtered host listing uses accessible
   projects from the fixed projects route.
 - `--language LANGUAGE` on host/user repository discovery maps only to
   `with_programming_language`: **uses this language**, not GitHub primary language.
   The group-project route has no pinned language filter and rejects it.
-- Repository list/view `--fields clone_urls` adds optional `http_url_to_repo` and
-  `ssh_url_to_repo`. URLs must name the exact host/project, use HTTPS or the closed
-  `git@host:path.git` / `ssh://git@host/path.git` forms, and carry no unexpected
-  user, host, path, query, fragment, or credentials. Alternate SSH hosts/ports are
-  not inferred. No local clone or Git mutation occurs. Absent upstream URLs remain
-  absent; default output has no clone fields.
+  Language names accept punctuation within 64 bytes of valid, non-control UTF-8
+  text and are query-encoded. Digit-leading usernames are accepted; numeric IDs
+  remain ambiguous and are rejected.
 - Issue/MR search defaults to the existing project scope. Explicit `--scope host`
   ignores checkout context; `--group FULL_PATH` selects a group and descendants.
   These cannot be combined with a repository selector or each other. Search
@@ -38,6 +34,18 @@ allowlists, accepted selectors, and residuals. No live account data is evidence.
   Repository search supports group search and explicit user ownership. User or
   language selection uses the project-discovery search route, not a rewritten
   GitHub query. The native query remains required.
+  Without user/language selectors, created sorting uses project-list routes
+  with `order_by=created_at&sort=desc` before pagination, `archived=false`, and
+  `search_namespaces=true` to retain basic project-search matching. Group searches
+  use `include_subgroups=true&with_shared=false`. GitLab v18.3.0's
+  `API::Helpers#project_finder_params_ce` passes namespace matching through to
+  both project finders, including the group route; the fixture pins this behavior.
+  The project-list route applies a three-character minimum for partial matching
+  that basic search does not. This mapping rejects query terms shorter than three
+  characters (ignoring quotes), including short words in quoted phrases, rather
+  than changing their matching behavior. Unsorted search remains available.
+- Returned URL authorities compare case-insensitively; project, group, and
+  resource paths remain exact, including resource type and IID.
 
 ## Exact residuals, not equivalence claims
 
@@ -61,7 +69,7 @@ not availability on a live GitLab deployment.
 - `internal/product/discovery_e2e_test.go` builds **both** executable names and
   exercises accepted selectors, unsupported/duplicate/malformed inputs before
   child execution, exact argv, nested namespaces, wrong owner/group/host/project,
-  clone scheme/authority checks, retained filters across pages, page/display/field
+  authority/path checks, created ordering, retained filters across pages, page/display/field
   limits, 2 MiB page and 8 MiB total bounds, and controlled upstream errors.
 - `internal/product/discovery_test.go` exercises public `Run` cancellation,
   inherited read deadlines, and the reproduced wrong-project repo-view regression.

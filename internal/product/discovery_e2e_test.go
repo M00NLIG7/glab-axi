@@ -3,6 +3,7 @@ package product
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,7 @@ type discoveryCase struct {
 	failure bool
 	reason  string
 	count   int
-	clone   bool
+	firstID int64
 }
 
 func TestDiscoveryExecutableContracts(t *testing.T) {
@@ -52,19 +53,56 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	}
 	tests := []discoveryCase{
 		{name: "default", args: []string{"repo", "list"}, steps: []discoveryStep{{"repo list --output json --page 1 --per-page 31", repos(project), false}}, count: 1},
-		{name: "clone-view", args: []string{"repo", "view", "team/sub/project", "--fields", "clone_urls"}, steps: []discoveryStep{{"repo view team/sub/project --output json", project, false}}, clone: true},
-		{name: "clone-list", args: []string{"repo", "list", "--fields", "clone_urls"}, steps: []discoveryStep{{"repo list --output json --page 1 --per-page 31", repos(project), false}}, count: 1, clone: true},
+		{name: "view", args: []string{"repo", "view", "team/sub/project"}, steps: []discoveryStep{{"repo view team/sub/project --output json", project, false}}},
 		{name: "group", args: []string{"repo", "list", "--group", "team/sub"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?include_subgroups=false&page=1&per_page=31&with_shared=false", repos(project), false}}, count: 1},
 		{name: "subgroups", args: []string{"repo", "list", "--group", "team/sub", "--include-subgroups"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?include_subgroups=true&page=1&per_page=31&with_shared=false", repos(discoveryRepo("team/sub/child/project", "group")), false}}, count: 1},
-		{name: "owner", args: []string{"repo", "list", "--owner", "alice"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
 		{name: "positional-owner", args: []string{"repo", "list", "alice"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
 		{name: "language", args: []string{"repo", "list", "--language", "C++"}, steps: []discoveryStep{{api + "projects?page=1&per_page=31&with_programming_language=C%2B%2B", repos(project), false}}, count: 1},
-		{name: "owner-language", args: []string{"repo", "list", "--owner", "alice", "--language", "Go"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&with_programming_language=Go", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
-		{name: "active", args: []string{"repo", "list", "--active"}, steps: []discoveryStep{{api + "projects?archived=false&page=1&per_page=31", repos(project), false}}, count: 1},
+		{name: "owner-language", args: []string{"repo", "list", "alice", "--language", "Go"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&with_programming_language=Go", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
+		{name: "search-repos-short-unsorted", args: []string{"search", "repos", "go"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=go", repos(project), false}}, count: 1},
 		{name: "search-repos", args: []string{"search", "repos", "cli"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=cli", repos(project), false}}, count: 1},
-		{name: "search-group-repos", args: []string{"search", "repos", "cli", "--group", "team/sub", "--sort", "created"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/search?order_by=created_at&page=1&per_page=31&scope=projects&search=cli&sort=desc", repos(project), false}}, count: 1},
+		{name: "search-group-repos", args: []string{"search", "repos", "cli", "--group", "team/sub", "--sort", "created"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?archived=false&include_subgroups=true&order_by=created_at&page=1&per_page=31&search=cli&search_namespaces=true&sort=desc&with_shared=false", repos(project), false}}, count: 1},
 		{name: "search-language", args: []string{"search", "repos", "cli", "--language", "Go", "--sort", "created"}, steps: []discoveryStep{{api + "projects?order_by=created_at&page=1&per_page=31&search=cli&sort=desc&with_programming_language=Go", repos(project), false}}, count: 1},
 		{name: "search-owner", args: []string{"search", "repos", "cli", "--owner", "alice"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&search=cli", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
+	}
+	for _, command := range [][]string{{"repo", "list", "0xalice"}, {"search", "repos", "cli", "--owner", "0xalice"}} {
+		query := "page=1&per_page=31"
+		if command[0] == "search" {
+			query += "&search=cli"
+		}
+		tests = append(tests, discoveryCase{name: command[0] + "-digit-leading-owner", args: command, steps: []discoveryStep{{api + "users/0xalice/projects?" + query, repos(discoveryRepo("0xalice/project", "user")), false}}, count: 1})
+	}
+	for _, language := range []string{"Ren'Py", "F*", "C&sort=asc"} {
+		for _, command := range [][]string{{"repo", "list"}, {"search", "repos", "cli"}} {
+			query := "page=1&per_page=31"
+			if command[0] == "search" {
+				query += "&search=cli"
+			}
+			query += "&with_programming_language=" + url.QueryEscape(language)
+			tests = append(tests, discoveryCase{name: command[0] + "-language-" + language, args: append(command, "--language", language), steps: []discoveryStep{{api + "projects?" + query, repos(project), false}}, count: 1})
+		}
+	}
+	for _, area := range []string{"host", "group"} {
+		args := []string{"search", "repos", "team/sub", "--sort", "created"}
+		prefix := "projects?archived=false&"
+		suffix := "&search=team%2Fsub&search_namespaces=true&sort=desc"
+		var steps []discoveryStep
+		if area == "group" {
+			args = append(args, "--group", "team/sub")
+			prefix = "groups/team%2Fsub/projects?archived=false&include_subgroups=true&"
+			suffix += "&with_shared=false"
+			steps = append(steps, groupflight)
+		}
+		page := make([]any, 100)
+		for i := range page {
+			p := discoveryRepo(fmt.Sprintf("team/sub/child/p%d", i), "group")
+			p["id"] = i + 1
+			p["created_at"] = fmt.Sprintf("2026-09-21T00:%02d:%02dZ", (99-i)/60, (99-i)%60)
+			page[i] = p
+		}
+		tests = append(tests, discoveryCase{name: "search-created-limit-" + area, args: append(append([]string{}, args...), "--limit", "1"), steps: append(append([]discoveryStep{}, steps...), discoveryStep{api + prefix + "order_by=created_at&page=1&per_page=2" + suffix, page[:2], false}), count: 1, firstID: 1, reason: "display_limit"})
+		steps = append(steps, discoveryStep{api + prefix + "order_by=created_at&page=1&per_page=100" + suffix, page, false}, discoveryStep{api + prefix + "order_by=created_at&page=2&per_page=100" + suffix, []any{}, false})
+		tests = append(tests, discoveryCase{name: "search-created-pages-" + area, args: append(args, "--limit", "101"), steps: steps, count: 100, firstID: 1})
 	}
 	for _, visibility := range []string{"public", "internal", "private"} {
 		p := discoveryRepo("team/sub/project", "group")
@@ -123,9 +161,10 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	for i := range page {
 		p := discoveryRepo(fmt.Sprintf("alice/p%d", i), "user")
 		p["id"] = i + 1
+		p["archived"] = true
 		page[i] = p
 	}
-	tests = append(tests, discoveryCase{name: "pagination", args: []string{"repo", "list", "--owner", "alice", "--active", "--visibility", "private", "--language", "Go", "--limit", "101"}, steps: []discoveryStep{{api + "users/alice/projects?archived=false&page=1&per_page=100&visibility=private&with_programming_language=Go", page, false}, {api + "users/alice/projects?archived=false&page=2&per_page=100&visibility=private&with_programming_language=Go", []any{}, false}}, count: 100})
+	tests = append(tests, discoveryCase{name: "pagination", args: []string{"repo", "list", "alice", "--archived", "--visibility", "private", "--language", "Go", "--limit", "101"}, steps: []discoveryStep{{api + "users/alice/projects?archived=true&page=1&per_page=100&visibility=private&with_programming_language=Go", page, false}, {api + "users/alice/projects?archived=true&page=2&per_page=100&visibility=private&with_programming_language=Go", []any{}, false}}, count: 100})
 	searchPage := make([]any, 100)
 	for i := range searchPage {
 		searchPage[i] = issue("issues", "opened")
@@ -138,9 +177,9 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	}
 	tests = append(tests, discoveryCase{name: "hard-pages", args: []string{"repo", "list", "--limit", "1000"}, steps: steps, count: 1000, reason: "hard_page_limit"})
 	// Identity and upstream error cases must not emit successful partial data.
-	for _, mutation := range []string{"host", "group", "owner-kind", "owner-path", "clone-http", "clone-ssh", "clone-scheme", "clone-credentials", "clone-query", "clone-port", "clone-path", "visibility", "archive", "missing-archive", "web-suffix"} {
+	for _, mutation := range []string{"host", "group", "owner-kind", "owner-path", "visibility", "archive", "missing-archive", "web-suffix"} {
 		p := discoveryRepo("alice/project", "user")
-		args := []string{"repo", "list", "--owner", "alice", "--fields", "clone_urls"}
+		args := []string{"repo", "list", "alice"}
 		endpoint := api + "users/alice/projects?page=1&per_page=31"
 		switch mutation {
 		case "host":
@@ -151,27 +190,13 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 			p["namespace"].(map[string]any)["kind"] = "group"
 		case "owner-path":
 			p["namespace"].(map[string]any)["full_path"] = "bob"
-		case "clone-http":
-			p["http_url_to_repo"] = "http://gitlab.com/alice/project.git"
-		case "clone-ssh":
-			p["ssh_url_to_repo"] = "git@evil.example:alice/project.git"
-		case "clone-scheme":
-			p["ssh_url_to_repo"] = "file:///tmp/repo"
-		case "clone-credentials":
-			p["http_url_to_repo"] = "https://secret@gitlab.com/alice/project.git"
-		case "clone-query":
-			p["http_url_to_repo"] = "https://gitlab.com/alice/project.git?token=x"
-		case "clone-port":
-			p["ssh_url_to_repo"] = "ssh://git@gitlab.com:2222/alice/project.git"
-		case "clone-path":
-			p["ssh_url_to_repo"] = "git@gitlab.com:alice/other.git"
 		case "visibility":
 			args = append(args, "--visibility", "public")
 			endpoint += "&visibility=public"
 		case "missing-archive":
 			delete(p, "archived")
-			args = append(args, "--active")
-			endpoint = api + "users/alice/projects?archived=false&page=1&per_page=31"
+			args = append(args, "--archived")
+			endpoint = api + "users/alice/projects?archived=true&page=1&per_page=31"
 		case "archive":
 			args = append(args, "--archived")
 			endpoint = api + "users/alice/projects?archived=true&page=1&per_page=31"
@@ -180,9 +205,6 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 		}
 		tests = append(tests, discoveryCase{name: "reject-" + mutation, args: args, steps: []discoveryStep{{endpoint, repos(p), false}}, failure: true})
 	}
-	sshRepo := discoveryRepo("team/sub/project", "group")
-	sshRepo["ssh_url_to_repo"] = "ssh://git@gitlab.com/team/sub/project.git"
-	tests = append(tests, discoveryCase{name: "ssh-url-scheme", args: []string{"repo", "view", "team/sub/project", "--fields", "clone_urls"}, steps: []discoveryStep{{"repo view team/sub/project --output json", sshRepo, false}}, clone: true})
 	oversized := discoveryRepo("team/sub/project", "group")
 	oversized["description"] = strings.Repeat("x", 2<<20)
 	tests = append(tests, discoveryCase{name: "page-byte-bound", args: []string{"repo", "list"}, steps: []discoveryStep{{"repo list --output json --page 1 --per-page 31", repos(oversized), false}}, failure: true})
@@ -221,10 +243,47 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	for _, message := range []string{"HTTP 403: search disabled or tier unavailable", "HTTP 429: rate limited", "HTTP 500: upstream failed"} {
 		tests = append(tests, discoveryCase{name: message, args: []string{"search", "issues", "bug", "--scope", "host"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=issues&search=bug", message, true}}, failure: true})
 	}
+	tests = append(tests, discoveryCase{name: "dashboard", args: []string{"-R", "team/sub/project"}, steps: []discoveryStep{{"repo view team/sub/project --output json", project, false}, {"issue list --output json --page 1 --per-page 6 -R team/sub/project", []any{}, false}, {"mr list --output json --page 1 --per-page 6 -R team/sub/project", []any{}, false}, {"ci list --output json --page 1 --per-page 6 -R team/sub/project", []any{}, false}}})
+	for _, test := range tests {
+		switch test.name {
+		case "default", "view", "group", "search-repos", "issues-host", "mrs-group", "dashboard":
+		default:
+			continue
+		}
+		for _, uppercaseInput := range []bool{false, true} {
+			variant := test
+			variant.name += fmt.Sprintf("-host-case-%t", uppercaseInput)
+			variant.args = append([]string{}, test.args...)
+			variant.steps = append([]discoveryStep{}, test.steps...)
+			if uppercaseInput {
+				variant.args = append(variant.args, "--hostname", "GITLAB.COM")
+			}
+			for i := range variant.steps {
+				if uppercaseInput {
+					variant.steps[i].argv = strings.ReplaceAll(variant.steps[i].argv, "--hostname gitlab.com", "--hostname GITLAB.COM")
+				} else {
+					body, err := json.Marshal(variant.steps[i].body)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := json.Unmarshal([]byte(strings.ReplaceAll(string(body), "https://gitlab.com/", "https://GITLAB.COM/")), &variant.steps[i].body); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			tests = append(tests, variant)
+		}
+	}
 	invalid := [][]string{
-		{"repo", "list", "--owner", "alice", "--owner", "bob"}, {"repo", "list", "alice", "--owner", "alice"}, {"repo", "list", "--owner", "alice", "--group", "team"}, {"repo", "list", "--owner", "team/sub"}, {"repo", "list", "--owner", "@me"}, {"repo", "list", "--group", "../escape"}, {"repo", "list", "--group", "123"}, {"repo", "list", "--group", "team", "--language", "Go"}, {"repo", "list", "--include-subgroups"}, {"repo", "list", "--archived", "--active"}, {"repo", "list", "--archived=true"}, {"repo", "list", "--visibility", "secret"}, {"repo", "list", "--fields", "clone_urls,token"}, {"repo", "list", "--fields", "clone_urls", "--fields", "clone_urls"}, {"repo", "list", "--language", strings.Repeat("x", 65)}, {"repo", "list", "--limit", "1001"}, {"repo", "list", "--limit", "0"},
+		{"repo", "list", "--owner", "alice"}, {"repo", "list", "alice", "--owner", "alice"}, {"repo", "list", "alice", "--group", "team"}, {"repo", "list", "team/sub"}, {"repo", "list", "@me"}, {"repo", "list", "123"}, {"search", "repos", "cli", "--owner", "123"}, {"repo", "list", "--group", "../escape"}, {"repo", "list", "--group", "123"}, {"repo", "list", "--group", "team", "--language", "Go"}, {"repo", "list", "--include-subgroups"}, {"repo", "list", "--active"}, {"repo", "list", "--archived=true"}, {"repo", "list", "--visibility", "secret"}, {"repo", "list", "--fields", "clone_urls"}, {"repo", "view", "team/sub/project", "--fields", "clone_urls"}, {"repo", "list", "--language", strings.Repeat("x", 65)}, {"repo", "list", "--limit", "1001"}, {"repo", "list", "--limit", "0"},
 		{"search", "issues", "x", "--state", "merged"}, {"search", "issues", "x", "--state", "open"}, {"search", "mrs", "x", "--state", "opened", "--state", "closed"}, {"search", "issues", "x", "--scope", "host", "-R", "team/project"}, {"search", "issues", "x", "--group", "team", "-R", "team/project"}, {"search", "issues", "x", "--group", "team", "--scope", "host"}, {"search", "issues", "x", "--scope", "global"}, {"search", "repos", "x", "--owner", "alice", "--group", "team"}, {"search", "issues", strings.Repeat("x", 1025)}, {"search", "issues", " "}, {"search", "issues", "x", "--hostname", "https://gitlab.com"},
 		{"search", "issues", "x", "--label", "bug"}, {"search", "issues", "x", "--assignee", "alice"}, {"search", "issues", "x", "--author", "alice"}, {"search", "mrs", "x", "--draft"}, {"search", "mrs", "x", "--review", "approved"}, {"search", "issues", "x", "--sort", "updated"}, {"search", "repos", "x", "--stars", ">100"}, {"search", "code", "x", "--language", "Go"}, {"search", "code", "x", "--group", "team"}, {"search", "commits", "x", "--author", "alice"}, {"search", "commits", "x", "--scope", "host"},
+	}
+	for _, language := range []string{" F*", "F* ", "F\t*", "Ren'Py\n", strings.Repeat("x", 65)} {
+		invalid = append(invalid, []string{"repo", "list", "--language", language}, []string{"search", "repos", "cli", "--language", language})
+	}
+	for _, query := range []string{"go", "go cli", "\"go\" cli", "\"go cli\"", "\"\"", "界"} {
+		invalid = append(invalid, []string{"search", "repos", query, "--sort", "created"}, []string{"search", "repos", query, "--group", "team/sub", "--sort", "created"})
 	}
 	for i, args := range invalid {
 		tests = append(tests, discoveryCase{name: fmt.Sprintf("invalid-%d", i), args: args, failure: true})
@@ -309,8 +368,34 @@ cat "$FIXTURE/body.$n"
 	if !test.failure && (env.Meta.Count != test.count || env.Meta.Reason != test.reason || env.Meta.Truncated != (test.reason != "") || env.Meta.Complete != (test.reason != "display_limit" && test.reason != "hard_page_limit")) {
 		t.Fatalf("bounds: %s", output)
 	}
-	if !test.failure && strings.Contains(string(output), "http_url_to_repo") != test.clone {
-		t.Fatalf("clone opt-in: %s", output)
+	if !test.failure {
+		var repositories []map[string]any
+		if body, ok := env.Data["repositories"]; ok {
+			if err := json.Unmarshal(body, &repositories); err != nil {
+				t.Fatal(err)
+			}
+		} else if body, ok := env.Data["repository"]; ok {
+			var repository map[string]any
+			if err := json.Unmarshal(body, &repository); err != nil {
+				t.Fatal(err)
+			}
+			repositories = append(repositories, repository)
+		}
+		for _, repository := range repositories {
+			for _, field := range []string{"http_url_to_repo", "ssh_url_to_repo"} {
+				if _, ok := repository[field]; ok {
+					t.Fatalf("unexpected repository field %s: %s", field, output)
+				}
+			}
+		}
+	}
+	if !test.failure && test.firstID != 0 {
+		var results []struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.Unmarshal(env.Data["results"], &results); err != nil || len(results) == 0 || results[0].ID != test.firstID {
+			t.Fatalf("result order: %s", output)
+		}
 	}
 	record, readErr := os.ReadFile(filepath.Join(dir, "record"))
 	if len(test.steps) == 0 {

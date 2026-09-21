@@ -241,13 +241,13 @@ func executeReleaseView(ctx context.Context, client delegateClient, target Targe
 	return commandOutput{data: map[string]any{"release": release}, meta: meta}, err
 }
 
-func executeRepoView(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
+func executeRepoView(ctx context.Context, client delegateClient, target Target, _ Parsed, meta uxv1.Meta) (commandOutput, error) {
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpRepoView, Host: target.Host, Repo: target.Repo})
 	meta.UpstreamVersion = response.UpstreamVersion
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	repository, truncated, err := normalizeSelectedRepo(response.Body, target, parsed.Values["--fields"] == "clone_urls")
+	repository, truncated, err := normalizeSelectedRepo(response.Body, target)
 	meta.Truncated = truncated
 	if truncated {
 		meta.Reason = "field_limit"
@@ -261,7 +261,7 @@ func executeDashboard(ctx context.Context, client delegateClient, target Target,
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	repository, repoTruncated, err := normalizeSelectedRepo(repoResponse.Body, target, false)
+	repository, repoTruncated, err := normalizeSelectedRepo(repoResponse.Body, target)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}

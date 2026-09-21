@@ -377,7 +377,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/release-view.schema.json`.
 ## `repo list`
 
 ```text
-gl-axi repo list [USER] [--owner USER | --group FULL_PATH] [global flags]
+gl-axi repo list [USER | --group FULL_PATH] [global flags]
 ```
 
 Discover repositories with explicit user/group ownership.
@@ -385,14 +385,13 @@ Discover repositories with explicit user/group ownership.
 Unfiltered discovery preserves the official-profile default. User owners and groups are distinct.
 Filtered host discovery lists accessible projects. Group discovery excludes shared projects; descendants are opt-in.
 Language means uses the language, not GitHub primary language. No group language filter.
-Clone URLs are opt-in metadata only, bound to the selected host and project.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/repo-list.schema.json`.
 
 ## `repo view`
 
 ```text
-gl-axi repo view [namespace/project] [--fields clone_urls] [global flags]
+gl-axi repo view [namespace/project] [global flags]
 ```
 
 View a project/repository.
@@ -421,6 +420,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -437,6 +437,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -453,6 +454,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -469,6 +471,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -485,6 +488,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.

@@ -142,8 +142,6 @@ type upstreamRepo struct {
 	Visibility        string `json:"visibility"`
 	Archived          *bool  `json:"archived"`
 	LastActivityAt    string `json:"last_activity_at"`
-	HTTPURLToRepo     string `json:"http_url_to_repo"`
-	SSHURLToRepo      string `json:"ssh_url_to_repo"`
 	Namespace         struct {
 		ID       int64  `json:"id"`
 		Kind     string `json:"kind"`
@@ -253,8 +251,6 @@ type Repository struct {
 	Visibility        string `json:"visibility,omitempty"`
 	Archived          bool   `json:"archived"`
 	LastActivityAt    string `json:"last_activity_at,omitempty"`
-	HTTPURLToRepo     string `json:"http_url_to_repo,omitempty"`
-	SSHURLToRepo      string `json:"ssh_url_to_repo,omitempty"`
 }
 
 type Label struct {

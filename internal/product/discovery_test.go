@@ -52,3 +52,33 @@ func TestDiscoveryRepoViewRejectsWrongProject(t *testing.T) {
 		t.Fatalf("accepted wrong project: %s", stdout.String())
 	}
 }
+
+func TestDiscoveryRepoViewRetainsExactResourceURL(t *testing.T) {
+	for _, web := range []string{
+		"https://gitlab.com/Group/project",
+		"https://gitlab.com/group/Project",
+		"https://gitlab.com/group/project/",
+		"https://gitlab.com/group%2Fproject",
+		"https://gitlab.com/group/project?",
+		"https://gitlab.com/group/project#",
+		"https://gitlab.com/group/project?x=y",
+		"https://gitlab.com/group/project#readme",
+		"https://user@gitlab.com/group/project",
+		"http://gitlab.com/group/project",
+		"https://gitlab.com.evil.example/group/project",
+		"https://gitlab.com:443/group/project",
+	} {
+		t.Run(web, func(t *testing.T) {
+			repo := discoveryRepo("group/project", "group")
+			repo["web_url"] = web
+			delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{glab.OpRepoView: {discoveryResponse(repo)}}}
+			stdout, _, deps := productTestDeps(t, delegate)
+			if code := Run(context.Background(), []string{"repo", "view", "group/project", "--hostname", "GITLAB.COM", "--format", "json"}, deps); code == 0 {
+				t.Fatalf("accepted different resource URL: %s", stdout.String())
+			}
+			if len(delegate.requests) != 1 {
+				t.Fatalf("requests=%v", delegate.requests)
+			}
+		})
+	}
+}

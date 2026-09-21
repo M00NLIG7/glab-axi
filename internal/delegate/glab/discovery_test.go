@@ -23,6 +23,10 @@ func discoveryRequests() []struct {
 		{Request{Operation: OpRepoDiscovery, Discovery: DiscoverySelectors{Owner: "alice", Visibility: "private", Archived: "false", Language: "C++"}}, "users/alice/projects?archived=false&page=2&per_page=31&visibility=private&with_programming_language=C%2B%2B"},
 		{Request{Operation: OpRepoDiscovery, Discovery: DiscoverySelectors{Group: "team/sub", Visibility: "public", Archived: "true", IncludeSubgroups: true}}, "groups/team%2Fsub/projects?archived=true&include_subgroups=true&page=2&per_page=31&visibility=public&with_shared=false"},
 		{Request{Operation: OpRepoDiscovery, Query: "cli", Discovery: DiscoverySelectors{Language: "Go"}, Search: SearchSelectors{Sort: "created"}}, "projects?order_by=created_at&page=2&per_page=31&search=cli&sort=desc&with_programming_language=Go"},
+		{Request{Operation: OpRepoDiscovery, Discovery: DiscoverySelectors{Owner: "0xalice", Language: "Ren'Py"}}, "users/0xalice/projects?page=2&per_page=31&with_programming_language=Ren%27Py"},
+		{Request{Operation: OpRepoDiscovery, Query: "cli", Discovery: DiscoverySelectors{Language: "F*"}}, "projects?page=2&per_page=31&search=cli&with_programming_language=F%2A"},
+		{Request{Operation: OpSearch, Scope: "repos", Query: "cli", Search: SearchSelectors{Sort: "created"}}, "projects?archived=false&order_by=created_at&page=2&per_page=31&search=cli&search_namespaces=true&sort=desc"},
+		{Request{Operation: OpSearch, Scope: "repos", Query: "cli", Search: SearchSelectors{Group: "team/sub", Sort: "created"}}, "groups/team%2Fsub/projects?archived=false&include_subgroups=true&order_by=created_at&page=2&per_page=31&search=cli&search_namespaces=true&sort=desc&with_shared=false"},
 		{Request{Operation: OpDiscoveryGroup, Discovery: DiscoverySelectors{Group: "team/sub"}}, "groups/team%2Fsub?with_projects=false"},
 		{Request{Operation: OpDiscoveryProject, Repo: "team/sub/project"}, "projects/team%2Fsub%2Fproject"},
 		{Request{Operation: OpDiscoveryProject, ID: 42}, "projects/42"},
@@ -49,6 +53,11 @@ func TestDiscoveryTypedArgv(t *testing.T) {
 	for _, r := range []Request{
 		{Operation: OpRepoDiscovery, Page: 11, PerPage: 30}, {Operation: OpRepoDiscovery, Page: 1, PerPage: 101},
 		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Owner: "@me"}},
+		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Owner: "123"}},
+		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Language: "F*\n"}},
+		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Language: "F\t*"}},
+		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Language: "\xff"}},
+		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Language: strings.Repeat("x", 65)}},
 		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Owner: "alice", Group: "team"}},
 		{Operation: OpRepoDiscovery, Page: 1, PerPage: 30, Discovery: DiscoverySelectors{Group: "team", Language: "Go"}},
 		{Operation: OpDiscoveryGroup, Discovery: DiscoverySelectors{Group: "../escape"}},
@@ -56,6 +65,8 @@ func TestDiscoveryTypedArgv(t *testing.T) {
 		{Operation: OpSearch, Page: 1, PerPage: 30, Scope: "code", Query: "x", Search: SearchSelectors{Area: "host"}},
 		{Operation: OpSearch, Page: 1, PerPage: 30, Scope: "issues", Query: "x", Search: SearchSelectors{Area: "host", Sort: "updated"}},
 		{Operation: OpSearch, Page: 1, PerPage: 30, Scope: "issues", Query: "x", Search: SearchSelectors{Area: "host", State: "merged"}},
+		{Operation: OpSearch, Page: 1, PerPage: 30, Scope: "repos", Query: "go cli", Search: SearchSelectors{Sort: "created"}},
+		{Operation: OpSearch, Page: 1, PerPage: 30, Scope: "repos", Query: "\"go\" cli", Search: SearchSelectors{Group: "team/sub", Sort: "created"}},
 	} {
 		r.Host = "gitlab.com"
 		if _, err := build(r); err == nil {

@@ -120,9 +120,7 @@
         "default_branch": {"type": "string", "maxLength": 1024},
         "visibility": {"type": "string", "maxLength": 128},
         "archived": {"type": "boolean"},
-        "last_activity_at": {"type": "string", "maxLength": 1024},
-        "http_url_to_repo": {"type": "string", "maxLength": 2048, "pattern": "^https://"},
-        "ssh_url_to_repo": {"type": "string", "maxLength": 2048, "pattern": "^(git@|ssh://git@)"}
+        "last_activity_at": {"type": "string", "maxLength": 1024}
       }
     },
     "label": {

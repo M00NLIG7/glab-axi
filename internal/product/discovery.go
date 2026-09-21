@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -12,18 +13,15 @@ import (
 	"gl-axi/internal/safeurl"
 )
 
-const searchDetails = "Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.\nLabels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.\nCommit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.\nDisabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.\nRepository language/user filters use project discovery search; language means uses a language, not primary language."
+const searchDetails = "Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.\nLabels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.\nCommit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.\nDisabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.\nWithout user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Short query terms (under three characters, ignoring quotes) are unsupported for this mapping.\nRepository language/user filters use project discovery search; language means uses a language, not primary language."
 
 func discoveryFlags() []FlagDefinition {
 	return []FlagDefinition{
-		{Name: "--owner", Value: "USER", Description: "Exact user namespace (not a group)."},
 		{Name: "--group", Value: "FULL_PATH", Description: "Exact group namespace, including nested paths; excludes shared projects."},
 		{Name: "--include-subgroups", Boolean: true, Description: "Include descendant namespaces; requires --group."},
 		{Name: "--visibility", Value: "public|internal|private", Description: "GitLab visibility."},
 		{Name: "--archived", Boolean: true, Description: "Archived projects only."},
-		{Name: "--active", Boolean: true, Description: "Non-archived projects only (not a deletion-state filter)."},
 		{Name: "--language", Value: "LANGUAGE", Description: "Uses programming language, not primary language; host/user discovery only."},
-		{Name: "--fields", Value: "clone_urls", Description: "Add validated HTTPS/SSH clone metadata; never clone."},
 	}
 }
 
@@ -53,9 +51,6 @@ func discoverySelection(p Parsed) glab.DiscoverySelectors {
 	if p.Booleans["--archived"] {
 		s.Archived = "true"
 	}
-	if p.Booleans["--active"] {
-		s.Archived = "false"
-	}
 	return s
 }
 
@@ -74,17 +69,8 @@ func validateDiscoveryParsed(p Parsed) error {
 	if repo := p.Values["--repo"]; repo != "" && safeurl.ValidateProject(repo) != nil {
 		return uxv1.NewError(uxv1.CodeValidation, "invalid repository target")
 	}
-	if fields := p.Values["--fields"]; fields != "" && fields != "clone_urls" {
-		return uxv1.NewError(uxv1.CodeValidation, "repository fields must be exactly clone_urls")
-	}
 	if path == "repo view" {
 		return nil
-	}
-	if p.Booleans["--archived"] && p.Booleans["--active"] {
-		return uxv1.NewError(uxv1.CodeValidation, "archived and active are mutually exclusive")
-	}
-	if path == "repo list" && len(p.Positionals) == 1 && p.Values["--owner"] != "" {
-		return uxv1.NewError(uxv1.CodeValidation, "select the user owner once")
 	}
 	if err := discoverySelection(p).Validate(); err != nil {
 		return err
@@ -95,6 +81,11 @@ func validateDiscoveryParsed(p Parsed) error {
 		}
 		if err := searchSelection(p).Validate(p.Definition.Path[1]); err != nil {
 			return err
+		}
+		if path == "search repos" && p.Values["--sort"] == "created" && p.Values["--owner"] == "" && p.Values["--language"] == "" {
+			if err := glab.ValidateCreatedProjectQuery(p.Positionals[0]); err != nil {
+				return err
+			}
 		}
 		if (p.Values["--scope"] == "host" || p.Values["--group"] != "") && p.Values["--repo"] != "" {
 			return uxv1.NewError(uxv1.CodeValidation, "host/group search cannot also select a repository")
@@ -116,7 +107,7 @@ func discoveryGroup(ctx context.Context, client delegateClient, host, group stri
 	if err := decodeStrict(response.Body, &source); err != nil {
 		return 0, err
 	}
-	if source.ID < 1 || source.FullPath != group || source.WebURL != "https://"+host+"/groups/"+group {
+	if source.ID < 1 || source.FullPath != group || !exactDiscoveryURL(source.WebURL, host, "/groups/"+group) {
 		return 0, uxv1.NewError(uxv1.CodeSafety, "provider returned a different group identity")
 	}
 	return source.ID, nil
@@ -141,13 +132,18 @@ func discoveryProject(ctx context.Context, client delegateClient, target Target,
 }
 
 func exactDiscoveryRepo(source upstreamRepo, host string) error {
-	if source.ID < 1 || safeurl.ValidateProject(source.PathWithNamespace) != nil || source.WebURL != canonicalProjectURL(host, source.PathWithNamespace) {
+	if source.ID < 1 || safeurl.ValidateProject(source.PathWithNamespace) != nil || !exactDiscoveryURL(source.WebURL, host, "/"+source.PathWithNamespace) {
 		return uxv1.NewError(uxv1.CodeSafety, "provider returned a noncanonical repository identity")
 	}
 	return nil
 }
 
-func normalizeDiscoveryRepos(body []byte, host string, selectors glab.DiscoverySelectors, groupID int64, cloneURLs bool) ([]Repository, bool, error) {
+func exactDiscoveryURL(raw, host, path string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && strings.EqualFold(parsed.Host, host) && raw == "https://"+parsed.Host+path
+}
+
+func normalizeDiscoveryRepos(body []byte, host string, selectors glab.DiscoverySelectors, groupID int64) ([]Repository, bool, error) {
 	var source []upstreamRepo
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
@@ -178,18 +174,13 @@ func normalizeDiscoveryRepos(body []byte, host string, selectors glab.DiscoveryS
 		if err != nil {
 			return nil, false, err
 		}
-		if cloneURLs {
-			if err := addCloneURLs(&repo, item, host); err != nil {
-				return nil, false, err
-			}
-		}
 		truncated = truncated || cut
 		out = append(out, repo)
 	}
 	return out, truncated, nil
 }
 
-func normalizeSelectedRepo(body []byte, target Target, cloneURLs bool) (Repository, bool, error) {
+func normalizeSelectedRepo(body []byte, target Target) (Repository, bool, error) {
 	var source upstreamRepo
 	if err := decodeStrict(body, &source); err != nil {
 		return Repository{}, false, err
@@ -200,28 +191,7 @@ func normalizeSelectedRepo(body []byte, target Target, cloneURLs bool) (Reposito
 	if err := exactDiscoveryRepo(source, target.Host); err != nil {
 		return Repository{}, false, err
 	}
-	repo, cut, err := normalizeRepo(source, target.Host)
-	if err == nil && cloneURLs {
-		err = addCloneURLs(&repo, source, target.Host)
-	}
-	return repo, cut, err
-}
-
-func addCloneURLs(repo *Repository, source upstreamRepo, host string) error {
-	// Metadata is exact identity, never a fetch instruction. Do not normalize an
-	// alternate host, user, transport or path into an apparently safe URL.
-	if source.HTTPURLToRepo != "" && source.HTTPURLToRepo != "https://"+host+"/"+source.PathWithNamespace+".git" {
-		return uxv1.NewError(uxv1.CodeSafety, "provider returned an unsafe HTTPS clone URL")
-	}
-	if source.SSHURLToRepo != "" {
-		wantSCP := "git@" + host + ":" + source.PathWithNamespace + ".git"
-		wantSSH := "ssh://git@" + host + "/" + source.PathWithNamespace + ".git"
-		if source.SSHURLToRepo != wantSCP && source.SSHURLToRepo != wantSSH {
-			return uxv1.NewError(uxv1.CodeSafety, "provider returned an unsafe SSH clone URL")
-		}
-	}
-	repo.HTTPURLToRepo, repo.SSHURLToRepo = source.HTTPURLToRepo, source.SSHURLToRepo
-	return nil
+	return normalizeRepo(source, target.Host)
 }
 
 // Count all paginated bodies and project/group identity lookups together. The
@@ -263,7 +233,7 @@ func fetchDiscoveryRepos(ctx context.Context, client delegateClient, target Targ
 		op = glab.OpRepoList
 	}
 	return fetchList(ctx, client, glab.Request{Operation: op, Host: target.Host, Discovery: s}, p.Limit, func(body []byte) ([]Repository, bool, error) {
-		return normalizeDiscoveryRepos(body, target.Host, s, groupID, p.Values["--fields"] == "clone_urls")
+		return normalizeDiscoveryRepos(body, target.Host, s, groupID)
 	})
 }
 
@@ -315,7 +285,7 @@ func fetchScopedSearch(ctx context.Context, client delegateClient, target Target
 				}
 				if p.Values["--owner"] != "" {
 					encoded, _ := json.Marshal([]map[string]any{item})
-					if _, _, err := normalizeDiscoveryRepos(encoded, target.Host, request.Discovery, 0, false); err != nil {
+					if _, _, err := normalizeDiscoveryRepos(encoded, target.Host, request.Discovery, 0); err != nil {
 						return nil, false, err
 					}
 				}
@@ -344,7 +314,7 @@ func fetchScopedSearch(ctx context.Context, client delegateClient, target Target
 			}
 			if kind == "issues" || kind == "mrs" || kind == "repos" {
 				web, ok := item["web_url"].(string)
-				want := canonicalProjectURL(target.Host, repo)
+				want := "/" + repo
 				if kind != "repos" {
 					iid, ok := positiveJSONNumber(item["iid"])
 					if !ok {
@@ -356,7 +326,7 @@ func fetchScopedSearch(ctx context.Context, client delegateClient, target Target
 					}
 					want += "/-/" + resource + "/" + iid.String()
 				}
-				if !ok || web != want {
+				if !ok || !exactDiscoveryURL(web, target.Host, want) {
 					return nil, false, uxv1.NewError(uxv1.CodeSafety, "search returned a different resource URL")
 				}
 				if s.State != "" && s.State != "all" && item["state"] != s.State {

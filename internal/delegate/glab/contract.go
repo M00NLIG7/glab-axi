@@ -305,6 +305,14 @@ func build(request Request) (invocation, error) {
 				return invocation{}, uxv1.Wrap(uxv1.CodeValidation, "invalid repository target", err)
 			}
 		}
+		if request.Scope == "repos" && request.Search.Sort == "created" {
+			request.Discovery = DiscoverySelectors{Group: request.Search.Group, IncludeSubgroups: request.Search.Group != "", Archived: "false"}
+			endpoint, err := discoveryEndpoint(request)
+			if err != nil {
+				return invocation{}, err
+			}
+			return jsonPage(append(apiPrefix(), endpoint)), nil
+		}
 		values := url.Values{"scope": {scope}, "search": {request.Query}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}
 		if request.Search.State != "" {
 			values.Set("state", request.Search.State)
