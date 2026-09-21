@@ -64,6 +64,9 @@ GitLab project (not Rune).
 12. Exercise the [parser-level command denials](../internal/product/parser.go)
     and alternate merge strategy (`--rebase`) while auditing child/network
     execution; each exits 2 with no child/request.
+    Guarded project create/edit/fork use synthetic TLS/process tests only under
+    this acceptance scope; no live project administration is authorized. See
+    [project administration](project-administration.md).
 13. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
     completeness metadata, bounded discussions/trace/diff, canonical setup
     idempotence, compatibility-hook preservation, both signed update manifests,

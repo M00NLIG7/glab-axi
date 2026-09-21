@@ -34,7 +34,7 @@ const (
 // Error is the stable product failure. Cause and StatusCode are retained only
 // for control flow and are never serialized. Receipt is reserved for bounded,
 // product-normalized refusal or mutation-outcome evidence, including explicitly
-// unknown outcomes and uncertain ordering effects.
+// unknown outcomes, uncertain ordering effects, and project-administration outcomes.
 type Error struct {
 	Code       Code   `json:"code"`
 	Message    string `json:"message"`

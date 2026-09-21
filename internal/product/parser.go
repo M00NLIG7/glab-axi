@@ -47,8 +47,7 @@ var deniedNested = map[string]map[string]string{
 		"cancel": "pipeline cancellation",
 	},
 	"repo": {
-		"create": "repository creation", "edit": "repository editing", "update": "repository editing",
-		"fork": "repository forking", "delete": "repository deletion", "transfer": "repository transfer",
+		"update": "unguarded repository editing", "delete": "repository deletion", "transfer": "repository transfer",
 	},
 	"release": {
 		"create": "release creation", "edit": "release editing", "update": "release editing",

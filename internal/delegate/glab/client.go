@@ -314,6 +314,12 @@ func classifyChildFailure(stderr []byte, cause error, write bool, operation Oper
 				}
 				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 			}
+			if operation == OpAdminProject {
+				if rejection, ok := uxv1.NewHTTPRejection(status); ok {
+					rejection.Cause = cause
+					return rejection
+				}
+			}
 			switch status {
 			case 401:
 				return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)

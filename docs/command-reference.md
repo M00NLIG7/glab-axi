@@ -374,6 +374,42 @@ View a release and project-bound download metadata (latest when omitted).
 
 Backend: `official-glab`. Schema: `schema/ux-v1/release-view.schema.json`.
 
+## `repo create`
+
+```text
+gl-axi repo create -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--format toon|json]
+```
+
+Create one empty project in an explicit namespace.
+
+Provider metadata only: no source, template, clone, push, or merge-policy changes. Explicit account, namespace and visibility are required. See docs/project-administration.md for guards and residual races.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+
+## `repo edit`
+
+```text
+gl-axi repo edit -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --expected-state-file FILE --allow-project-admin --accept-non-atomic [setting flags] [--format toon|json]
+```
+
+Edit exact project settings with caller prestate and drift checks.
+
+Requires a private closed expected-state snapshot and explicit non-atomic acknowledgement. Supports description, visibility, default branch and GitLab issues/wiki access levels only. Never changes merge protections. See docs/project-administration.md.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+
+## `repo fork`
+
+```text
+gl-axi repo fork -R SOURCE/PROJECT --hostname HOST --expected-source-id ID --destination NAMESPACE/PROJECT --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--wait-seconds 0..20] [--format toon|json]
+```
+
+Request one asynchronous project fork into an explicit namespace.
+
+Provider-only fork. Accepted/in-progress is not ready. Optional polling is bounded; no clone, remote or push effects. Never retry an ambiguous mutation blindly. See docs/project-administration.md.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+
 ## `repo list`
 
 ```text
@@ -387,7 +423,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/repo-list.schema.json`.
 ## `repo view`
 
 ```text
-gl-axi repo view [namespace/project] [global flags]
+gl-axi repo view [namespace/project] [--admin-snapshot] [global flags]
 ```
 
 View a project/repository.
@@ -736,4 +772,4 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation outside guarded create/edit/fork, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

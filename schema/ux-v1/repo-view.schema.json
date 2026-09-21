@@ -10,6 +10,17 @@
   "properties": {
     "repository": {
       "$ref": "resources.schema.json#/$defs/repository"
+    },
+    "admin_snapshot": {"$ref": "repo-admin.schema.json#/$defs/project"},
+    "import_status": {"enum": ["none", "scheduled", "started", "finished", "failed", "unknown"]},
+    "forked_from_project": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "path_with_namespace", "web_url"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "path_with_namespace": {"type": "string", "maxLength": 1024},
+        "web_url": {"type": "string", "format": "uri", "maxLength": 2048}
+      }
     }
   }
 }
