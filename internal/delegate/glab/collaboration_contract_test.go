@@ -66,36 +66,49 @@ func TestCollaborationTypedRoutesMatchVersionedFixtures(t *testing.T) {
 
 func TestApprovalAvailabilityNeedsPinnedHTTPFraming(t *testing.T) {
 	for _, test := range []struct {
+		body   string
 		text   string
 		status int
 		code   uxv1.Code
 	}{
-		{"glab: 403 Forbidden (HTTP 403)", 403, uxv1.CodeForbidden},
-		{"glab: provider-secret (HTTP 404)\n", 404, uxv1.CodeNotFound},
-		{"glab: HTTP 404\n", 404, uxv1.CodeNotFound},
-		{"glab: Upstream returned HTTP 403 (HTTP 500)\n", 0, uxv1.CodeUpstream},
-		{"glab: 404 not found (HTTP 500)\n", 0, uxv1.CodeUpstream},
-		{"glab: provider-secret (HTTP 403) (HTTP 500)\n", 0, uxv1.CodeUpstream},
-		{"glab: Upstream returned HTTP 500 (HTTP 403)\n", 403, uxv1.CodeForbidden},
-		{"HTTP 404", 0, uxv1.CodeNotFound},
-		{"403 forbidden", 0, uxv1.CodeForbidden},
-		{"404 not found", 0, uxv1.CodeNotFound},
-		{"provider said permission denied", 0, uxv1.CodeForbidden},
-		{"glab: Upstream returned HTTP 403", 0, uxv1.CodeForbidden},
-		{"glab: provider-secret (HTTP 403): more text", 0, uxv1.CodeForbidden},
-		{"glab: provider-secret (HTTP 403)\nglab: HTTP 500\n", 0, uxv1.CodeForbidden},
-		{"provider-secret\nglab: HTTP 403\n", 0, uxv1.CodeForbidden},
-		{`{"message":"glab: provider-secret (HTTP 403)"}`, 0, uxv1.CodeForbidden},
-		{`Post "https://gitlab.example/api/v4/projects/1": 403 Forbidden`, 0, uxv1.CodeForbidden},
+		{`{"message":"403 Forbidden"}`, "glab: 403 Forbidden (HTTP 403)", 403, uxv1.CodeForbidden},
+		{`{"message":"provider-secret"}`, "glab: provider-secret (HTTP 404)\n", 404, uxv1.CodeNotFound},
+		{`{}`, "glab: HTTP 404\n", 404, uxv1.CodeNotFound},
+		{`{"message":"Upstream returned HTTP 403"}`, "glab: Upstream returned HTTP 403 (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{`{"message":"404 not found"}`, "glab: 404 not found (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{`{"message":"provider-secret (HTTP 403)"}`, "glab: provider-secret (HTTP 403) (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{`{"message":"Upstream returned HTTP 500"}`, "glab: Upstream returned HTTP 500 (HTTP 403)\n", 403, uxv1.CodeForbidden},
+		{`{"message":"provider-secret","errors":["HTTP 500"]}`, "glab: provider-secret (HTTP 403)\n", 403, uxv1.CodeForbidden},
+		{`{"errors":["upstream denied (HTTP 403)"]}`, "glab: upstream denied (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"errors":[{"message":"upstream missing (HTTP 404)"}]}`, "glab: upstream missing (HTTP 404)\n", 0, uxv1.CodeNotFound},
+		{`{"errors":["HTTP 403"]}`, "glab: HTTP 403\n", 0, uxv1.CodeForbidden},
+		{`{"message":"different provider-secret"}`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"message":"provider-secret (HTTP 403)"}`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"message":"provider-secret"}`, "glab: HTTP 403\n", 0, uxv1.CodeForbidden},
+		{`{}`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{"", "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"message":`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"message":42}`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{"message":"provider-secret","errors":{}}`, "glab: provider-secret (HTTP 403)\n", 0, uxv1.CodeForbidden},
+		{`{}`, "HTTP 404", 0, uxv1.CodeNotFound},
+		{`{}`, "403 forbidden", 0, uxv1.CodeForbidden},
+		{`{}`, "404 not found", 0, uxv1.CodeNotFound},
+		{`{}`, "provider said permission denied", 0, uxv1.CodeForbidden},
+		{`{}`, "glab: Upstream returned HTTP 403", 0, uxv1.CodeForbidden},
+		{`{"message":"provider-secret"}`, "glab: provider-secret (HTTP 403): more text", 0, uxv1.CodeForbidden},
+		{`{"message":"provider-secret"}`, "glab: provider-secret (HTTP 403)\nglab: HTTP 500\n", 0, uxv1.CodeForbidden},
+		{`{}`, "provider-secret\nglab: HTTP 403\n", 0, uxv1.CodeForbidden},
+		{`{}`, `{"message":"glab: provider-secret (HTTP 403)"}`, 0, uxv1.CodeForbidden},
+		{`{}`, `Post "https://gitlab.example/api/v4/projects/1": 403 Forbidden`, 0, uxv1.CodeForbidden},
 	} {
 		for _, operation := range []Operation{OpMRApprovals, OpEnsureCreate, OpMRView} {
-			err := uxv1.AsError(classifyChildFailure([]byte(test.text), errors.New("child"), operation == OpEnsureCreate, operation))
+			err := uxv1.AsError(classifyChildFailure([]byte(test.body), []byte(test.text), errors.New("child"), operation == OpEnsureCreate, operation))
 			status := test.status
 			if operation == OpMRView {
 				status = 0
 			}
 			if err == nil || err.StatusCode != status || err.Code != test.code {
-				t.Fatalf("%s %q: %#v", operation, test.text, err)
+				t.Fatalf("%s body=%q stderr=%q: %#v", operation, test.body, test.text, err)
 			}
 		}
 	}
@@ -186,6 +199,9 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 		{500, `{"message":"Upstream returned HTTP 403 provider-secret"}`, 0, uxv1.CodeUpstream},
 		{500, `{"message":"provider-secret (HTTP 404)"}`, 0, uxv1.CodeUpstream},
 		{500, `{"errors":["provider-secret (HTTP 403)","provider-secret"]}`, 0, uxv1.CodeForbidden},
+		{500, `{"errors":["provider-secret (HTTP 403)"]}`, 0, uxv1.CodeForbidden},
+		{500, `{"errors":[{"message":"provider-secret (HTTP 404)"}]}`, 0, uxv1.CodeNotFound},
+		{500, `{"errors":["HTTP 403"]}`, 0, uxv1.CodeForbidden},
 	}
 	for _, test := range failures {
 		mu.Lock()

@@ -3,6 +3,7 @@ package glab
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -268,7 +269,7 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 				return nil, err
 			}
 		}
-		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write, operation)
+		return nil, classifyChildFailure(stdout.buffer.Bytes(), stderr.buffer.Bytes(), waitErr, write, operation)
 	}
 	return stdout.buffer.Bytes(), nil
 }
@@ -303,35 +304,53 @@ func (c *boundedCapture) Write(p []byte) (int, error) {
 	return original, nil
 }
 
-func classifyChildFailure(stderr []byte, cause error, write bool, operation Operation) error {
-	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 3 {
-		statusText := match[1]
-		if len(statusText) == 0 {
-			statusText = match[2]
+func childHTTPStatus(body, stderr []byte) (int, bool) {
+	match := childHTTPRejectionPattern.FindSubmatch(stderr)
+	if len(match) != 3 {
+		return 0, false
+	}
+	var response struct {
+		Message string
+		Errors  []json.RawMessage
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return 0, false
+	}
+	statusText := string(match[2])
+	expected := "glab: HTTP " + statusText
+	if response.Message != "" {
+		statusText = string(match[1])
+		expected = "glab: " + response.Message + " (HTTP " + statusText + ")"
+	} else if len(response.Errors) != 0 {
+		return 0, false
+	}
+	if strings.TrimSuffix(string(stderr), "\n") != expected {
+		return 0, false
+	}
+	status, err := strconv.Atoi(statusText)
+	return status, err == nil
+}
+
+func classifyChildFailure(body, stderr []byte, cause error, write bool, operation Operation) error {
+	if status, ok := childHTTPStatus(body, stderr); ok {
+		if write || operation == OpMRApprovals {
+			if rejection, ok := operationHTTPRejection(operation, status); ok {
+				rejection.Cause = cause
+				return rejection
+			}
+			return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 		}
-		status, parseErr := strconv.Atoi(string(statusText))
-		if parseErr == nil {
-			// Approval availability needs a definite provider rejection, not
-			// a category guessed from arbitrary provider response text.
-			if write || operation == OpMRApprovals {
-				if rejection, ok := operationHTTPRejection(operation, status); ok {
-					rejection.Cause = cause
-					return rejection
-				}
-				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
-			}
-			switch status {
-			case 401:
-				return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)
-			case 403:
-				return uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", cause)
-			case 404:
-				return uxv1.Wrap(uxv1.CodeNotFound, "GitLab resource was not found", cause)
-			case 429:
-				return uxv1.Wrap(uxv1.CodeRateLimited, "GitLab rate limit was reached", cause)
-			default:
-				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
-			}
+		switch status {
+		case 401:
+			return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)
+		case 403:
+			return uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", cause)
+		case 404:
+			return uxv1.Wrap(uxv1.CodeNotFound, "GitLab resource was not found", cause)
+		case 429:
+			return uxv1.Wrap(uxv1.CodeRateLimited, "GitLab rate limit was reached", cause)
+		default:
+			return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 		}
 	}
 

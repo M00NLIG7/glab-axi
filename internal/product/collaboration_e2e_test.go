@@ -36,19 +36,19 @@ func TestCollaborationExecutableAliasesEndToEnd(t *testing.T) {
 				t.Fatalf("build: %v %s", err, out)
 			}
 			for _, test := range []struct {
-				name, group, leaf, file, body string
-				code, limit                   int
-				contains                      string
-				args                          []string
-				noChild                       bool
+				name, group, leaf, file, body, response string
+				code, limit                             int
+				contains                                string
+				args                                    []string
+				noChild                                 bool
 			}{
 				{name: "issue notes", group: "issue", leaf: "discussions", contains: `"issue_id":7007`},
 				{name: "exact discussion limit", group: "issue", leaf: "discussions", limit: 1, contains: `"complete":true`},
 				{name: "discussion limit probe", group: "issue", leaf: "discussions", limit: 1, file: "discussions-1.json", body: string(collaborationIssuePage(t, 0, 2)), contains: `"reason":"display_limit"`},
 				{name: "discussion pagination", group: "issue", leaf: "discussions", limit: 101, file: "discussions-1.json", body: string(collaborationIssuePage(t, 0, 100)), contains: `"count":100`},
 				{name: "empty comments", group: "issue", leaf: "discussions", file: "discussions-1.json", body: "[]", contains: `"discussions":[]`},
-				{name: "denied comments", group: "issue", leaf: "discussions", file: "discussions.error", body: "glab: provider-secret (HTTP 403)\n", code: 4, contains: `"code":"forbidden"`},
-				{name: "absent comments endpoint", group: "issue", leaf: "discussions", file: "discussions.error", body: "glab: provider-secret (HTTP 404)\n", code: 5, contains: `"complete":false`},
+				{name: "denied comments", group: "issue", leaf: "discussions", file: "discussions.error", body: "glab: provider-secret (HTTP 403)\n", response: `{"message":"provider-secret"}`, code: 4, contains: `"code":"forbidden"`},
+				{name: "absent comments endpoint", group: "issue", leaf: "discussions", file: "discussions.error", body: "glab: provider-secret (HTTP 404)\n", response: `{"message":"provider-secret"}`, code: 5, contains: `"complete":false`},
 				{name: "malformed comments", group: "issue", leaf: "discussions", file: "discussions-1.json", body: `{"error":"provider-secret"}`, code: 8, contains: `"code":"upstream_error"`},
 				{name: "wrong note target", group: "issue", leaf: "discussions", file: "discussions-1.json", body: strings.Replace(string(collaborationIssuePage(t, 0, 1)), `"noteable_id":7007`, `"noteable_id":7008`, 1), code: 9, contains: `"code":"safety_violation"`},
 				{name: "wrong issue host", group: "issue", leaf: "discussions", file: "issue.json", body: strings.Replace(string(collaborationIssueBody()), "gitlab.com", "evil.invalid", 1), code: 9, contains: `"code":"safety_violation"`},
@@ -56,15 +56,20 @@ func TestCollaborationExecutableAliasesEndToEnd(t *testing.T) {
 				{name: "approvals", group: "mr", leaf: "approvals", contains: `"state":"approved"`},
 				{name: "empty approvals", group: "mr", leaf: "approvals", file: "approvals.json", body: `{"id":7007,"iid":7,"project_id":99,"approved":false,"approved_by":[]}`, contains: `"state":"not_approved"`},
 				{name: "unknown approval state", group: "mr", leaf: "approvals", file: "approvals.json", body: `{"id":7007,"iid":7,"project_id":99,"approved_by":[]}`, contains: `"reason":"state_unknown"`},
-				{name: "denied approval endpoint", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403)\n", contains: `"reason":"access_denied"`},
-				{name: "unavailable approval endpoint", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 404)\n", contains: `"reason":"not_found_or_unsupported"`},
-				{name: "denial text cannot hide server failure", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: Upstream returned HTTP 403 provider-secret (HTTP 500)\n", code: 8, contains: `"code":"upstream_error"`},
-				{name: "nested status cannot hide server failure", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 404) (HTTP 500)\n", code: 8, contains: `"code":"upstream_error"`},
+				{name: "denied approval endpoint", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403)\n", response: `{"message":"provider-secret"}`, contains: `"reason":"access_denied"`},
+				{name: "unavailable approval endpoint", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 404)\n", response: `{"message":"provider-secret"}`, contains: `"reason":"not_found_or_unsupported"`},
+				{name: "denial text cannot hide server failure", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: Upstream returned HTTP 403 provider-secret (HTTP 500)\n", response: `{"message":"Upstream returned HTTP 403 provider-secret"}`, code: 8, contains: `"code":"upstream_error"`},
+				{name: "nested status cannot hide server failure", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 404) (HTTP 500)\n", response: `{"message":"provider-secret (HTTP 404)"}`, code: 8, contains: `"code":"upstream_error"`},
 				{name: "ambiguous approval framing", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403)\nglab: HTTP 500\n", code: 4, contains: `"code":"forbidden"`},
+				{name: "singleton error string is not unavailable", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403)\n", response: `{"errors":["provider-secret (HTTP 403)"]}`, code: 4, contains: `"code":"forbidden"`},
+				{name: "singleton error object is not unavailable", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 404)\n", response: `{"errors":[{"message":"provider-secret (HTTP 404)"}]}`, code: 5, contains: `"code":"not_found"`},
+				{name: "error array cannot forge direct status", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: HTTP 403\n", response: `{"errors":["HTTP 403"]}`, code: 4, contains: `"code":"forbidden"`},
+				{name: "message must match status framing", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403)\n", response: `{"message":"provider-secret (HTTP 403)"}`, code: 4, contains: `"code":"forbidden"`},
+				{name: "direct unavailable status", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: HTTP 404\n", response: `{}`, contains: `"reason":"not_found_or_unsupported"`},
 				{name: "nonterminal approval status", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 403): more text\n", code: 4, contains: `"code":"forbidden"`},
 				{name: "unframed denial is not unavailable", group: "mr", leaf: "approvals", file: "approvals.error", body: "403 provider-secret", code: 4, contains: `"code":"forbidden"`},
 				{name: "bare HTTP denial is not unavailable", group: "mr", leaf: "approvals", file: "approvals.error", body: "HTTP 403 provider-secret", code: 4, contains: `"code":"forbidden"`},
-				{name: "authentication error", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 401)\n", code: 3, contains: `"code":"authentication_error"`},
+				{name: "authentication error", group: "mr", leaf: "approvals", file: "approvals.error", body: "glab: provider-secret (HTTP 401)\n", response: `{"message":"provider-secret"}`, code: 3, contains: `"code":"authentication_error"`},
 				{name: "malformed approval state", group: "mr", leaf: "approvals", file: "approvals.json", body: `{"id":7007,"iid":7,"project_id":99,"approved_by":[],"approved":"yes"}`, code: 8, contains: `"code":"upstream_error"`},
 				{name: "wrong approval IID", group: "mr", leaf: "approvals", file: "approvals.json", body: strings.Replace(string(collaborationApprovalBody()), `"iid":7`, `"iid":8`, 1), code: 9, contains: `"code":"safety_violation"`},
 				{name: "expected head flag refused", group: "mr", leaf: "approvals", code: 2, contains: `"code":"unsupported"`, args: []string{"--expected-head", discussionTestHeadSHA}, noChild: true},
@@ -82,6 +87,11 @@ func TestCollaborationExecutableAliasesEndToEnd(t *testing.T) {
 					if test.file != "" {
 						if err := os.WriteFile(filepath.Join(dir, test.file), []byte(test.body), 0o600); err != nil {
 							t.Fatal(err)
+						}
+						if test.response != "" {
+							if err := os.WriteFile(filepath.Join(dir, test.file+".body"), []byte(test.response), 0o600); err != nil {
+								t.Fatal(err)
+							}
 						}
 					}
 					limit := test.limit
@@ -168,7 +178,11 @@ case "$*" in
   *) printf 'unexpected argv\n' >&2; exit 92 ;;
 esac
 if [ -f "$file.wait" ]; then touch waiting; exec sleep 30; fi
-if [ -f "$file.error" ]; then cat "$file.error" >&2; exit 1; fi
+if [ -f "$file.error" ]; then
+  if [ -f "$file.error.body" ]; then cat "$file.error.body"; fi
+  cat "$file.error" >&2
+  exit 1
+fi
 if [ "$file" = discussions ]; then cat "discussions-$page.json"; exit 0; fi
 if [ -f "$file.seen" ] && [ -f "$file.final.json" ]; then cat "$file.final.json"; else cat "$file.json"; fi
 touch "$file.seen"
