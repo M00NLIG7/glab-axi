@@ -68,10 +68,35 @@ func TestApprovalAvailabilityNeedsPinnedHTTPFraming(t *testing.T) {
 	for _, test := range []struct {
 		text   string
 		status int
-	}{{"glab: 403 Forbidden (HTTP 403)", 403}, {"HTTP 404", 404}, {"403 forbidden", 0}, {"404 not found", 0}, {"provider said permission denied", 0}} {
-		err := uxv1.AsError(classifyChildFailure([]byte(test.text), errors.New("child"), false, OpMRApprovals))
-		if err.StatusCode != test.status {
-			t.Fatalf("%q: %#v", test.text, err)
+		code   uxv1.Code
+	}{
+		{"glab: 403 Forbidden (HTTP 403)", 403, uxv1.CodeForbidden},
+		{"glab: provider-secret (HTTP 404)\n", 404, uxv1.CodeNotFound},
+		{"glab: HTTP 404\n", 404, uxv1.CodeNotFound},
+		{"glab: Upstream returned HTTP 403 (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{"glab: 404 not found (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{"glab: provider-secret (HTTP 403) (HTTP 500)\n", 0, uxv1.CodeUpstream},
+		{"glab: Upstream returned HTTP 500 (HTTP 403)\n", 403, uxv1.CodeForbidden},
+		{"HTTP 404", 0, uxv1.CodeNotFound},
+		{"403 forbidden", 0, uxv1.CodeForbidden},
+		{"404 not found", 0, uxv1.CodeNotFound},
+		{"provider said permission denied", 0, uxv1.CodeForbidden},
+		{"glab: Upstream returned HTTP 403", 0, uxv1.CodeForbidden},
+		{"glab: provider-secret (HTTP 403): more text", 0, uxv1.CodeForbidden},
+		{"glab: provider-secret (HTTP 403)\nglab: HTTP 500\n", 0, uxv1.CodeForbidden},
+		{"provider-secret\nglab: HTTP 403\n", 0, uxv1.CodeForbidden},
+		{`{"message":"glab: provider-secret (HTTP 403)"}`, 0, uxv1.CodeForbidden},
+		{`Post "https://gitlab.example/api/v4/projects/1": 403 Forbidden`, 0, uxv1.CodeForbidden},
+	} {
+		for _, operation := range []Operation{OpMRApprovals, OpEnsureCreate, OpMRView} {
+			err := uxv1.AsError(classifyChildFailure([]byte(test.text), errors.New("child"), operation == OpEnsureCreate, operation))
+			status := test.status
+			if operation == OpMRView {
+				status = 0
+			}
+			if err == nil || err.StatusCode != status || err.Code != test.code {
+				t.Fatalf("%s %q: %#v", operation, test.text, err)
+			}
 		}
 	}
 }
@@ -92,10 +117,12 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 	var mu sync.Mutex
 	var requests []string
 	status := 200
+	errorBody := ""
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		requests = append(requests, r.Method+" "+r.RequestURI)
 		current := status
+		body := errorBody
 		mu.Unlock()
 		if r.Host != host || r.Method != "GET" || r.Header.Get("PRIVATE-TOKEN") != strings.Join([]string{"synthetic", "collaboration", "tls"}, "-") {
 			http.Error(w, "unexpected authority", 400)
@@ -104,7 +131,7 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if current != 200 {
 			w.WriteHeader(current)
-			fmt.Fprint(w, `{"message":"provider-secret"}`)
+			fmt.Fprint(w, body)
 			return
 		}
 		switch r.RequestURI {
@@ -145,19 +172,34 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 			t.Fatalf("%s: response=%#v err=%v", op, response, err)
 		}
 	}
-	for _, s := range []int{403, 404, 401, 429} {
+	failures := []struct {
+		status     int
+		body       string
+		wantStatus int
+		wantCode   uxv1.Code
+	}{
+		{403, `{"message":"provider-secret"}`, 403, uxv1.CodeForbidden},
+		{404, `{"message":"provider-secret"}`, 404, uxv1.CodeNotFound},
+		{401, `{"message":"provider-secret"}`, 401, uxv1.CodeAuthentication},
+		{429, `{"message":"provider-secret"}`, 429, uxv1.CodeRateLimited},
+		{404, `{}`, 404, uxv1.CodeNotFound},
+		{500, `{"message":"Upstream returned HTTP 403 provider-secret"}`, 0, uxv1.CodeUpstream},
+		{500, `{"message":"provider-secret (HTTP 404)"}`, 0, uxv1.CodeUpstream},
+		{500, `{"errors":["provider-secret (HTTP 403)","provider-secret"]}`, 0, uxv1.CodeForbidden},
+	}
+	for _, test := range failures {
 		mu.Lock()
-		status = s
+		status, errorBody = test.status, test.body
 		mu.Unlock()
 		_, err := client.Do(ctx, Request{Operation: OpMRApprovals, Host: host, Repo: "group/project", IID: 7})
 		classified := uxv1.AsError(err)
-		if classified == nil || classified.StatusCode != s || strings.Contains(classified.Message, "provider-secret") {
-			t.Fatalf("status=%d err=%#v", s, classified)
+		if classified == nil || classified.StatusCode != test.wantStatus || classified.Code != test.wantCode || strings.Contains(classified.Message, "provider-secret") {
+			t.Fatalf("status=%d body=%s err=%#v", test.status, test.body, classified)
 		}
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(requests) != 6 || requests[0] != "GET /api/v4/projects/group%2Fproject/issues/7/discussions?page=2&per_page=31" {
+	if len(requests) != 2+len(failures) || requests[0] != "GET /api/v4/projects/group%2Fproject/issues/7/discussions?page=2&per_page=31" {
 		t.Fatalf("requests=%v", requests)
 	}
 }

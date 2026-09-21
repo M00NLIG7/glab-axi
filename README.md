@@ -72,7 +72,7 @@ local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
 
 Collaboration read equivalents also include `issue discussions <iid>` for
-comments/threaded notes and `mr approvals <iid> [--expected-head SHA]` for
+comments/threaded notes and `mr approvals <iid>` for
 assigned reviewers and current GitLab approval state. They use separate closed
 schemas without changing default issue/MR views. Assigned reviewers and notes
 are not GitHub review submissions. Unknown/denied approval state never becomes

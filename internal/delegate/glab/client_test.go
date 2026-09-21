@@ -199,7 +199,7 @@ func TestMutationHTTPClassificationRequiresPinnedStatusFraming(t *testing.T) {
 	if classified := uxv1.AsError(unframed); classified.StatusCode != 0 {
 		t.Fatalf("provider-controlled text became a definite rejection: %#v", classified)
 	}
-	framed := classifyChildFailure([]byte(`Post "https://gitlab.example.invalid/api/v4/projects/group%2Fproject/merge_requests": 403 Forbidden`), cause, true, OpEnsureCreate)
+	framed := classifyChildFailure([]byte(`glab: 403 Forbidden (HTTP 403)`), cause, true, OpEnsureCreate)
 	if classified := uxv1.AsError(framed); classified.StatusCode != 403 || classified.Code != uxv1.CodeForbidden {
 		t.Fatalf("pinned child status framing was not classified: %#v", classified)
 	}
@@ -208,7 +208,7 @@ func TestMutationHTTPClassificationRequiresPinnedStatusFraming(t *testing.T) {
 func TestMergeHTTPClassificationIsOperationSpecific(t *testing.T) {
 	cause := errors.New("exit status 1")
 	for _, status := range []int{405, 406} {
-		framed := []byte(fmt.Sprintf(`glab: %d rejected (HTTP %d): provider-sentinel`, status, status))
+		framed := []byte(fmt.Sprintf(`glab: %d rejected: provider-sentinel (HTTP %d)`, status, status))
 		mergeErr := uxv1.AsError(classifyChildFailure(framed, cause, true, OpMRMerge))
 		if mergeErr.Code != uxv1.CodeConflict || mergeErr.StatusCode != status || strings.Contains(mergeErr.Error(), "provider-sentinel") {
 			t.Fatalf("merge status %d classification=%#v", status, mergeErr)
@@ -943,7 +943,7 @@ if [ "${GLAB_AXI_FAKE_MODE:-}" = "http-rejection" ]; then
     429) reason='Too Many Requests' ;;
     *) printf 'unsupported fake status\n' >&2; exit 94 ;;
   esac
-  printf 'glab: %s %s (HTTP %s): %s\n' "${GLAB_AXI_FAKE_HTTP_STATUS}" "$reason" "${GLAB_AXI_FAKE_HTTP_STATUS}" "${GLAB_AXI_FAKE_STDERR_SENTINEL:-synthetic}" >&2
+  printf 'glab: %s %s: %s (HTTP %s)\n' "${GLAB_AXI_FAKE_HTTP_STATUS}" "$reason" "${GLAB_AXI_FAKE_STDERR_SENTINEL:-synthetic}" "${GLAB_AXI_FAKE_HTTP_STATUS}" >&2
   exit 1
 fi
 if [ -n "${GLAB_AXI_FAKE_BODY:-}" ]; then

@@ -30,7 +30,7 @@ var versionPattern = regexp.MustCompile(`^glab ([0-9]+\.[0-9]+\.[0-9]+) \(([0-9A
 
 // Only pinned wrapper framing can prove a status; an unframed provider body
 // may still influence the broad safe category below, but never StatusCode.
-var childHTTPRejectionPattern = regexp.MustCompile(`(?im)(?:\bhttp(?:\s+status)?(?:\s+code)?\s*[:=]?\s*|\bglab:\s*|\bapi\s+(?:request|call)\s+(?:failed|error)\s*:\s*|\b(?:get|post|put|patch|delete|head)\s+(?:"https://[^"\s]+"|https://[^\s]+):\s*)(400|401|403|404|405|406|409|422|429)\b`)
+var childHTTPRejectionPattern = regexp.MustCompile(`^glab: (?:[^\r\n]+ \(HTTP ([0-9]{3})\)|HTTP ([0-9]{3}))\n?$`)
 
 type ClientConfig struct {
 	Path             string
@@ -304,8 +304,12 @@ func (c *boundedCapture) Write(p []byte) (int, error) {
 }
 
 func classifyChildFailure(stderr []byte, cause error, write bool, operation Operation) error {
-	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 2 {
-		status, parseErr := strconv.Atoi(string(match[1]))
+	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 3 {
+		statusText := match[1]
+		if len(statusText) == 0 {
+			statusText = match[2]
+		}
+		status, parseErr := strconv.Atoi(string(statusText))
 		if parseErr == nil {
 			// Approval availability needs a definite provider rejection, not
 			// a category guessed from arbitrary provider response text.

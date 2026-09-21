@@ -229,7 +229,7 @@ gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 --f
 ## `mr approvals`
 
 ```text
-gl-axi mr approvals <iid> [--expected-head SHA] [global flags]
+gl-axi mr approvals <iid> [global flags]
 ```
 
 View assigned reviewers and current GitLab approval state.

@@ -12,7 +12,7 @@ was used to establish the fixture.
   comments, replies and system notes. The existing MR discussion normalizer,
   pagination and nested/body bounds are reused, with `noteable_type=Issue` and
   exact global issue ID/project/IID validation. This is not a comment write.
-- `gl-axi mr approvals IID [--expected-head SHA]`: assigned reviewers from the
+- `gl-axi mr approvals IID`: assigned reviewers from the
   MR and the current approval summary from the fixed `/approvals` GET. This is
   not GitHub review-submission history. Existing `mr discussions` supplies
   inline/threaded notes; those notes are never interpreted as review votes.

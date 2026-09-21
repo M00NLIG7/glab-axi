@@ -265,9 +265,6 @@ func executeMRApprovals(ctx context.Context, delegate delegateClient, target Tar
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	if expected := parsed.Values["--expected-head"]; expected != "" && expected != initial.HeadSHA {
-		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "merge request head does not match --expected-head")
-	}
 	reviewers, reviewersCut, err := normalizeAssignedReviewers(response.Body, parsed.Limit)
 	if err != nil {
 		return commandOutput{meta: meta}, err
