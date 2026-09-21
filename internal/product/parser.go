@@ -264,6 +264,12 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 	if err := validateNativeSelection(parsed); err != nil {
 		return Parsed{}, err
 	}
+	switch strings.Join(definition.Path, " ") {
+	case "pipeline list", "pipeline view", "pipeline watch", "job list", "job view", "job trace":
+		if err := validateCIReadParsed(parsed); err != nil {
+			return Parsed{}, err
+		}
+	}
 	if err := validateParsedCommand(parsed); err != nil {
 		return Parsed{}, err
 	}

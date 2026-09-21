@@ -1,0 +1,219 @@
+// Exact source excerpts from gitlab.com/gitlab-org/api/client-go/v2 v2.53.0,
+// the dependency pinned by official glab 1.112.0 (816e3a52411aba73d90237859fdc6ecbc86bd169).
+// Acquired from https://proxy.golang.org/gitlab.com/gitlab-org/api/client-go/v2/@v/v2.53.0.zip
+// Excerpts only; full files are not redistributed here.
+// pipelines.go: Copyright 2021, Igor Varavko
+// jobs.go: Copyright 2021, Arkbriar
+// types.go: Copyright 2021, Sander van Harmelen
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// See licenses/gitlab.com_gitlab-org_api_client-go_v2.LICENSE.
+
+// pipelines.go full-file SHA256: 9bc5ada68e52d4181ed36b8a5de9bb236249f3fcfb3129779c85af9b10c08f8a
+
+// pipelines.go:25-45
+type PipelineSource string
+
+// PipelineSource is the source of a pipeline.
+// GitLab API docs: https://docs.gitlab.com/ci/jobs/job_rules/#ci_pipeline_source-predefined-variable
+const (
+	PipelineSourceAPI                         PipelineSource = "api"
+	PipelineSourceChat                        PipelineSource = "chat"
+	PipelineSourceExternal                    PipelineSource = "external"
+	PipelineSourceExternalPullRequestEvent    PipelineSource = "external_pull_request_event"
+	PipelineSourceMergeRequestEvent           PipelineSource = "merge_request_event"
+	PipelineSourceOndemandDastScan            PipelineSource = "ondemand_dast_scan"
+	PipelineSourceOndemandDastValidation      PipelineSource = "ondemand_dast_validation"
+	PipelineSourceParentPipeline              PipelineSource = "parent_pipeline"
+	PipelineSourcePipeline                    PipelineSource = "pipeline"
+	PipelineSourcePush                        PipelineSource = "push"
+	PipelineSourceSchedule                    PipelineSource = "schedule"
+	PipelineSourceSecurityOrchestrationPolicy PipelineSource = "security_orchestration_policy"
+	PipelineSourceTrigger                     PipelineSource = "trigger"
+	PipelineSourceWeb                         PipelineSource = "web"
+	PipelineSourceWebIDE                      PipelineSource = "webide"
+)
+
+// pipelines.go:94-122
+type Pipeline struct {
+	ID             int64           `json:"id"`
+	IID            int64           `json:"iid"`
+	ProjectID      int64           `json:"project_id"`
+	Status         string          `json:"status"`
+	Source         PipelineSource  `json:"source"`
+	Ref            string          `json:"ref"`
+	Name           string          `json:"name"`
+	SHA            string          `json:"sha"`
+	BeforeSHA      string          `json:"before_sha"`
+	Tag            bool            `json:"tag"`
+	YamlErrors     string          `json:"yaml_errors"`
+	User           *BasicUser      `json:"user"`
+	UpdatedAt      *time.Time      `json:"updated_at"`
+	CreatedAt      *time.Time      `json:"created_at"`
+	StartedAt      *time.Time      `json:"started_at"`
+	FinishedAt     *time.Time      `json:"finished_at"`
+	CommittedAt    *time.Time      `json:"committed_at"`
+	Duration       int64           `json:"duration"`
+	QueuedDuration int64           `json:"queued_duration"`
+	Coverage       string          `json:"coverage"`
+	WebURL         string          `json:"web_url"`
+	DetailedStatus *DetailedStatus `json:"detailed_status"`
+}
+
+func (p Pipeline) String() string {
+	return Stringify(p)
+}
+
+
+// pipelines.go:225-291
+
+// PipelineInfo shows the basic entities of a pipeline, mostly used as fields
+// on other assets, like Commit.
+type PipelineInfo struct {
+	ID        int64      `json:"id"`
+	IID       int64      `json:"iid"`
+	ProjectID int64      `json:"project_id"`
+	Status    string     `json:"status"`
+	Source    string     `json:"source"`
+	Ref       string     `json:"ref"`
+	SHA       string     `json:"sha"`
+	Name      string     `json:"name"`
+	WebURL    string     `json:"web_url"`
+	UpdatedAt *time.Time `json:"updated_at"`
+	CreatedAt *time.Time `json:"created_at"`
+}
+
+func (p PipelineInfo) String() string {
+	return Stringify(p)
+}
+
+// ListProjectPipelinesOptions represents the available ListProjectPipelines()
+// options.
+//
+// GitLab API docs:
+// https://docs.gitlab.com/api/pipelines/#list-project-pipelines
+type ListProjectPipelinesOptions struct {
+	ListOptions
+	Scope         *string          `url:"scope,omitempty" json:"scope,omitempty"`
+	Status        *BuildStateValue `url:"status,omitempty" json:"status,omitempty"`
+	Source        *string          `url:"source,omitempty" json:"source,omitempty"`
+	Ref           *string          `url:"ref,omitempty" json:"ref,omitempty"`
+	SHA           *string          `url:"sha,omitempty" json:"sha,omitempty"`
+	YamlErrors    *bool            `url:"yaml_errors,omitempty" json:"yaml_errors,omitempty"`
+	Name          *string          `url:"name,omitempty" json:"name,omitempty"`
+	Username      *string          `url:"username,omitempty" json:"username,omitempty"`
+	UpdatedAfter  *time.Time       `url:"updated_after,omitempty" json:"updated_after,omitempty"`
+	UpdatedBefore *time.Time       `url:"updated_before,omitempty" json:"updated_before,omitempty"`
+	OrderBy       *string          `url:"order_by,omitempty" json:"order_by,omitempty"`
+	Sort          *string          `url:"sort,omitempty" json:"sort,omitempty"`
+	CreatedAfter  *time.Time       `url:"created_after,omitempty" json:"created_after,omitempty"`
+	CreatedBefore *time.Time       `url:"created_before,omitempty" json:"created_before,omitempty"`
+}
+
+// ListProjectPipelines gets a list of project pipelines.
+//
+// GitLab API docs:
+// https://docs.gitlab.com/api/pipelines/#list-project-pipelines
+func (s *PipelinesService) ListProjectPipelines(pid any, opt *ListProjectPipelinesOptions, options ...RequestOptionFunc) ([]*PipelineInfo, *Response, error) {
+	return do[[]*PipelineInfo](s.client,
+		withPath("projects/%s/pipelines", ProjectID{pid}),
+		withAPIOpts(opt),
+		withRequestOpts(options...),
+	)
+}
+
+// GetPipeline gets a single project pipeline.
+//
+// GitLab API docs:
+// https://docs.gitlab.com/api/pipelines/#get-a-single-pipeline
+func (s *PipelinesService) GetPipeline(pid any, pipeline int64, options ...RequestOptionFunc) (*Pipeline, *Response, error) {
+	return do[*Pipeline](s.client,
+		withPath("projects/%s/pipelines/%d", ProjectID{pid}, pipeline),
+		withRequestOpts(options...),
+	)
+}
+
+
+// jobs.go full-file SHA256: e98f8ab0a87b75d49db280876a931aa58edba1ac1c51331fc10d513279522756
+
+// jobs.go:240-277
+
+// ListJobsOptions represents the available ListProjectJobs() options.
+//
+// GitLab API docs:
+// https://docs.gitlab.com/api/jobs/#list-project-jobs
+type ListJobsOptions struct {
+	ListOptions
+	Scope          *[]BuildStateValue `url:"scope[],omitempty" json:"scope,omitempty"`
+	IncludeRetried *bool              `url:"include_retried,omitempty" json:"include_retried,omitempty"`
+}
+
+func (s *JobsService) ListProjectJobs(pid any, opts *ListJobsOptions, options ...RequestOptionFunc) ([]*Job, *Response, error) {
+	return do[[]*Job](s.client,
+		withMethod(http.MethodGet),
+		withPath("projects/%s/jobs", ProjectID{pid}),
+		withAPIOpts(opts),
+		withRequestOpts(options...),
+	)
+}
+
+func (s *JobsService) ListPipelineJobs(pid any, pipelineID int64, opts *ListJobsOptions, options ...RequestOptionFunc) ([]*Job, *Response, error) {
+	return do[[]*Job](s.client,
+		withMethod(http.MethodGet),
+		withPath("projects/%s/pipelines/%d/jobs", ProjectID{pid}, pipelineID),
+		withAPIOpts(opts),
+		withRequestOpts(options...),
+	)
+}
+
+func (s *JobsService) ListPipelineBridges(pid any, pipelineID int64, opts *ListJobsOptions, options ...RequestOptionFunc) ([]*Bridge, *Response, error) {
+	return do[[]*Bridge](s.client,
+		withMethod(http.MethodGet),
+		withPath("projects/%s/pipelines/%d/bridges", ProjectID{pid}, pipelineID),
+		withAPIOpts(opts),
+		withRequestOpts(options...),
+	)
+}
+
+
+// jobs.go:294-302
+func (s *JobsService) GetJob(pid any, jobID int64, options ...RequestOptionFunc) (*Job, *Response, error) {
+	return do[*Job](s.client,
+		withMethod(http.MethodGet),
+		withPath("projects/%s/jobs/%d", ProjectID{pid}, jobID),
+		withAPIOpts(nil),
+		withRequestOpts(options...),
+	)
+}
+
+
+// types.go full-file SHA256: 72bd04286106109a34c7470d152a34b3494701b1459db4f35f387fd0dfd8c405
+
+// types.go:287-303
+// BuildStateValue represents a GitLab build state.
+type BuildStateValue string
+
+// These constants represent all valid build states.
+const (
+	Created            BuildStateValue = "created"
+	WaitingForResource BuildStateValue = "waiting_for_resource"
+	Preparing          BuildStateValue = "preparing"
+	Pending            BuildStateValue = "pending"
+	Running            BuildStateValue = "running"
+	Success            BuildStateValue = "success"
+	Failed             BuildStateValue = "failed"
+	Canceled           BuildStateValue = "canceled"
+	Skipped            BuildStateValue = "skipped"
+	Manual             BuildStateValue = "manual"
+	Scheduled          BuildStateValue = "scheduled"
+)

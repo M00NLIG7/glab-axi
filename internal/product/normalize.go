@@ -40,6 +40,7 @@ type upstreamIssue struct {
 }
 
 type upstreamPipeline struct {
+	IID       int64        `json:"iid"`
 	ID        int64        `json:"id"`
 	Status    string       `json:"status"`
 	Source    string       `json:"source"`
@@ -190,6 +191,7 @@ type MergeRequest struct {
 }
 
 type Pipeline struct {
+	IID       int64      `json:"iid,omitempty"`
 	ID        int64      `json:"id"`
 	Status    string     `json:"status"`
 	RawStatus string     `json:"raw_status,omitempty"`

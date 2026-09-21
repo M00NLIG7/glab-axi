@@ -1,0 +1,56 @@
+{
+  "schema": "glab-axi/read-parity-ci/v1",
+  "reference_repository": "https://github.com/kunchenguid/gh-axi",
+  "reference_commit": "2bffd9a5b60ded64d6c9851683b27a480173a7ee",
+  "reference_source": "src/commands/run.ts",
+  "provider_evidence": "contracts/official-glab/v1.112.0/ci-reads-source.go.txt",
+  "provider_evidence_sha256": "98f0f8728b90ce718c3ca6e5c65760040ccc573725b3fd3d6fee5dceaf05b3e2",
+  "provider_cli_source": "internal/commands/ci/list/list.go at official glab 816e3a52411aba73d90237859fdc6ecbc86bd169; fixture ci-list-source.go.txt",
+  "provider_cli_source_sha256": "436173c03e57b533dff3a6e387659cdb56b52c46a1a88518e59a46d9be9d148d",
+  "accepted": [
+    ["pipeline", "list", "--ref", "main", "--status", "failed", "--source", "push", "--user", "alice", "--sha", "1123456789012345678901234567890123456789", "--fields", "iid,sha,web_url,updated_at"],
+    ["pipeline", "view", "55", "--jobs", "--job-status", "manual"],
+    ["pipeline", "view", "55", "--job-id", "9", "--trace"],
+    ["pipeline", "view", "55", "--trace-failed"],
+    ["pipeline", "watch", "55", "--timeout", "30", "--interval", "3", "--ref", "main"],
+    ["job", "list", "--pipeline-id", "55", "--job-id", "9", "--status", "failed"],
+    ["job", "trace", "9", "--pipeline-id", "55"],
+    ["job", "view", "9", "--pipeline-id", "55"]
+  ],
+  "rejected": [
+    ["pipeline", "list", "--workflow", "ci.yml"],
+    ["pipeline", "view", "55", "--steps"],
+    ["pipeline", "view", "55", "--trace"],
+    ["pipeline", "view", "55", "--trace-failed", "--job-status", "failed"],
+    ["pipeline", "list", "--fields", "iid,iid"],
+    ["pipeline", "watch", "55", "--timeout", "301"],
+    ["pipeline", "retry", "55"],
+    ["job", "cancel", "9"]
+  ],
+  "bounds": {
+    "watch_default_seconds": 30,
+    "watch_max_seconds": 300,
+    "watch_default_interval_seconds": 3,
+    "watch_interval_seconds": [1, 30],
+    "max_provider_operations": 100,
+    "cumulative_provider_body_bytes": 8388608,
+    "watch_final_data_bytes": 65536,
+    "ci_final_data_bytes": 2097152,
+    "max_trace_jobs": 5,
+    "trace_tail_bytes": 262144,
+    "full_log_file": false
+  },
+  "semantics": {
+    "workflow": "unsupported; GitLab pipeline source is not a workflow resource",
+    "steps": "unsupported; jobs are the GitLab-native resource",
+    "fields": "additive; existing SHA, URL and updated-at default fields remain; iid is opt-in",
+    "username": "server-side filter; pinned PipelineInfo omits the triggering user",
+    "watch_success": "only exact pipeline success exits zero; no job/bridge or merge-readiness claim",
+    "watch_non_green": "failed, canceled, skipped and manual exit conflict; unknown/stale evidence exits safety violation",
+    "watch_timeout": "upstream_error with watch_timeout reason, never success",
+    "watch_caller_cancel": "canceled exit 130, never success",
+    "trace_selection": "failed includes allow_failure jobs; selected membership and status rechecked before trace; hard cap truncation disclosed",
+    "merge_proof": "filtered reads are separate from existing complete unfiltered jobs/bridges proof",
+    "native_v1": "unchanged"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/pipeline-watch.schema.json",
+  "title": "glab-axi/ux-v1 pipeline-watch data (only verified pipeline success exits zero)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pipeline", "outcome", "polls"],
+  "properties": {
+    "pipeline": {"$ref": "resources.schema.json#/$defs/pipeline"},
+    "outcome": {"const": "success"},
+    "polls": {"type": "integer", "minimum": 1, "maximum": 100}
+  }
+}

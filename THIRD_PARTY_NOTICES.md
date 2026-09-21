@@ -17,3 +17,8 @@ Official GitLab CLI `glab` is an external runtime prerequisite, not linked or
 bundled. The supported v1.112.0 release is MIT licensed; its exact upstream
 license and package/source/help evidence are retained under
 `contracts/official-glab/v1.112.0/`.
+
+CI read conformance evidence also includes source excerpts from
+`gitlab.com/gitlab-org/api/client-go/v2` v2.53.0, licensed under Apache-2.0.
+It is not linked into this binary. The fixture retains attribution and the
+license text is in `licenses/gitlab.com_gitlab-org_api_client-go_v2.LICENSE`.

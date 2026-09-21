@@ -194,7 +194,10 @@ func TestProductMRChecksFailsUnknownJobsClosed(t *testing.T) {
 func TestProductTraceIsTailBoundedAndRedacted(t *testing.T) {
 	secret := strings.Join([]string{"glpat", "runtime", "trace", "sentinel"}, "-")
 	trace := strings.Repeat("x", 300<<10) + "\nPRIVATE-TOKEN: " + secret + "\n"
-	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{glab.OpJobTrace: {{Body: []byte(trace), UpstreamVersion: glab.SupportedVersion}}}}
+	delegate := &fakeDelegate{responses: map[glab.Operation][]glab.Response{
+		glab.OpJobView:  {ciResponse(ciJob(9, "failed"))},
+		glab.OpJobTrace: {{Body: []byte(trace), UpstreamVersion: glab.SupportedVersion}},
+	}}
 	stdout, _, deps := productTestDeps(t, delegate)
 	if code := Run(context.Background(), []string{"job", "trace", "9", "-R", "group/project", "--hostname", "gitlab.com", "--format", "json"}, deps); code != 0 {
 		t.Fatalf("exit=%d output=%s", code, stdout.String())

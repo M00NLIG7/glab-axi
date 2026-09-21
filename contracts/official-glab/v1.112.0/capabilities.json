@@ -137,7 +137,10 @@
     {
       "name": "pipeline-list",
       "kind": "read-json-page",
-      "argv": ["ci", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
+      "argv": ["ci", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"],
+      "optional_typed_argv_before_page": ["--ref", "{ref}", "--status", "{gitlab_status}", "--source", "{pipeline_source}", "--username", "{username}", "--sha", "{sha}"],
+      "response_optional_additive_fields": ["iid"],
+      "evidence": "ci-reads-source.go.txt; help.txt ci list"
     },
     {
       "name": "pipeline-view",
@@ -147,7 +150,9 @@
     {
       "name": "job-list",
       "kind": "fixed-api-read-json-page",
-      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{pipeline_id}/jobs?page={page}&per_page={per_page}"]
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/pipelines/{pipeline_id}/jobs?page={page}&per_page={per_page}"],
+      "optional_typed_query_suffix": "&scope%5B%5D={gitlab_status}",
+      "evidence": "ci-reads-source.go.txt ListJobsOptions and ListPipelineJobs"
     },
     {
       "name": "job-view",

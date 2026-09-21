@@ -76,6 +76,10 @@ type Request struct {
 	ListID                      int64
 	Cursor                      string
 	AllowOrderingInitialization bool
+	PipelineFilters             PipelineFilters
+	JobStatus                   string
+	// MaxResponseBytes may only narrow the operation's existing capture cap.
+	MaxResponseBytes int
 }
 
 type invocation struct {
@@ -134,6 +138,12 @@ func build(request Request) (invocation, error) {
 			OpReleaseList:  {"release", "list", "--output", "json"},
 			OpLabelList:    {"label", "list", "--output", "json"},
 		}[request.Operation]
+		if request.Operation == OpPipelineList {
+			if err := ValidatePipelineFilters(request.PipelineFilters); err != nil {
+				return invocation{}, err
+			}
+			base = append(base, request.PipelineFilters.args()...)
+		}
 		base = append(base, page...)
 		base = append(base, repoArgs()...)
 		return jsonPage(base), nil
@@ -213,6 +223,12 @@ func build(request Request) (invocation, error) {
 			return invocation{}, err
 		}
 		endpoint := fmt.Sprintf("projects/%s/pipelines/%d/jobs?page=%d&per_page=%d", escapedRepo, request.PipelineID, request.Page, request.PerPage)
+		if request.JobStatus != "" {
+			if !ValidCIStatus(request.JobStatus) {
+				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "invalid job status")
+			}
+			endpoint += "&scope%5B%5D=" + url.QueryEscape(request.JobStatus)
+		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpJobView, OpJobTrace:
 		if request.ID < 1 {

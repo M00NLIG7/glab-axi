@@ -26,13 +26,14 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - `gl-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` - Immediately squash-merge one exact green merge request.
 - `gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` - Create or update exactly one matching open merge request.
 - `gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` - Alias for bounded MR ensure semantics.
-- `gl-axi pipeline list [global flags]` - List project pipelines.
-- `gl-axi pipeline view <id> [global flags]` - View one pipeline.
-- `gl-axi job list --pipeline-id ID [global flags]` - List jobs for one pipeline.
+- `gl-axi pipeline list [--ref REF] [--status STATUS] [--source SOURCE] [--user USERNAME] [--sha SHA] [--fields iid,sha,web_url,updated_at] [global flags]` - List project pipelines.
+- `gl-axi pipeline view <id> [--ref REF] [--sha SHA] [--jobs] [--job-id ID] [--job-status STATUS] [--trace | --trace-failed] [global flags]` - View one pipeline.
+- `gl-axi pipeline watch <id> [--timeout SECONDS] [--interval SECONDS] [--ref REF] [--sha SHA] [target/output flags]` - Watch one exact pipeline within a finite budget.
+- `gl-axi job list --pipeline-id ID [--job-id ID] [--status STATUS] [global flags]` - List jobs for one pipeline.
 - `gl-axi job artifacts <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA` - Read artifact metadata for one exact job and pipeline.
 - `gl-axi job download <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA --destination ABSOLUTE_NEW_DIRECTORY` - Safely extract one exact job's artifact ZIP into a new directory.
-- `gl-axi job view <id> [global flags]` - View one CI/CD job.
-- `gl-axi job trace <id> [global flags]` - View a bounded, redacted tail of one job trace.
+- `gl-axi job view <id> [--pipeline-id ID] [global flags]` - View one CI/CD job.
+- `gl-axi job trace <id> [--pipeline-id ID] [global flags]` - View a bounded, redacted tail of one job trace.
 - `gl-axi release list [global flags]` - List project releases and bounded download metadata.
 - `gl-axi release download <tag> --auth-source native --hostname HOST -R PROJECT --expected-sha SHA --asset-id ID --asset-name NAME --destination ABSOLUTE_NEW_DIRECTORY` - Download one exact release asset into a new private directory.
 - `gl-axi release view [tag] [global flags]` - View a release and project-bound download metadata (latest when omitted).

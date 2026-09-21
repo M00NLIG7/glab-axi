@@ -87,6 +87,9 @@ func (c *Client) Do(ctx context.Context, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
+	if request.MaxResponseBytes > 0 {
+		invocation.maxStdout = min(invocation.maxStdout, request.MaxResponseBytes)
+	}
 	version, err := c.ensureVersion(ctx)
 	if err != nil {
 		return Response{}, err

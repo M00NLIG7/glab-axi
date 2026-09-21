@@ -25,6 +25,7 @@
       "additionalProperties": false,
       "required": ["id", "status"],
       "properties": {
+        "iid": {"type": "integer", "minimum": 1},
         "id": {"type": "integer", "minimum": 1},
         "status": {"enum": ["success", "failed", "canceled", "skipped", "running"]},
         "raw_status": {"type": "string", "maxLength": 128},

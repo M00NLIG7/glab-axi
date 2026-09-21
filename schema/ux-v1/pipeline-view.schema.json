@@ -10,6 +10,19 @@
   "properties": {
     "pipeline": {
       "$ref": "resources.schema.json#/$defs/pipeline"
+    },
+    "jobs": {"type": "array", "maxItems": 1000, "items": {"$ref": "resources.schema.json#/$defs/job"}},
+    "traces": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["job_id", "trace", "truncated"],
+        "properties": {
+          "job_id": {"type": "integer", "minimum": 1},
+          "trace": {"type": "string", "maxLength": 262168},
+          "truncated": {"type": "boolean"}
+        }
+      }
     }
   }
 }
