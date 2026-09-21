@@ -27,8 +27,8 @@ pinned provider does not establish a comment-count sort; popularity is not an
 alias for comment count.
 
 MRs additionally accept `--source-branch BRANCH`, `--target-branch BRANCH`, and
-mutually exclusive `--draft` / `--not-draft`. Branches must be valid Git branch
-names. Returned MRs must match selected branches.
+`--draft` to select draft MRs. Omitting `--draft` includes both draft and
+non-draft MRs. Branches must be valid Git branch names. Returned MRs must match selected branches.
 
 All flags accept space or equals values. Duplicate singleton flags, empty values,
 unknown flags, and ambiguous input fail before official-glab child work. These
@@ -36,13 +36,13 @@ are typed selectors, not raw upstream argv or query-language passthrough.
 
 ```sh
 gl-axi issue list -R group/project --state closed --label bug --author alice --sort updated
-gl-axi mr list -R group/project --source-branch feature/topic --target-branch main --not-draft
+gl-axi mr list -R group/project --source-branch feature/topic --target-branch main --draft
 ```
 
 The pinned official client resolves author/assignee usernames with bounded user
 GET requests and sends their IDs to the project list. Milestone titles and label
 names are encoded as query values. The official client's draft selector uses
-GitLab's `wip=yes|no` query. Exact behavior is tested against a local TLS server
+GitLab's `wip=yes` query. Exact behavior is tested against a local TLS server
 with synthetic credentials, without using a real account or profile.
 
 ## Optional fields and descriptions
@@ -60,20 +60,30 @@ GitLab JSON keys are not accepted, and views do not accept `--fields`.
   schemas. Selection does not invent unavailable provider facts.
 - Lists omit descriptions by default. Select `description` to include them.
 - Views include descriptions by default and retain their existing output shape.
-- `--body-limit N` lowers the description cap to 0..131072 UTF-8 bytes. The
-  default remains 131072. It requires an included description (automatic on views;
-  lists require `--fields description`). Zero omits the body, reporting truncation if nonempty.
-  Truncation never splits UTF-8 or exceeds the requested bytes, including markers.
+- Included descriptions retain the fixed 131072-byte UTF-8 cap. Truncation never
+  splits UTF-8 or exceeds that cap, including the truncation marker.
 
 ```sh
-gl-axi issue list -R group/project --fields description,labels --body-limit 500 --limit 10 --format json
-gl-axi mr view 42 -R group/project --body-limit 4096 --format json
+gl-axi issue list -R group/project --fields description,labels --limit 10 --format json
+gl-axi mr view 42 -R group/project --format json
 ```
 
 No schema widening is needed: these fields are already optional in the closed
 `schema/ux-v1/resources.schema.json` contracts. `meta.complete` describes item-set
 pagination, while `meta.truncated` also reports field cuts (`field_limit`).
 Existing page/display-limit reasons take precedence over field truncation.
+
+## Capability matrix
+
+| Capability | Pinned reference | This increment |
+| --- | --- | --- |
+| List descriptions | Additive `--fields body` | Additive `--fields description`, capped at 131072 UTF-8 bytes |
+| Default view body | Truncated preview | Existing default body shape, capped at 131072 UTF-8 bytes |
+| Full view body | `--full` disables body truncation | Not implemented; the fixed safety cap always applies |
+| Draft-only PR/MR list | `--draft`; omission is unfiltered | `--draft`; omission is unfiltered |
+
+The reference full-view option remains a parity gap. This increment does not
+provide unbounded body output or caller-configurable byte limits.
 
 ## Bounds and compatibility
 
@@ -84,7 +94,8 @@ page when necessary; the hard page limit never claims completeness. There is no
 unbounded `--full`, arbitrary `--json`, jq, raw API or new provider mutation.
 
 Host/project/resource identity is checked before rendering, including exact IID
-for views. The existing root-path target contract does not accept a different
+for views. Issue URLs accept only the exact project paths `/-/issues/IID` and
+`/-/work_items/IID`; MR URLs accept only `/-/merge_requests/IID`. The existing root-path target contract does not accept a different
 nested project merely because its path ends with the requested namespace.
 
 Canonical `gl-axi` and the tested `glab-axi` executable alias share these behaviors.

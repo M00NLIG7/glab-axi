@@ -20,7 +20,6 @@ type ListFilters struct {
 	SourceBranch string
 	TargetBranch string
 	Draft        bool
-	NotDraft     bool
 }
 
 // Validate runs both before target discovery and at the delegate boundary.
@@ -73,10 +72,7 @@ func (f ListFilters) Validate(operation Operation) error {
 	if f.Sort != "" && (operation != OpIssueList || f.Sort != "created" && f.Sort != "updated") {
 		return invalid()
 	}
-	if operation == OpIssueList && (f.SourceBranch != "" || f.TargetBranch != "" || f.Draft || f.NotDraft) {
-		return invalid()
-	}
-	if f.Draft && f.NotDraft {
+	if operation == OpIssueList && (f.SourceBranch != "" || f.TargetBranch != "" || f.Draft) {
 		return invalid()
 	}
 	for _, branch := range []string{f.SourceBranch, f.TargetBranch} {
@@ -129,9 +125,6 @@ func (f ListFilters) argv(operation Operation) ([]string, error) {
 	}
 	if f.Draft {
 		args = append(args, "--draft")
-	}
-	if f.NotDraft {
-		args = append(args, "--not-draft")
 	}
 	return args, nil
 }

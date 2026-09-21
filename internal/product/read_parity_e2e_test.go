@@ -56,7 +56,7 @@ fi
 							t.Fatalf("help: %v: %s", err, output)
 						}
 						help := string(output)
-						if strings.Contains(help, "--fields") != (action == "list") || strings.Contains(help, "--milestone") != (group == "issue" && action == "list") || strings.Contains(help, "open|opened") || !strings.Contains(help, "--body-limit") {
+						if strings.Contains(help, "--fields") != (action == "list") || strings.Contains(help, "--milestone") != (group == "issue" && action == "list") || strings.Contains(help, "open|opened") || strings.Contains(help, "--body-limit") || strings.Contains(help, "--not-draft") {
 							t.Fatalf("unexpected help: %s", help)
 						}
 					})
@@ -68,12 +68,11 @@ fi
 				expected        string
 				wantDescription bool
 			}{
-				{"filtered issues", []string{"issue", "list", "--state=closed", "--label=triage", "--label=needs review", "--author=alice", "--assignee=bob", "--milestone=release 2", "--sort=updated", "--fields=description,labels", "--body-limit=16"}, "issue list --output json --closed --label=triage --label=needs review --author=alice --assignee=bob --milestone=release 2 --order=updated_at --sort=desc --page 1 --per-page 31 -R group/project", true},
-				{"filtered MRs", []string{"mr", "list", "--state=merged", "--source-branch=feature/topic", "--target-branch=main", "--not-draft", "--fields=description", "--body-limit=16"}, "mr list --output json --merged --source-branch=feature/topic --target-branch=main --not-draft --page 1 --per-page 31 -R group/project", true},
-				{"issue body", []string{"issue", "view", "42", "--body-limit=16"}, "issue view 42 --output json -R group/project", true},
-				{"MR body", []string{"mr", "view", "42", "--body-limit=16"}, "mr view 42 --output json -R group/project", true},
+				{"filtered issues", []string{"issue", "list", "--state=closed", "--label=triage", "--label=needs review", "--author=alice", "--assignee=bob", "--milestone=release 2", "--sort=updated", "--fields=description,labels"}, "issue list --output json --closed --label=triage --label=needs review --author=alice --assignee=bob --milestone=release 2 --order=updated_at --sort=desc --page 1 --per-page 31 -R group/project", true},
+				{"filtered MRs", []string{"mr", "list", "--state=merged", "--source-branch=feature/topic", "--target-branch=main", "--fields=description"}, "mr list --output json --merged --source-branch=feature/topic --target-branch=main --page 1 --per-page 31 -R group/project", true},
 				{"issue defaults", []string{"issue", "view", "42"}, "issue view 42 --output json -R group/project", true},
 				{"MR defaults", []string{"mr", "view", "42"}, "mr view 42 --output json -R group/project", true},
+				{"draft MRs", []string{"mr", "list", "--draft"}, "mr list --output json --draft --page 1 --per-page 31 -R group/project", false},
 				{"open issues", []string{"issue", "list", "--state=open", "--fields=author"}, "issue list --output json --page 1 --per-page 31 -R group/project", false},
 				{"open MRs", []string{"mr", "list", "--state=open", "--fields=author"}, "mr list --output json --page 1 --per-page 31 -R group/project", false},
 			} {
@@ -138,6 +137,53 @@ fi
 						t.Fatalf("unexpected child work: %s", calls)
 					}
 				})
+			}
+			for _, test := range readParityURLCases() {
+				for _, action := range []string{"list", "view"} {
+					t.Run("URL "+test.name+"/"+action, func(t *testing.T) {
+						record := filepath.Join(t.TempDir(), "calls")
+						responseFile := filepath.Join(t.TempDir(), "response")
+						item := readParityObject(test.group, "body", 42)
+						item["web_url"] = test.web
+						var source any = item
+						args := []string{test.group, action}
+						expected := test.group + " list --output json --page 1 --per-page 31 -R group/project"
+						if action == "list" {
+							source = []any{item}
+						} else {
+							args = append(args, "42")
+							expected = test.group + " view 42 --output json -R group/project"
+						}
+						body, err := json.Marshal(source)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if err := os.WriteFile(responseFile, body, 0600); err != nil {
+							t.Fatal(err)
+						}
+						command := exec.Command(binary, readParityArgs(args)...)
+						command.Dir = dir
+						command.Env = []string{"PATH=" + dir + ":/usr/bin:/bin", "HOME=" + dir, "GL_AXI_READ_RECORD=" + record, "GL_AXI_READ_RESPONSE=" + responseFile, "GL_AXI_READ_EXPECTED=" + expected}
+						var stdout, stderr bytes.Buffer
+						command.Stdout, command.Stderr = &stdout, &stderr
+						err = command.Run()
+						code := 0
+						if err != nil {
+							exit, ok := err.(*exec.ExitError)
+							if !ok {
+								t.Fatal(err)
+							}
+							code = exit.ExitCode()
+						}
+						if code != test.wantCode || stderr.Len() != 0 || !json.Valid(stdout.Bytes()) {
+							t.Fatalf("exit=%d want=%d stdout=%s stderr=%s", code, test.wantCode, &stdout, &stderr)
+						}
+						calls, err := os.ReadFile(record)
+						if err != nil || string(calls) != "version\n"+expected+"\n" {
+							t.Fatalf("unexpected child work: %s error=%v", calls, err)
+						}
+					})
+				}
 			}
 			for _, args := range contract.Rejected {
 				t.Run("reject "+strings.Join(args, " "), func(t *testing.T) {

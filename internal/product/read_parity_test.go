@@ -14,6 +14,7 @@ import (
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
 )
 
 type readParityContract struct {
@@ -83,6 +84,106 @@ func readParityBody(t *testing.T, group, action, description string) []byte {
 	return encoded
 }
 
+func readParityURLCases() []struct {
+	name, group, web string
+	wantCode         int
+} {
+	return []struct {
+		name, group, web string
+		wantCode         int
+	}{
+		{"issue", "issue", "https://gitlab.com/group/project/-/issues/42", 0},
+		{"work-item", "issue", "https://gitlab.com/group/project/-/work_items/42", 0},
+		{"MR", "mr", "https://gitlab.com/group/project/-/merge_requests/42", 0},
+		{"work-item-host", "issue", "https://evil.invalid/group/project/-/work_items/42", 9},
+		{"work-item-project", "issue", "https://gitlab.com/group/other/-/work_items/42", 9},
+		{"work-item-nested-project", "issue", "https://gitlab.com/other/group/project/-/work_items/42", 9},
+		{"work-item-IID", "issue", "https://gitlab.com/group/project/-/work_items/43", 9},
+		{"work-item-padded-IID", "issue", "https://gitlab.com/group/project/-/work_items/042", 9},
+		{"work-item-child-path", "issue", "https://gitlab.com/group/project/-/work_items/42/notes", 9},
+		{"work-item-query", "issue", "https://gitlab.com/group/project/-/work_items/42?x=private", 9},
+		{"work-item-fragment", "issue", "https://gitlab.com/group/project/-/work_items/42#note_1", 9},
+		{"work-item-encoded-separator", "issue", "https://gitlab.com/group/project/-/work_items%2F42", 9},
+		{"issue-MR-route", "issue", "https://gitlab.com/group/project/-/merge_requests/42", 9},
+		{"MR-work-item-route", "mr", "https://gitlab.com/group/project/-/work_items/42", 9},
+		{"MR-issue-route", "mr", "https://gitlab.com/group/project/-/issues/42", 9},
+	}
+}
+
+func TestReadSelectionIssueURLForms(t *testing.T) {
+	for _, test := range readParityURLCases() {
+		for _, action := range []string{"list", "view"} {
+			t.Run(test.name+"/"+action, func(t *testing.T) {
+				item := readParityObject(test.group, "body", 42)
+				item["web_url"] = test.web
+				var source any = item
+				args := []string{test.group, action}
+				if action == "list" {
+					source = []any{item}
+				} else {
+					args = append(args, "42")
+				}
+				body, err := json.Marshal(source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				delegate := &fakeDelegate{doFunc: func(context.Context, glab.Request) (glab.Response, error, bool) {
+					return glab.Response{Body: body}, nil, true
+				}}
+				stdout, stderr, deps := productTestDeps(t, delegate)
+				if code := Run(context.Background(), readParityArgs(args), deps); code != test.wantCode || stderr.Len() != 0 {
+					t.Fatalf("exit=%d want=%d output=%s stderr=%s", code, test.wantCode, stdout, stderr)
+				}
+				var envelope struct {
+					Data json.RawMessage `json:"data"`
+				}
+				if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if test.wantCode != 0 && len(envelope.Data) != 0 && string(envelope.Data) != "null" {
+					t.Fatalf("unsafe resource returned: %s", envelope.Data)
+				}
+				if test.wantCode == 0 {
+					var data map[string]json.RawMessage
+					if err := json.Unmarshal(envelope.Data, &data); err != nil {
+						t.Fatal(err)
+					}
+					type resource struct {
+						IID    int64  `json:"iid"`
+						WebURL string `json:"web_url"`
+					}
+					var got resource
+					if action == "view" {
+						if err := json.Unmarshal(data[test.group], &got); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						key := "issues"
+						if test.group == "mr" {
+							key = "mrs"
+						}
+						var items []resource
+						if err := json.Unmarshal(data[key], &items); err != nil || len(items) != 1 {
+							t.Fatalf("items=%#v error=%v", items, err)
+						}
+						got = items[0]
+					}
+					if got.IID != 42 || got.WebURL != test.web {
+						t.Fatalf("resource identity changed: %#v", got)
+					}
+					if action == "view" {
+						args[2] = "43"
+						stdout, _, deps = productTestDeps(t, delegate)
+						if code := Run(context.Background(), readParityArgs(args), deps); code != 9 {
+							t.Fatalf("different view IID accepted: exit=%d output=%s", code, stdout)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestPinnedReadParityConsumerContract(t *testing.T) {
 	contract := loadReadParityContract(t)
 	for _, args := range contract.Accepted {
@@ -126,10 +227,10 @@ func TestPinnedReadParityConsumerContract(t *testing.T) {
 func TestReadSelectionPreservesDefaultFieldsAndByteBounds(t *testing.T) {
 	for _, group := range []string{"issue", "mr"} {
 		for _, action := range []string{"list", "view"} {
-			for _, limit := range []int{0, 1, 2, 5, 16, 32, 131072} {
-				t.Run(fmt.Sprintf("%s/%s/%d", group, action, limit), func(t *testing.T) {
+			for _, raw := range []string{"", "body", strings.Repeat("a", limits.MaxDescriptionBytes), strings.Repeat("é", limits.MaxDescriptionBytes/2), strings.Repeat("界", limits.MaxDescriptionBytes/3) + "ab", strings.Repeat("界", limits.MaxDescriptionBytes/3+1)} {
+				t.Run(fmt.Sprintf("%s/%s/%d", group, action, len(raw)), func(t *testing.T) {
 					delegate := &fakeDelegate{doFunc: func(_ context.Context, r glab.Request) (glab.Response, error, bool) {
-						return glab.Response{Body: readParityBody(t, group, action, strings.Repeat("界", 50000))}, nil, true
+						return glab.Response{Body: readParityBody(t, group, action, raw)}, nil, true
 					}}
 					stdout, _, deps := productTestDeps(t, delegate)
 					args := []string{group, action}
@@ -138,7 +239,6 @@ func TestReadSelectionPreservesDefaultFieldsAndByteBounds(t *testing.T) {
 					} else {
 						args = append(args, "--fields=description")
 					}
-					args = append(args, "--body-limit="+strconv.Itoa(limit))
 					if code := Run(context.Background(), readParityArgs(args), deps); code != 0 {
 						t.Fatalf("exit=%d %s", code, stdout)
 					}
@@ -167,10 +267,20 @@ func TestReadSelectionPreservesDefaultFieldsAndByteBounds(t *testing.T) {
 						t.Fatal(err)
 					}
 					description, _ := item["description"].(string)
-					if len(description) > limit || !utf8.ValidString(description) || item["iid"] != float64(42) || item["web_url"] == nil || item["state"] != "opened" || item["author"] != "alice" || item["labels"] == nil || item["created_at"] == nil || item["updated_at"] == nil {
+					if len(description) > limits.MaxDescriptionBytes || !utf8.ValidString(description) || item["iid"] != float64(42) || item["web_url"] == nil || item["state"] != "opened" || item["author"] != "alice" || item["labels"] == nil || item["created_at"] == nil || item["updated_at"] == nil {
 						t.Fatalf("selection failed: %#v", item)
 					}
-					if !envelope.Meta.Complete || !envelope.Meta.Truncated || envelope.Meta.Reason != "field_limit" {
+					truncated := len(raw) > limits.MaxDescriptionBytes
+					reason := ""
+					if truncated {
+						reason = "field_limit"
+						if !strings.HasSuffix(description, "…[truncated]") || !strings.HasPrefix(raw, strings.TrimSuffix(description, "…[truncated]")) || len(description) < limits.MaxDescriptionBytes-3 {
+							t.Fatalf("invalid fixed-cap truncation: %q", description)
+						}
+					} else if description != raw {
+						t.Fatalf("description changed below cap: length=%d", len(raw))
+					}
+					if !envelope.Meta.Complete || envelope.Meta.Truncated != truncated || envelope.Meta.Reason != reason {
 						t.Fatalf("metadata=%#v", envelope.Meta)
 					}
 				})

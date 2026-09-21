@@ -4,14 +4,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
 )
 
-const readSelectionDetails = "Default fields and identity/state validation always remain.\nDefaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.\nUse --body-limit to lower the description cap.\nmeta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.\nSee docs/read-parity.md for filter semantics, field names, and remaining reference differences."
+const readSelectionDetails = "Default fields and identity/state validation always remain.\nDefaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.\nmeta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.\nSee docs/read-parity.md for filter semantics, field names, and remaining reference differences."
 
 func readListFlags(mr bool) []FlagDefinition {
 	state := "open|closed|all"
@@ -28,8 +27,7 @@ func readListFlags(mr bool) []FlagDefinition {
 		flags = append(flags,
 			FlagDefinition{Name: "--source-branch", Value: "BRANCH", Description: "Exact source branch."},
 			FlagDefinition{Name: "--target-branch", Value: "BRANCH", Description: "Exact target branch."},
-			FlagDefinition{Name: "--draft", Boolean: true, Description: "Only draft MRs; mutually exclusive with --not-draft."},
-			FlagDefinition{Name: "--not-draft", Boolean: true, Description: "Only non-draft MRs."})
+			FlagDefinition{Name: "--draft", Boolean: true, Description: "Only draft MRs; omit to include draft and non-draft MRs."})
 	} else {
 		flags = append(flags,
 			FlagDefinition{Name: "--milestone", Value: "TITLE", Description: "Exact milestone title, not provider selectors (None, Any, Upcoming, Started, #upcoming, #started, No Milestone, Any Milestone)."},
@@ -40,13 +38,7 @@ func readListFlags(mr bool) []FlagDefinition {
 		fields += ",base_sha,head_sha,head_pipeline,raw_merge_status"
 	}
 	flags = append(flags, FlagDefinition{Name: "--fields", Value: "FIELD,...", Description: "Add optional fields: " + fields + ". Default fields always remain; description adds list bodies."})
-	return append(flags, readBodyFlags()...)
-}
-
-func readBodyFlags() []FlagDefinition {
-	return []FlagDefinition{
-		{Name: "--body-limit", Value: "BYTES", Description: "Description cap 0..131072 UTF-8 bytes (default 131072); requires an included description. Never raises provider/operation bounds."},
-	}
+	return flags
 }
 
 func listFilters(parsed Parsed) glab.ListFilters {
@@ -54,17 +46,16 @@ func listFilters(parsed Parsed) glab.ListFilters {
 		State: parsed.Values["--state"], Labels: parsed.MultiValues["--label"],
 		Author: parsed.Values["--author"], Assignee: parsed.Values["--assignee"], Milestone: parsed.Values["--milestone"],
 		Sort: parsed.Values["--sort"], SourceBranch: parsed.Values["--source-branch"], TargetBranch: parsed.Values["--target-branch"],
-		Draft: parsed.Booleans["--draft"], NotDraft: parsed.Booleans["--not-draft"],
+		Draft: parsed.Booleans["--draft"],
 	}
 }
 
 type readSelection struct {
-	body      bool
-	bodyLimit int
+	body bool
 }
 
 func parseReadSelection(parsed Parsed) (readSelection, error) {
-	selection := readSelection{body: parsed.Definition.Path[1] == "view", bodyLimit: limits.MaxDescriptionBytes}
+	selection := readSelection{body: parsed.Definition.Path[1] == "view"}
 	if raw := parsed.Values["--fields"]; raw != "" {
 		allowed := map[string]bool{"description": true, "author": true, "labels": true, "created_at": true, "updated_at": true}
 		if parsed.Definition.Path[0] == "mr" {
@@ -80,13 +71,6 @@ func parseReadSelection(parsed Parsed) (readSelection, error) {
 			fields[field] = true
 		}
 		selection.body = fields["description"]
-	}
-	if raw := parsed.Values["--body-limit"]; raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 0 || n > limits.MaxDescriptionBytes || strconv.Itoa(n) != raw || !selection.body {
-			return selection, uxv1.NewError(uxv1.CodeValidation, "--body-limit requires a selected description and a canonical byte count from 0 through 131072")
-		}
-		selection.bodyLimit = n
 	}
 	return selection, nil
 }
@@ -109,27 +93,11 @@ func validateReadParsed(parsed Parsed) error {
 	return err
 }
 
-// Body selection is a local rendering choice, never additional upstream argv.
-// Even very small caps remain byte-bounded, including truncation markers.
 func (s readSelection) description(raw string) (string, bool, error) {
 	if !s.body {
 		return "", false, nil
 	}
-	if !utf8.ValidString(raw) || strings.ContainsRune(raw, '\x00') {
-		return "", false, malformed("description")
-	}
-	if len(raw) <= s.bodyLimit {
-		return raw, false, nil
-	}
-	marker := "…[truncated]"
-	if len(marker) > s.bodyLimit {
-		marker = ""
-	}
-	cut := s.bodyLimit - len(marker)
-	for cut > 0 && !utf8.RuneStart(raw[cut]) {
-		cut--
-	}
-	return raw[:cut] + marker, true, nil
+	return boundedText(raw, "description", limits.MaxDescriptionBytes, false)
 }
 
 func (s readSelection) issue(item upstreamIssue, target Target, iid int64) (Issue, bool, error) {
@@ -163,9 +131,17 @@ func (s readSelection) mr(item upstreamMR, target Target, iid int64, filters gla
 
 func readResourceIdentity(raw string, target Target, resource string, actual, expected int64) error {
 	parsed, err := url.Parse(raw)
-	path := (&url.URL{Path: "/" + target.Repo + "/-/" + resource + "/" + strconv.FormatInt(actual, 10)}).EscapedPath()
-	if err != nil || parsed.EscapedPath() != path || expected != 0 && actual != expected {
-		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different resource identity")
+	if err == nil && (expected == 0 || actual == expected) {
+		resources := []string{resource}
+		if resource == "issues" {
+			resources = append(resources, "work_items")
+		}
+		for _, kind := range resources {
+			path := (&url.URL{Path: "/" + target.Repo + "/-/" + kind + "/" + strconv.FormatInt(actual, 10)}).EscapedPath()
+			if parsed.EscapedPath() == path {
+				return nil
+			}
+		}
 	}
-	return nil
+	return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different resource identity")
 }

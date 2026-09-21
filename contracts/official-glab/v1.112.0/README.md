@@ -70,8 +70,8 @@ Issue/MR list filter variants are pinned in `capabilities.json` and
 `TestPinnedOfficialGlabReadFiltersTLS`. The existing help transcript proves
 state, labels, author/assignee, issue milestone and ordering, MR branches and draft
 flags. The TLS fixture proves exact query encoding, username-to-ID GET reads,
-and `wip=yes|no` draft semantics. Local list `--fields` additions and `--body-limit`
-never changes upstream argv or raises provider bounds. The fixture uses only a
+and `wip=yes` draft semantics. Local list `--fields` additions never change
+upstream argv or raise the fixed description cap or provider bounds. The fixture uses only a
 synthetic per-host `ca_cert` profile so it also runs on macOS without system trust
 or credential-store changes.
 

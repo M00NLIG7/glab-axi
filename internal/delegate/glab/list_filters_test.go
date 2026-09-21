@@ -27,7 +27,7 @@ func TestListFiltersBuildClosedArgv(t *testing.T) {
 		{OpIssueList, ListFilters{State: "open"}, nil},
 		{OpMRList, ListFilters{State: "open"}, nil},
 		{OpIssueList, ListFilters{State: "closed", Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob", Milestone: "release 2", Sort: "updated"}, []string{"--closed", "--label=triage", "--label=needs review", "--author=alice", "--assignee=bob", "--milestone=release 2", "--order=updated_at", "--sort=desc"}},
-		{OpMRList, ListFilters{State: "merged", SourceBranch: "feature/topic", TargetBranch: "main", NotDraft: true}, []string{"--merged", "--source-branch=feature/topic", "--target-branch=main", "--not-draft"}},
+		{OpMRList, ListFilters{State: "merged", SourceBranch: "feature/topic", TargetBranch: "main"}, []string{"--merged", "--source-branch=feature/topic", "--target-branch=main"}},
 		{OpMRList, ListFilters{State: "all", Draft: true}, []string{"--all", "--draft"}},
 	} {
 		request := Request{Operation: test.op, Host: "gitlab.com", Repo: "group/project", Page: 2, PerPage: 31, Filters: test.filters}
@@ -48,7 +48,7 @@ func TestListFiltersBuildClosedArgv(t *testing.T) {
 	for _, filters := range []ListFilters{
 		{State: "bad"}, {Labels: []string{"a,b"}}, {Labels: []string{"any"}}, {Labels: []string{"x", "x"}},
 		{Author: "--all"}, {Assignee: "@me"}, {Milestone: "None"}, {Sort: "comments"},
-		{SourceBranch: "../main"}, {TargetBranch: "main.lock"}, {Draft: true, NotDraft: true},
+		{SourceBranch: "../main"}, {TargetBranch: "main.lock"},
 	} {
 		if _, err := build(Request{Operation: OpMRList, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 31, Filters: filters}); err == nil {
 			t.Fatalf("invalid filters accepted: %#v", filters)
@@ -144,20 +144,20 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 	}
 	client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + filepath.Join(home, "config"), "GITLAB_TOKEN=" + strings.Join([]string{"synthetic", "filter", "token"}, "-"), "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caBundle, "PATH=/usr/bin:/bin"}})
 	for _, test := range []struct {
-		op              Operation
-		state, sort     string
-		draft, notDraft bool
+		op          Operation
+		state, sort string
+		draft       bool
 	}{
-		{OpIssueList, "open", "created", false, false},
-		{OpMRList, "open", "", false, false},
-		{OpIssueList, "closed", "updated", false, false},
-		{OpIssueList, "all", "created", false, false},
-		{OpMRList, "all", "", true, false},
-		{OpMRList, "merged", "", false, true},
-		{OpMRList, "closed", "", false, false},
+		{OpIssueList, "open", "created", false},
+		{OpMRList, "open", "", false},
+		{OpIssueList, "closed", "updated", false},
+		{OpIssueList, "all", "created", false},
+		{OpMRList, "all", "", true},
+		{OpMRList, "merged", "", false},
+		{OpMRList, "closed", "", false},
 	} {
 		op := test.op
-		filters := ListFilters{State: test.state, Sort: test.sort, Draft: test.draft, NotDraft: test.notDraft, Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob"}
+		filters := ListFilters{State: test.state, Sort: test.sort, Draft: test.draft, Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob"}
 		if op == OpMRList {
 			filters.SourceBranch = "feature/topic"
 			filters.TargetBranch = "main"
@@ -205,9 +205,6 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 			want.Set("target_branch", "main")
 			if test.draft {
 				want.Set("wip", "yes")
-			}
-			if test.notDraft {
-				want.Set("wip", "no")
 			}
 		}
 		if !reflect.DeepEqual(query, want) || len(captured) != 3 {
