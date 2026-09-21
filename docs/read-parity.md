@@ -92,6 +92,9 @@ All pages retain identical filters and page width. The display limit remains
 provider output and a 30-second read deadline. Exact-limit lists probe one further
 page when necessary; the hard page limit never claims completeness. There is no
 unbounded `--full`, arbitrary `--json`, jq, raw API or new provider mutation.
+Accumulated results exceeding the 8 MiB serialization cap return a bounded
+`upstream_error` envelope without data, with `meta.complete=false`,
+`meta.truncated=true`, and reason `operation_limit`.
 
 Host/project/resource identity is checked before rendering, including exact IID
 for views. Issue URLs accept only the exact project paths `/-/issues/IID` and

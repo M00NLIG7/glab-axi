@@ -152,7 +152,17 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 		meta.Complete = false
 		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), parsed.Format, err, meta)
 	}
-	if err := output.WriteValue(deps.Runtime.Stdout, parsed.Format, uxv1.Success(result.data, result.meta)); err != nil {
+	data, err := output.MarshalValue(parsed.Format, uxv1.Success(result.data, result.meta))
+	if err != nil {
+		meta := result.meta
+		meta.Complete = false
+		if uxv1.AsError(err).Code == uxv1.CodeUpstream {
+			meta.Truncated = true
+			meta.Reason = "operation_limit"
+		}
+		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), parsed.Format, err, meta)
+	}
+	if n, err := deps.Runtime.Stdout.Write(data); err != nil || n < len(data) {
 		_, _ = fmt.Fprintf(deps.Runtime.Stderr, "%s: output failure\n", productProgramName(deps))
 		return 8
 	}

@@ -28,6 +28,18 @@ func Write(w io.Writer, format Format, envelope v1.Envelope) error {
 // WriteValue emits either versioned envelope type through the same bounded,
 // deterministic encoder. Keeping v1 on this exact path preserves its bytes.
 func WriteValue(w io.Writer, format Format, value any) error {
+	data, err := MarshalValue(format, value)
+	if err != nil {
+		return err
+	}
+	n, err := w.Write(data)
+	if err == nil && n < len(data) {
+		return io.ErrShortWrite
+	}
+	return err
+}
+
+func MarshalValue(format Format, value any) ([]byte, error) {
 	var data []byte
 	var err error
 	switch format {
@@ -36,17 +48,15 @@ func WriteValue(w io.Writer, format Format, value any) error {
 	case TOON:
 		data, err = marshalTOON(value)
 	default:
-		return v1.NewError(v1.CodeValidation, "format must be toon or json")
+		return nil, v1.NewError(v1.CodeValidation, "format must be toon or json")
 	}
 	if err != nil {
-		return v1.Wrap(v1.CodeInternal, "cannot encode output", err)
+		return nil, v1.Wrap(v1.CodeInternal, "cannot encode output", err)
 	}
 	if len(data) > limits.MaxOperationBytes {
-		return v1.NewError(v1.CodeUpstream, "output exceeds the operation limit")
+		return nil, v1.NewError(v1.CodeUpstream, "output exceeds the operation limit")
 	}
-	data = append(data, '\n')
-	_, err = w.Write(data)
-	return err
+	return append(data, '\n'), nil
 }
 
 func marshalTOON(value any) ([]byte, error) {
