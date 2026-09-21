@@ -170,7 +170,8 @@ func build(request Request) (invocation, error) {
 			if err := safeurl.ValidateBranch(request.Ref); err != nil {
 				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "invalid snippet file ref")
 			}
-			endpoint += "/files/" + url.PathEscape(request.Ref) + "/" + url.PathEscape(request.Filename) + "/raw"
+			filename := strings.ReplaceAll(url.PathEscape(request.Filename), ":", "%3A")
+			endpoint += "/files/" + url.PathEscape(request.Ref) + "/" + filename + "/raw"
 			return invocation{args: append(apiPrefix(), endpoint), host: request.Host, maxStdout: limits.MaxJSONPageBytes, outputKind: outputText}, nil
 		}
 		return jsonObject(append(apiPrefix(), endpoint)), nil

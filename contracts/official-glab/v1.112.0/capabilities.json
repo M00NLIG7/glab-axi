@@ -35,7 +35,7 @@
     {"name": "snippet-project", "kind": "fixed-api-read-json-object", "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]},
     {"name": "snippet-list", "kind": "fixed-api-read-json-page", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets?page={page}&per_page={per_page}"], "input_policy": "scope_prefix is empty for personal or projects/{escaped_repo}/ for project; explicit closed scope required"},
     {"name": "snippet-view", "kind": "fixed-api-read-json-object", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets/{id}"]},
-    {"name": "snippet-file", "kind": "fixed-api-read-text", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets/{id}/files/{escaped_ref}/{escaped_filename}/raw"], "input_policy": "positive ID, exact validated inventory filename and root ref; never execute provider raw_url"},
+    {"name": "snippet-file", "kind": "fixed-api-read-text", "argv": ["api", "--method", "GET", "--hostname", "{host}", "{scope_prefix}snippets/{id}/files/{escaped_ref}/{escaped_filename}/raw"], "input_policy": "positive ID, exact validated inventory filename and root ref; escape every filename colon as %3A to prevent placeholder expansion; never execute provider raw_url"},
     {
       "name": "board-list",
       "kind": "fixed-graphql-query-page",

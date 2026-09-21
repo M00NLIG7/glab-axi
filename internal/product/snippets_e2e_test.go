@@ -212,6 +212,14 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 		item.WebURL = strings.Replace(item.WebURL, "gitlab.com", host, 1)
 		item.RawURL = strings.Replace(item.RawURL, "gitlab.com", host, 1)
 		item.Files[0].RawURL = strings.Replace(item.Files[0].RawURL, "gitlab.com", host, 1)
+		for _, file := range snippetFilenameCases {
+			item.Files = append(item.Files, upstreamSnippetFile{Path: file.name, RawURL: item.WebURL + "/raw/main/" + file.rawPath})
+			if strings.HasSuffix(r.URL.Path, "/files/main/"+file.name+"/raw") {
+				w.Header().Set("Content-Type", "text/plain")
+				fmt.Fprint(w, file.content)
+				return
+			}
+		}
 		if mode == "wrong-id" {
 			item.ID = 99
 		}
@@ -310,17 +318,12 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := []string{"HOME=" + dir, "GLAB_CONFIG_DIR=" + configDir, "PATH=" + dir + ":/usr/bin:/bin", "GITLAB_TOKEN=" + secret, "SSL_CERT_FILE=" + cert, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY="}
-	probe := exec.Command(official, "api", "--method", "GET", "--hostname", host, "user")
-	probe.Env = env
-	probe.Dir = dir
-	if output, err := probe.CombinedOutput(); err != nil {
-		t.Fatalf("local synthetic protocol preflight failed: %v: %s", err, output)
-	}
-	tests := []struct {
+	type testCase struct {
 		name    string
 		args    []string
 		failure bool
-	}{
+	}
+	tests := []testCase{
 		{"personal-list", []string{"list", "--scope", "personal"}, false},
 		{"project-list", []string{"list", "--scope", "project", "-R", "group/project"}, false},
 		{"fields", []string{"list", "--scope", "personal", "--fields", "description,created_at,updated_at"}, false},
@@ -343,6 +346,20 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 		{"page-overflow", []string{"list", "--scope", "personal"}, true},
 		{"invalid-host", []string{"view", "https://wrong.example/-/snippets/42", "--scope", "personal"}, true},
 		{"invalid-project", []string{"view", "https://" + host + "/group/other/-/snippets/42", "--scope", "project", "-R", "group/project"}, true},
+		{"invalid-legacy-personal", []string{"view", "https://" + host + "/snippets/42", "--scope", "personal"}, true},
+		{"invalid-legacy-project", []string{"view", "https://" + host + "/group/project/snippets/42", "--scope", "project", "-R", "group/project"}, true},
+	}
+	wantContent := map[string]SnippetContent{}
+	for _, scope := range []string{"personal", "project"} {
+		for _, file := range snippetFilenameCases {
+			name := "filename-" + scope + "-" + file.name
+			args := []string{"view", "42", "--scope", scope, "--filename", file.name}
+			if scope == "project" {
+				args = append(args, "-R", "group/project")
+			}
+			tests = append(tests, testCase{name, args, false})
+			wantContent[name] = SnippetContent{Filename: file.name, Ref: "main", Text: file.content}
+		}
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -393,6 +410,18 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 			}
 			if test.name == "long-title" && (!e.Meta.Truncated || len(e.Data.Snippet.Title) > 4096) {
 				t.Fatal("UTF-8 title bound not honored")
+			}
+			if want, ok := wantContent[test.name]; ok {
+				if e.Data.Snippet.Content == nil || *e.Data.Snippet.Content != want {
+					t.Fatalf("content=%+v want=%+v", e.Data.Snippet.Content, want)
+				}
+				wantRequests := 4
+				if e.Data.Snippet.Scope == "project" {
+					wantRequests++
+				}
+				if count != wantRequests {
+					t.Fatalf("got %d requests, want %d", count, wantRequests)
+				}
 			}
 		})
 	}

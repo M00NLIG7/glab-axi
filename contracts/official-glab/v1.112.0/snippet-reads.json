@@ -10,7 +10,10 @@
     "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/doc/api/snippets.md",
     "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/doc/api/project_snippets.md",
     "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/lib/api/snippets.rb",
-    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/lib/api/entities/snippet.rb"
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/lib/api/entities/snippet.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.0.0-ee/Gemfile.lock",
+    "https://github.com/rails/rails/blob/v7.1.5.1/actionpack/lib/action_dispatch/journey/router/utils.rb",
+    "https://gitlab.com/gitlab-org/cli/-/blob/v1.112.0/internal/commands/api/api.go"
   ],
   "routes": {
     "snippet-user": "user",
@@ -28,8 +31,11 @@
     "personal_list": "GET snippets is authenticated and author-scoped but can include project snippets; exclude project_id != null locally, retaining page scan completeness.",
     "personal_view": "Exact personal snippet, any owner visible to the authenticated identity; never claim own-only view.",
     "project": "Bind numeric project identity and exact project path before snippet reads.",
+    "selectors": "Canonical positive IDs or exact selected-host HTTPS /-/snippets/{id} URLs, with the explicit project path for project scope; legacy /snippets/{id} URLs are not accepted.",
     "visibility": "Local exact public/internal/private filter, not an undocumented provider query. Private personal means creator-only; private project means project members. No secret/unlisted equivalence.",
     "files": "Current entity exposes files.path and root-ref raw URLs. Never follow returned URLs. Validate host, scope, ID, filename and ref, then construct the fixed API file route. Missing file inventory is unavailable, not an empty inventory.",
+    "file_url_encoding": "Returned file URLs use Rails 7.1.5.1 path encoding: unreserved characters, sub-delimiters, colon, at-sign and slash remain literal. Require the exact canonical encoding after binding host, snippet scope, ID, ref and filename; reject encoded separators and traversal.",
+    "file_argv_encoding": "Escape the entire filename as one API segment, including every colon as %3A, so official glab cannot expand endpoint placeholders such as :username.",
     "authentication": "GET user must succeed before listing/viewing; no anonymous fallback or credential inspection.",
     "bounds": "30 second deadline, 10 pages of at most 100, 2 MiB response, 8 MiB operation; content defaults to 32768 UTF-8 bytes and can be lowered or raised only up to 131072. No raw/full escape."
   },

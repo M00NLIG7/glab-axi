@@ -109,16 +109,8 @@ func normalizeSnippet(raw upstreamSnippet, target Target, projectID int64, p Par
 	if raw.Author.WebURL != "" && raw.Author.WebURL != "https://"+target.Host+"/"+raw.Author.Username {
 		return Snippet{}, false, uxv1.NewError(uxv1.CodeSafety, "snippet owner URL is outside selected authority")
 	}
-	if raw.RawURL != "" {
-		valid := false
-		for _, base := range snippetBasePaths(target.Repo, raw.ID) {
-			if raw.RawURL == "https://"+target.Host+base+"/raw" {
-				valid = true
-			}
-		}
-		if !valid {
-			return Snippet{}, false, uxv1.NewError(uxv1.CodeSafety, "snippet raw URL is outside the exact snippet")
-		}
+	if raw.RawURL != "" && raw.RawURL != "https://"+target.Host+snippetBasePath(target.Repo, raw.ID)+"/raw" {
+		return Snippet{}, false, uxv1.NewError(uxv1.CodeSafety, "snippet raw URL is outside the exact snippet")
 	}
 	title, truncated, err := snippetText(raw.Title, 4096)
 	if err != nil {
@@ -183,23 +175,20 @@ func snippetFileRef(f upstreamSnippetFile, target Target, id int64) (string, err
 	if err := glab.ValidateSnippetFilename(f.Path); err != nil {
 		return invalid()
 	}
-	for _, base := range snippetBasePaths(target.Repo, id) {
-		prefix, suffix := base+"/raw/", "/"+f.Path
-		if !strings.HasPrefix(u.Path, prefix) || !strings.HasSuffix(u.Path, suffix) {
-			continue
-		}
-		middle := strings.TrimSuffix(strings.TrimPrefix(u.Path, prefix), suffix)
-		if err := safeurl.ValidateBranch(middle); err != nil {
-			return invalid()
-		}
-		// Prevent alternative encodings from disguising path separators/traversal.
-		expected := (&url.URL{Scheme: "https", Host: target.Host, Path: base + "/raw/" + middle + suffix}).String()
-		if f.RawURL != expected {
-			return invalid()
-		}
-		return middle, nil
+	prefix, suffix := snippetBasePath(target.Repo, id)+"/raw/", "/"+f.Path
+	if !strings.HasPrefix(u.Path, prefix) || !strings.HasSuffix(u.Path, suffix) {
+		return invalid()
 	}
-	return invalid()
+	middle := strings.TrimSuffix(strings.TrimPrefix(u.Path, prefix), suffix)
+	if err := safeurl.ValidateBranch(middle); err != nil {
+		return invalid()
+	}
+	expected := (&url.URL{Scheme: "https", Host: target.Host, Path: prefix + middle + suffix}).String()
+	expected = strings.NewReplacer("%21", "!", "%27", "'", "%28", "(", "%29", ")", "%2A", "*").Replace(expected)
+	if f.RawURL != expected {
+		return invalid()
+	}
+	return middle, nil
 }
 
 func snippetProjectTarget(raw upstreamSnippet, host string) (Target, error) {
@@ -213,11 +202,11 @@ func snippetProjectTarget(raw upstreamSnippet, host string) (Target, error) {
 	if err != nil || u.Host != host || u.Scheme != "https" {
 		return fail()
 	}
-	suffix := "/snippets/" + strconv.FormatInt(raw.ID, 10)
+	suffix := "/-/snippets/" + strconv.FormatInt(raw.ID, 10)
 	if !strings.HasSuffix(u.Path, suffix) {
 		return fail()
 	}
-	repo := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSuffix(u.Path, suffix), "/-"), "/")
+	repo := strings.TrimPrefix(strings.TrimSuffix(u.Path, suffix), "/")
 	if err := safeurl.ValidateProject(repo); err != nil {
 		return fail()
 	}

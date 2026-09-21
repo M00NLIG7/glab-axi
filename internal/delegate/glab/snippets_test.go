@@ -67,3 +67,24 @@ func TestSnippetBuilderInvalidBeforeExecutableLookup(t *testing.T) {
 		}
 	}
 }
+
+func TestSnippetBuilderEscapesFilenamePlaceholders(t *testing.T) {
+	for _, scope := range []string{"personal", "project"} {
+		repo, prefix := "", ""
+		if scope == "project" {
+			repo, prefix = "group/project", "projects/group%2Fproject/"
+		}
+		for _, placeholder := range []string{"user", "username", "group", "namespace", "repo", "branch", "id", "fullpath"} {
+			for _, dir := range []string{"", "dir/"} {
+				name := dir + ":" + placeholder + ".txt"
+				t.Run(scope+"/"+name, func(t *testing.T) {
+					got, err := build(Request{Operation: OpSnippetFile, Scope: scope, Host: "gitlab.com", Repo: repo, ID: 42, Ref: "main", Filename: name})
+					want := prefix + "snippets/42/files/main/" + strings.ReplaceAll(dir, "/", "%2F") + "%3A" + placeholder + ".txt/raw"
+					if err != nil || len(got.args) != 6 || got.args[5] != want || got.write {
+						t.Fatalf("argv=%v err=%v want=%s", got.args, err, want)
+					}
+				})
+			}
+		}
+	}
+}

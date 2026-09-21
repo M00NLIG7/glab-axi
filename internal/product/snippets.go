@@ -15,7 +15,7 @@ import (
 	"gl-axi/internal/safeurl"
 )
 
-const snippetDetails = "Scope is required. Personal lists contain only the authenticated user's personal snippets; personal view may read another visible owner. Project scope requires explicit -R. All reads verify authentication, with no anonymous fallback.\nVisibility is public/internal/private, never GitHub secret/unlisted. Private means creator-only for personal snippets and members-only for project snippets.\nVisibility filtering is local over at most ten provider pages. Completeness describes only that selected scope/filter.\nDefault view includes metadata and available file names, not file contents. --files omits description; --filename selects one exact inventory file at its reported root ref, never a raw URL.\nContent is UTF-8 text, default 32768 bytes, hard maximum 131072. Binary/unavailable content fails closed. Field truncation is explicit; --full and --raw are unsupported."
+const snippetDetails = "Scope is required. Personal lists contain only the authenticated user's personal snippets; personal view may read another visible owner. Project scope requires explicit -R. All reads verify authentication, with no anonymous fallback.\nVisibility is public/internal/private, never GitHub secret/unlisted. Private means creator-only for personal snippets and members-only for project snippets.\nVisibility filtering is local over at most ten provider pages. Completeness describes only that selected scope/filter.\nSelectors accept canonical positive IDs or selected-host /-/snippets/ID URLs, prefixed with the project path for project scope.\nDefault view includes metadata and available file names, not file contents. --files omits description; --filename selects one exact inventory file at its reported root ref, never a raw URL.\nContent is UTF-8 text, default 32768 bytes, hard maximum 131072. Binary/unavailable content fails closed. Field truncation is explicit; --full and --raw are unsupported."
 
 func snippetFlags(view bool) []FlagDefinition {
 	flags := []FlagDefinition{
@@ -97,13 +97,12 @@ func validateSnippetParsed(p Parsed) error {
 
 func snippetVisibility(v string) bool { return v == "public" || v == "internal" || v == "private" }
 
-func snippetBasePaths(repo string, id int64) []string {
+func snippetBasePath(repo string, id int64) string {
 	prefix := ""
 	if repo != "" {
 		prefix = "/" + repo
 	}
-	suffix := "/snippets/" + strconv.FormatInt(id, 10)
-	return []string{prefix + "/-" + suffix, prefix + suffix}
+	return prefix + "/-/snippets/" + strconv.FormatInt(id, 10)
 }
 
 func snippetSelector(raw string, target Target, scope string) (int64, error) {
@@ -124,10 +123,8 @@ func snippetSelector(raw string, target Target, scope string) (int64, error) {
 	if scope == "personal" {
 		repo = ""
 	}
-	for _, path := range snippetBasePaths(repo, id) {
-		if u.Path == path {
-			return id, nil
-		}
+	if u.Path == snippetBasePath(repo, id) {
+		return id, nil
 	}
 	return 0, controlledMessage("snippet URL does not match the selected scope and project")
 }

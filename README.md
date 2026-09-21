@@ -93,6 +93,8 @@ unlisted. Output distinguishes incomplete pagination from truncated fields.
 Default view returns metadata/file names, not all file contents. `--filename`
 selects one exact inventory path at its reported root ref, constructs a fixed
 API route rather than following a returned URL, and rechecks metadata afterward.
+Selectors accept positive IDs or canonical selected-host `/-/snippets/ID` URLs
+(prefixed with the project path for project scope).
 This is not an atomic immutable-content snapshot. Content defaults to 32768
 UTF-8 bytes, can be selected up to 131072 bytes, and rejects binary/unavailable
 files. File paths containing traversal, controls, backslashes, `%`, `?`, or `#`

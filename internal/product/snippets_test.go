@@ -24,7 +24,7 @@ func snippetFixture(id int64, project bool) upstreamSnippet {
 		n := int64(101)
 		pid = &n
 	}
-	base := "https://gitlab.com" + snippetBasePaths(repo, id)[0]
+	base := "https://gitlab.com" + snippetBasePath(repo, id)
 	return upstreamSnippet{ID: id, Title: "example", Description: "description", Visibility: "private", Author: snippetUserResponse{SnippetUser: SnippetUser{ID: 7, Username: "reader"}}, ProjectID: pid, WebURL: base, RawURL: base + "/raw", Files: []upstreamSnippetFile{{Path: "dir/a b.txt", RawURL: base + "/raw/main/dir/a%20b.txt"}}, CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-02T00:00:00Z"}
 }
 func snippetJSON(v any) []byte {
@@ -65,6 +65,115 @@ func runSnippetTest(t *testing.T, f *fakeDelegate, args ...string) (snippetEnvel
 	return result, code
 }
 
+var snippetFilenameCases = []struct {
+	name, rawPath, content string
+}{
+	{":username.txt", ":username.txt", "literal colon filename\n"},
+	{"reader.txt", "reader.txt", "different reader file\n"},
+	{"dir/prefix:username.txt", "dir/prefix:username.txt", "nested colon filename\n"},
+	{"notes(1).md", "notes(1).md", "parenthesized notes\n"},
+	{"dir/!$&'()*+,;=:@ 世.txt", "dir/!$&'()*+,;=:@%20%E4%B8%96.txt", "punctuation and Unicode\n"},
+}
+
+func TestSnippetProviderFilenameEncoding(t *testing.T) {
+	for _, scope := range []string{"personal", "project"} {
+		for _, mode := range []string{"list", "view", "files", "content"} {
+			for _, file := range snippetFilenameCases {
+				t.Run(scope+"/"+mode+"/"+file.name, func(t *testing.T) {
+					f := snippetFake()
+					item := snippetFixture(42, scope == "project")
+					item.Files = []upstreamSnippetFile{{Path: file.name, RawURL: item.WebURL + "/raw/main/" + file.rawPath}}
+					f.responses[glab.OpSnippetList] = []glab.Response{{Body: snippetJSON([]upstreamSnippet{item})}}
+					f.responses[glab.OpSnippetView] = []glab.Response{{Body: snippetJSON(item)}, {Body: snippetJSON(item)}}
+					f.responses[glab.OpSnippetFile] = []glab.Response{{Body: []byte(file.content)}}
+					args := []string{"snippet", "view", "42", "--scope", scope}
+					if mode == "list" {
+						args = []string{"snippet", "list", "--scope", scope}
+					}
+					if scope == "project" {
+						args = append(args, "-R", "group/project")
+					}
+					if mode == "files" {
+						args = append(args, "--files")
+					}
+					if mode == "content" {
+						args = append(args, "--filename", file.name)
+					}
+					e, code := runSnippetTest(t, f, args...)
+					if code != 0 || !e.OK || !e.Meta.Complete {
+						t.Fatalf("code=%d result=%+v", code, e)
+					}
+					s := e.Data.Snippet
+					if mode == "list" {
+						if len(e.Data.Snippets) != 1 {
+							t.Fatalf("snippets=%+v", e.Data.Snippets)
+						}
+						s = e.Data.Snippets[0]
+					}
+					if len(s.Files) != 1 || s.Files[0] != file.name {
+						t.Fatalf("files=%v", s.Files)
+					}
+					if mode == "content" && (s.Content == nil || s.Content.Filename != file.name || s.Content.Text != file.content || s.Content.Ref != "main" || s.Content.Truncated) {
+						t.Fatalf("content=%+v", s.Content)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSnippetRejectsNoncanonicalProviderURLs(t *testing.T) {
+	for _, scope := range []string{"personal", "project"} {
+		for name, change := range map[string]func(*upstreamSnippet){
+			"legacy web": func(s *upstreamSnippet) { s.WebURL = strings.Replace(s.WebURL, "/-/snippets/", "/snippets/", 1) },
+			"legacy raw": func(s *upstreamSnippet) { s.RawURL = strings.Replace(s.RawURL, "/-/snippets/", "/snippets/", 1) },
+			"legacy file": func(s *upstreamSnippet) {
+				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "/-/snippets/", "/snippets/", 1)
+			},
+			"file host": func(s *upstreamSnippet) {
+				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "gitlab.com", "evil.example", 1)
+			},
+			"file scope": func(s *upstreamSnippet) {
+				s.Files[0].RawURL = "https://gitlab.com/other/project/-/snippets/42/raw/main/dir/a%20b.txt"
+			},
+			"encoded slash": func(s *upstreamSnippet) { s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "dir/", "dir%2F", 1) },
+			"encoded boundary": func(s *upstreamSnippet) {
+				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "/raw/main/", "/raw/main%2F", 1)
+			},
+			"encoded traversal": func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/main/%2E%2E/dir/a%20b.txt" },
+			"double encoding":   func(s *upstreamSnippet) { s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "%20", "%2520", 1) },
+			"encoded name": func(s *upstreamSnippet) {
+				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "a%20b", "%61%20b", 1)
+			},
+			"fragment": func(s *upstreamSnippet) { s.Files[0].RawURL += "#fragment" },
+			"query":    func(s *upstreamSnippet) { s.Files[0].RawURL += "?" },
+		} {
+			for _, mode := range []string{"list", "view"} {
+				t.Run(scope+"/"+mode+"/"+name, func(t *testing.T) {
+					f := snippetFake()
+					item := snippetFixture(42, scope == "project")
+					change(&item)
+					f.responses[glab.OpSnippetList] = []glab.Response{{Body: snippetJSON([]upstreamSnippet{item})}}
+					f.responses[glab.OpSnippetView] = []glab.Response{{Body: snippetJSON(item)}}
+					args := []string{"snippet", "list", "--scope", scope}
+					if mode == "view" {
+						args = []string{"snippet", "view", "42", "--scope", scope, "--filename", "dir/a b.txt"}
+					}
+					wantRequests := 2
+					if scope == "project" {
+						args = append(args, "-R", "group/project")
+						wantRequests++
+					}
+					e, code := runSnippetTest(t, f, args...)
+					if code == 0 || e.OK || e.Meta.Complete || e.Error == nil || e.Error.Code != uxv1.CodeSafety || len(f.requests) != wantRequests {
+						t.Fatalf("code=%d result=%+v requests=%v", code, e, f.requests)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestSnippetInvalidInputDoesNoDelegateWork(t *testing.T) {
 	cases := [][]string{
 		{"list"}, {"list", "--scope", "all"}, {"list", "--scope", "personal", "-R", "group/project"}, {"list", "--scope", "project"},
@@ -78,6 +187,8 @@ func TestSnippetInvalidInputDoesNoDelegateWork(t *testing.T) {
 		{"view", "1", "--scope", "personal", "--content-limit", "1"}, {"view", "1", "--scope", "personal", "--filename", "a", "--content-limit", "131073"},
 		{"view", "1", "--scope", "personal", "--filename", "a", "--content-limit", "-1"}, {"view", "1", "--scope", "personal", "--full"}, {"view", "1", "--scope", "personal", "--raw"},
 		{"view", "https://evil.example/-/snippets/1", "--scope", "personal"},
+		{"view", "https://gitlab.com/snippets/1", "--scope", "personal"},
+		{"view", "https://gitlab.com/group/project/snippets/1", "--scope", "project", "-R", "group/project"},
 		{"view", "https://gitlab.com/group/other/-/snippets/1", "--scope", "project", "-R", "group/project"},
 		{"view", "https://gitlab.com/group/project/-/snippets/1", "--scope", "personal"},
 		{"view", "https://gitlab.com/-/snippets/1?raw=1", "--scope", "personal"},
@@ -94,6 +205,17 @@ func TestSnippetInvalidInputDoesNoDelegateWork(t *testing.T) {
 				t.Fatalf("code=%d response=%+v requests=%v", code, e, f.requests)
 			}
 		})
+	}
+}
+
+func TestSnippetPersonalListRejectsLegacyProjectURLs(t *testing.T) {
+	f := snippetFake()
+	item := snippetFixture(42, true)
+	item.WebURL = strings.Replace(item.WebURL, "/-/snippets/", "/snippets/", 1)
+	f.responses[glab.OpSnippetList] = []glab.Response{{Body: snippetJSON([]upstreamSnippet{item})}}
+	e, code := runSnippetTest(t, f, "snippet", "list", "--scope", "personal")
+	if code == 0 || e.OK || e.Meta.Complete || e.Error == nil || e.Error.Code != uxv1.CodeSafety || len(f.requests) != 2 {
+		t.Fatalf("code=%d result=%+v requests=%v", code, e, f.requests)
 	}
 }
 
@@ -125,7 +247,7 @@ func TestSnippetListScopesVisibilityAndFields(t *testing.T) {
 
 func TestSnippetViewSelectorsAndContent(t *testing.T) {
 	for _, project := range []bool{false, true} {
-		for _, selector := range []string{"id", "url", "legacy"} {
+		for _, selector := range []string{"id", "url"} {
 			for _, mode := range []string{"default", "files", "content"} {
 				t.Run(fmt.Sprintf("%v/%s/%s", project, selector, mode), func(t *testing.T) {
 					f := snippetFake()
@@ -135,9 +257,6 @@ func TestSnippetViewSelectorsAndContent(t *testing.T) {
 					target := "42"
 					if selector == "url" {
 						target = item.WebURL
-					}
-					if selector == "legacy" {
-						target = strings.Replace(item.WebURL, "/-/snippets/", "/snippets/", 1)
 					}
 					scope := "personal"
 					if project {

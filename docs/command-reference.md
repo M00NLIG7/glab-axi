@@ -107,6 +107,7 @@ List authenticated personal or project snippets.
 Scope is required. Personal lists contain only the authenticated user's personal snippets; personal view may read another visible owner. Project scope requires explicit -R. All reads verify authentication, with no anonymous fallback.
 Visibility is public/internal/private, never GitHub secret/unlisted. Private means creator-only for personal snippets and members-only for project snippets.
 Visibility filtering is local over at most ten provider pages. Completeness describes only that selected scope/filter.
+Selectors accept canonical positive IDs or selected-host /-/snippets/ID URLs, prefixed with the project path for project scope.
 Default view includes metadata and available file names, not file contents. --files omits description; --filename selects one exact inventory file at its reported root ref, never a raw URL.
 Content is UTF-8 text, default 32768 bytes, hard maximum 131072. Binary/unavailable content fails closed. Field truncation is explicit; --full and --raw are unsupported.
 
@@ -123,6 +124,7 @@ View snippet metadata, file names, or one bounded file.
 Scope is required. Personal lists contain only the authenticated user's personal snippets; personal view may read another visible owner. Project scope requires explicit -R. All reads verify authentication, with no anonymous fallback.
 Visibility is public/internal/private, never GitHub secret/unlisted. Private means creator-only for personal snippets and members-only for project snippets.
 Visibility filtering is local over at most ten provider pages. Completeness describes only that selected scope/filter.
+Selectors accept canonical positive IDs or selected-host /-/snippets/ID URLs, prefixed with the project path for project scope.
 Default view includes metadata and available file names, not file contents. --files omits description; --filename selects one exact inventory file at its reported root ref, never a raw URL.
 Content is UTF-8 text, default 32768 bytes, hard maximum 131072. Binary/unavailable content fails closed. Field truncation is explicit; --full and --raw are unsupported.
 
