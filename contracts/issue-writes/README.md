@@ -1,5 +1,17 @@
 # Typed issue writes
 
+## Known transport blocker
+
+These new write routes are not ready for operational use. The actual pinned
+`glab` 1.112.0 follows HTTP 301/302/303 for issue-create POST, issue-note POST and
+issue-state PUT to a different HTTPS authority as GET, forwarding the synthetic
+`Private-Token` in the local regression fixture. Body/receipt validation after
+the child returns cannot undo that confidentiality and exact-target violation.
+307/308 do not redirect these private-input requests in the same fixture.
+`TestPinnedOfficialGlabIssueWritesRejectCrossOriginRedirects` intentionally gates
+this unresolved transport guarantee; no production service or real token is
+involved. A transport fix is required before delivery.
+
 `v1.json` pins the executable consumer grammar and its bounded UX-v1 receipt.
 Provider routes, request/response fields and semantic evidence are pinned in
 `../official-glab/v1.112.0/issue-writes.json` and `capabilities.json`.
