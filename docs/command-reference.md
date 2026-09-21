@@ -255,7 +255,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.
 ## `pipeline list`
 
 ```text
-gl-axi pipeline list [--ref REF] [--status STATUS] [--source SOURCE] [--user USERNAME] [--sha SHA] [--fields iid,sha,web_url,updated_at] [global flags]
+gl-axi pipeline list [--ref REF] [--status STATUS] [--source SOURCE] [--user USERNAME] [--sha SHA] [--fields iid] [--web-base URL] [global flags]
 ```
 
 List project pipelines.
@@ -267,7 +267,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-list.schema.json`.
 ## `pipeline view`
 
 ```text
-gl-axi pipeline view <id> [--ref REF] [--sha SHA] [--jobs] [--job-id ID] [--job-status STATUS] [--trace | --trace-failed] [global flags]
+gl-axi pipeline view <id> [--ref REF] [--sha SHA] [--jobs] [--job-id ID] [--job-status STATUS] [--trace | --trace-failed] [--web-base URL] [global flags]
 ```
 
 View one pipeline.
@@ -279,7 +279,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-view.schema.json`.
 ## `pipeline watch`
 
 ```text
-gl-axi pipeline watch <id> [--timeout SECONDS] [--interval SECONDS] [--ref REF] [--sha SHA] [target/output flags]
+gl-axi pipeline watch <id> [--timeout SECONDS] [--interval SECONDS] [--ref REF] [--sha SHA] [--web-base URL] [target/output flags]
 ```
 
 Watch one exact pipeline within a finite budget.
@@ -291,7 +291,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-watch.schema.json`.
 ## `job list`
 
 ```text
-gl-axi job list --pipeline-id ID [--job-id ID] [--status STATUS] [global flags]
+gl-axi job list --pipeline-id ID [--job-id ID] [--status STATUS] [--web-base URL] [global flags]
 ```
 
 List jobs for one pipeline.
@@ -325,7 +325,7 @@ Backend: `native`. Schema: `schema/ux-v1/download.schema.json`.
 ## `job view`
 
 ```text
-gl-axi job view <id> [--pipeline-id ID] [global flags]
+gl-axi job view <id> [--pipeline-id ID] [--web-base URL] [global flags]
 ```
 
 View one CI/CD job.
@@ -335,7 +335,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/job-view.schema.json`.
 ## `job trace`
 
 ```text
-gl-axi job trace <id> [--pipeline-id ID] [global flags]
+gl-axi job trace <id> [--pipeline-id ID] [--web-base URL] [global flags]
 ```
 
 View a bounded, redacted tail of one job trace.

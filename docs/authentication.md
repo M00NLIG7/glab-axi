@@ -94,8 +94,20 @@ profile directly outside `gl-axi`, subject to organizational policy. A
 `gitlab.com` checkout may supply product host/repository context; self-managed
 checkout hosts require explicit `--hostname` or `GITLAB_HOST` authority. The AXI
 will use that selected authenticated host but never expose insecure TLS/storage
-flags. Native private-host REST remains separately configured as described
-below.
+flags. For pipeline and job reads on a relative-path installation, bind the expected
+web prefix explicitly, for example:
+
+```sh
+gl-axi pipeline view 55 --hostname gitlab.example.invalid -R group/project \
+  --web-base https://gitlab.example.invalid/gitlab
+```
+
+`--web-base` defaults to the selected HTTPS host root. Its host and port must
+match the selected hostname (case-insensitively); returned URLs must match the
+exact installation path, project, resource and ID. Configure the corresponding
+API routing independently in official glab's profile. This flag only binds
+returned web URLs and does not change credentials, API routing or native config.
+Native private-host REST remains separately configured as described below.
 
 ## Explicit product-native operations
 

@@ -57,10 +57,18 @@ func boundCIOutput(out commandOutput, err error) (commandOutput, error) {
 	return out, nil
 }
 func canonicalCIURL(target Target, resource string, id int64) string {
-	return (&url.URL{Scheme: "https", Host: target.Host, Path: "/" + target.Repo + "/-/" + resource + "/" + strconv.FormatInt(id, 10)}).String()
+	return (&url.URL{Scheme: "https", Host: target.Host, Path: target.webBasePath + "/" + target.Repo + "/-/" + resource + "/" + strconv.FormatInt(id, 10)}).String()
+}
+func matchesCIURL(raw string, target Target, resource string, id int64) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || !strings.EqualFold(parsed.Host, target.Host) {
+		return false
+	}
+	target.Host = parsed.Host
+	return raw == canonicalCIURL(target, resource, id)
 }
 func bindPipeline(source upstreamPipeline, target Target, id int64, ref, sha string) error {
-	if source.ID < 1 || (id != 0 && source.ID != id) || source.WebURL != canonicalCIURL(target, "pipelines", source.ID) {
+	if source.ID < 1 || (id != 0 && source.ID != id) || !matchesCIURL(source.WebURL, target, "pipelines", source.ID) {
 		return uxv1.NewError(uxv1.CodeSafety, "pipeline identity does not match the selected authority")
 	}
 	if (ref != "" && source.Ref != ref) || (sha != "" && source.SHA != sha) {
@@ -112,13 +120,11 @@ func fetchSelectedPipelines(ctx context.Context, client delegateClient, target T
 			if filters.Status != "" && raw.Status != item.Status {
 				item.RawStatus = raw.Status
 			}
-			for _, field := range strings.Split(p.Values["--fields"], ",") {
-				if field == "iid" {
-					if raw.IID < 1 {
-						return nil, false, malformed("pipeline IID")
-					}
-					item.IID = raw.IID
+			if p.Values["--fields"] == "iid" {
+				if raw.IID < 1 {
+					return nil, false, malformed("pipeline IID")
 				}
+				item.IID = raw.IID
 			}
 			items = append(items, item)
 		}
@@ -126,7 +132,7 @@ func fetchSelectedPipelines(ctx context.Context, client delegateClient, target T
 	})
 }
 func bindJob(raw upstreamJob, target Target, id, pipelineID int64, status string) error {
-	if raw.ID < 1 || (id != 0 && raw.ID != id) || raw.WebURL != canonicalCIURL(target, "jobs", raw.ID) {
+	if raw.ID < 1 || (id != 0 && raw.ID != id) || !matchesCIURL(raw.WebURL, target, "jobs", raw.ID) {
 		return uxv1.NewError(uxv1.CodeSafety, "job identity does not match the selected authority")
 	}
 	if pipelineID != 0 && (raw.Pipeline == nil || raw.Pipeline.ID != pipelineID) {

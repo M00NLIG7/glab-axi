@@ -22,11 +22,11 @@ func ciArgs(args ...string) []string {
 }
 func ciPipeline(id int64, status string) upstreamPipeline {
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	return upstreamPipeline{ID: id, IID: id + 100, Status: status, Source: "push", Ref: "main", SHA: ciTestSHA, WebURL: canonicalCIURL(Target{"gitlab.com", "group/project"}, "pipelines", id), UpdatedAt: &stamp}
+	return upstreamPipeline{ID: id, IID: id + 100, Status: status, Source: "push", Ref: "main", SHA: ciTestSHA, WebURL: fmt.Sprintf("https://gitlab.com/group/project/-/pipelines/%d", id), UpdatedAt: &stamp}
 }
 func ciJob(id int64, status string) upstreamJob {
 	pipeline := ciPipeline(55, "failed")
-	return upstreamJob{ID: id, Name: "test", Stage: "test", Status: status, WebURL: canonicalCIURL(Target{"gitlab.com", "group/project"}, "jobs", id), Pipeline: &pipeline}
+	return upstreamJob{ID: id, Name: "test", Stage: "test", Status: status, WebURL: fmt.Sprintf("https://gitlab.com/group/project/-/jobs/%d", id), Pipeline: &pipeline}
 }
 func ciResponse(value any) glab.Response {
 	body, _ := json.Marshal(value)
@@ -56,6 +56,8 @@ func TestCIReadSelectorsFailBeforeDependencyWork(t *testing.T) {
 		{"pipeline", "list", "--ref", "../main"}, {"pipeline", "list", "--status", "failure"},
 		{"pipeline", "list", "--source", "workflow"}, {"pipeline", "list", "--user", "@me"},
 		{"pipeline", "list", "--sha", "abc"}, {"pipeline", "list", "--fields", "iid,iid"},
+		{"pipeline", "list", "--fields", "sha"}, {"pipeline", "list", "--fields", "web_url"},
+		{"pipeline", "list", "--fields", "updated_at"}, {"pipeline", "list", "--fields", "iid,sha"},
 		{"pipeline", "list", "--fields", "steps"}, {"pipeline", "list", "--fields", "iid,"},
 		{"pipeline", "list", "--status", "failed", "--status", "success"},
 		{"pipeline", "view", "+55"}, {"pipeline", "watch", "055"},
@@ -95,7 +97,7 @@ func TestCIListFiltersAndAdditiveFieldsAcrossPages(t *testing.T) {
 		return ciResponse(items), nil, true
 	}}
 	stdout, _, deps := productTestDeps(t, fake)
-	code := Run(context.Background(), ciArgs("pipeline", "list", "--ref", "main", "--status", "failed", "--source", "push", "--user", "alice", "--sha", ciTestSHA, "--fields", "iid,sha,web_url,updated_at", "--limit", "100"), deps)
+	code := Run(context.Background(), ciArgs("pipeline", "list", "--ref", "main", "--status", "failed", "--source", "push", "--user", "alice", "--sha", ciTestSHA, "--fields", "iid", "--limit", "100"), deps)
 	env := ciEnvelope(t, stdout.String())
 	if code != 0 || !env.Meta.Complete || env.Meta.Truncated || len(fake.requests) != 2 || !strings.Contains(string(env.Data["pipelines"]), `"iid":101`) {
 		t.Fatalf("code=%d requests=%#v output=%s", code, fake.requests, stdout)
@@ -112,8 +114,13 @@ func TestCIListAllPinnedEnumsAndDefaultFields(t *testing.T) {
 			if Run(context.Background(), ciArgs("pipeline", "list", "--status", status), deps) != 0 {
 				t.Fatal(stdout)
 			}
-			if strings.Contains(stdout.String(), `"iid"`) {
-				t.Fatal("default fields changed")
+			var pipelines []Pipeline
+			if err := json.Unmarshal(ciEnvelope(t, stdout.String()).Data["pipelines"], &pipelines); err != nil {
+				t.Fatal(err)
+			}
+			if len(pipelines) != 1 || pipelines[0].IID != 0 || pipelines[0].SHA != ciTestSHA ||
+				pipelines[0].WebURL != "https://gitlab.com/group/project/-/pipelines/55" || pipelines[0].UpdatedAt == nil {
+				t.Fatal("default fields changed: ", stdout)
 			}
 			stdout.Reset()
 			if Run(context.Background(), ciArgs("job", "list", "--pipeline-id", "55", "--status", status), deps) != 0 {

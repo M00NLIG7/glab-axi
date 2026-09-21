@@ -1,9 +1,13 @@
 package product
 
 import (
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
@@ -17,19 +21,45 @@ const (
 	watchDefaultInterval = 3 * time.Second
 )
 
+func ciWebBaseFlag() FlagDefinition {
+	return FlagDefinition{Name: "--web-base", Value: "URL", Description: "Trusted HTTPS web base on the selected hostname, including an optional installation path (default: host root). Does not change official glab credentials or API routing."}
+}
+
+func ciWebBasePath(raw, host string) (string, error) {
+	invalid := func() error {
+		return uxv1.NewError(uxv1.CodeValidation, "web base must be a canonical HTTPS URL on the selected hostname with a safe installation path")
+	}
+	base, err := url.Parse(raw)
+	if err != nil || len(raw) > 2048 || !strings.EqualFold(base.Host, host) {
+		return "", invalid()
+	}
+	if raw != (&url.URL{Scheme: "https", Host: base.Host, Path: base.Path}).String() ||
+		!utf8.ValidString(base.Path) || strings.ContainsAny(base.Path, "\\%") || strings.Contains(base.Path, "//") ||
+		strings.ContainsFunc(base.Path, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
+		return "", invalid()
+	}
+	basePath := strings.TrimSuffix(base.Path, "/")
+	if basePath != "" && path.Clean(basePath) != basePath {
+		return "", invalid()
+	}
+	return basePath, nil
+}
+
 func pipelineListFlags() []FlagDefinition {
 	return []FlagDefinition{
+		ciWebBaseFlag(),
 		{Name: "--ref", Value: "REF", Description: "Exact Git ref."},
 		{Name: "--status", Value: "STATUS", Description: "GitLab status: created, waiting_for_resource, preparing, pending, running, success, failed, canceled, skipped, manual, scheduled."},
 		{Name: "--source", Value: "SOURCE", Description: "GitLab pipeline source (not a workflow): api, chat, external, external_pull_request_event, merge_request_event, ondemand_dast_scan, ondemand_dast_validation, parent_pipeline, pipeline, push, schedule, security_orchestration_policy, trigger, web, webide."},
 		{Name: "--user", Value: "USERNAME", Description: "Triggering GitLab username."},
 		{Name: "--sha", Value: "SHA", Description: "Exact lowercase 40- or 64-hex commit SHA."},
-		{Name: "--fields", Value: "FIELDS", Description: "Comma-separated additive fields: iid, sha, web_url, updated_at. Existing default fields stay present."},
+		{Name: "--fields", Value: "FIELDS", Description: "Additive field: iid. Existing default fields stay present."},
 	}
 }
 
 func pipelineIdentityFlags() []FlagDefinition {
 	return []FlagDefinition{
+		ciWebBaseFlag(),
 		{Name: "--ref", Value: "REF", Description: "Require this exact pipeline ref."},
 		{Name: "--sha", Value: "SHA", Description: "Require this exact lowercase 40- or 64-hex commit SHA."},
 	}
@@ -51,13 +81,14 @@ func pipelineWatchFlags() []FlagDefinition {
 }
 func jobListFlags() []FlagDefinition {
 	return []FlagDefinition{
+		ciWebBaseFlag(),
 		{Name: "--pipeline-id", Value: "ID", Description: "Exact pipeline ID.", Required: true},
 		{Name: "--job-id", Value: "ID", Description: "Select one job belonging to this pipeline."},
 		{Name: "--status", Value: "STATUS", Description: "Exact GitLab job status, including failed or manual."},
 	}
 }
 func jobIdentityFlags() []FlagDefinition {
-	return []FlagDefinition{{Name: "--pipeline-id", Value: "ID", Description: "Require membership in this exact pipeline before reading."}}
+	return []FlagDefinition{ciWebBaseFlag(), {Name: "--pipeline-id", Value: "ID", Description: "Require membership in this exact pipeline before reading."}}
 }
 
 func pipelineFilters(parsed Parsed) glab.PipelineFilters {
@@ -97,19 +128,8 @@ func validateCIReadParsed(p Parsed) error {
 			return uxv1.NewError(uxv1.CodeValidation, "invalid GitLab CI status")
 		}
 	}
-	if fields := p.Values["--fields"]; fields != "" {
-		seen := map[string]bool{}
-		for _, field := range strings.Split(fields, ",") {
-			switch field {
-			case "iid", "sha", "web_url", "updated_at":
-			default:
-				return uxv1.NewError(uxv1.CodeValidation, "unsupported pipeline field")
-			}
-			if seen[field] {
-				return uxv1.NewError(uxv1.CodeValidation, "duplicate pipeline field")
-			}
-			seen[field] = true
-		}
+	if fields := p.Values["--fields"]; fields != "" && fields != "iid" {
+		return uxv1.NewError(uxv1.CodeValidation, "unsupported pipeline field; only iid is selectable")
 	}
 	if p.Booleans["--trace"] && (p.Values["--job-id"] == "" || p.Booleans["--trace-failed"]) {
 		return uxv1.NewError(uxv1.CodeValidation, "--trace requires --job-id and cannot combine with --trace-failed")
