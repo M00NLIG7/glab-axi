@@ -166,12 +166,39 @@ accepts a custom message. The pinned Firstmate contract is
 under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 
-The permanent denial boundary includes generic API, every live issue mutation,
+The current denial boundary includes generic API, direct issue editing,
 issue creation, unguarded or alternate merge, approve,
 comment/note/reply/resolve, merge-request and label-resource mutation,
 close/reopen/delete, repository/release writes, secrets/variables, and
 pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
+
+## GitLab-native planning
+
+```sh
+gl-axi board list --group team/nested --hostname gitlab.com
+gl-axi board view 7 -R team/nested/project --hostname gitlab.com
+gl-axi work-item fields 42 -R team/nested/project --hostname gitlab.com
+gl-axi work-item hierarchy 42 -R team/nested/project --hostname gitlab.com
+```
+
+Board columns are provider filters, not independent Projects-v2 item objects.
+Work-item fields report visible widget types and fixed attributes, not arbitrary
+custom-field definitions or values. Hierarchy means one parent and bounded,
+authorized direct children, not issue links or a recursively complete tree.
+Group work items require GitLab's epics entitlement; null/unavailable data is
+never silently presented as an empty collection.
+
+`board issues <board-id> --list-id ID --allow-ordering-initialization --hostname HOST`
+also requires exactly one `-R PROJECT` or `--group GROUP`. This is **not a pure
+read**: GitLab may initialize issue relative positions and shift sibling
+positions, including beyond displayed items. Every invocation requires the
+explicit acknowledgment. Receipts report possible effects, never invented
+successful changes. Without it there is no child or provider request.
+
+The [pinned GitLab 19.3 contract](contracts/gitlab-planning/v19.3.0/) documents
+schema, version/tier differences, bounded pagination and remaining semantic
+differences. Board/list metadata reads never fetch issues behind the scenes.
 
 ## `glab-axi` compatibility alias
 

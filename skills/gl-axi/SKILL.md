@@ -36,13 +36,19 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 - `gl-axi search repos <query> [--hostname HOST] [--limit N]` - Search projects/repositories on one host.
 - `gl-axi search commits <query> [global flags]` - Search commits in one project.
 - `gl-axi search code <query> [global flags]` - Search code blobs in one project.
+- `gl-axi board list (-R PROJECT | --group GROUP) [global flags]` - List GitLab issue boards in one project or group.
+- `gl-axi board view <board-id> (-R PROJECT | --group GROUP) [global flags]` - View an issue board and its bounded list/column definitions.
+- `gl-axi board issues <board-id> --list-id ID --allow-ordering-initialization --hostname HOST (-R PROJECT | --group GROUP) [global flags]` - List board issues with explicit consent to possible ordering initialization.
+- `gl-axi work-item fields <iid> (-R PROJECT | --group GROUP) [global flags]` - List visible widget types and fixed fields for one work item.
+- `gl-axi work-item hierarchy <iid> (-R PROJECT | --group GROUP) [global flags]` - Read the parent and bounded direct children of one work item.
 
 ## Safety
 
 - Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.
 - Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.
-- Do not attempt generic API, live issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.
+- Do not attempt generic API, direct issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.
 - `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.
 - `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.
+- `board issues` requires `--allow-ordering-initialization` and explicit scope/host. GitLab may initialize issue relative positions and shift sibling positions, including beyond displayed items; receipts never claim changes were measured. Do not use this command when mutation-free reads are required.
 - Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.
 - Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.

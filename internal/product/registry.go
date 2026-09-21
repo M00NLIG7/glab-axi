@@ -43,7 +43,7 @@ type FlagDefinition struct {
 	Repeatable  bool
 }
 
-var definitions = []Definition{
+var definitions = append([]Definition{
 	{Path: nil, Summary: "Show a bounded current-project dashboard.", Usage: "gl-axi [global flags]", RepoMode: RepoRequired, Schema: "dashboard", Backend: "official-glab"},
 	{Path: []string{"auth", "login"}, Summary: "Authenticate through official glab in a human TTY.", Usage: "gl-axi auth login [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-login", Backend: "official-glab"},
 	{Path: []string{"auth", "status"}, Summary: "Check official-glab authentication without displaying a token.", Usage: "gl-axi auth status [--hostname HOST]", RepoMode: RepoNone, Schema: "auth-status", Backend: "official-glab"},
@@ -75,7 +75,7 @@ var definitions = []Definition{
 	{Path: []string{"search", "code"}, Summary: "Search code blobs in one project.", Usage: "gl-axi search code <query> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "search", Backend: "official-glab"},
 	{Path: []string{"setup", "hooks"}, Summary: "Install or repair generated Agent Skill and session hooks.", Usage: "gl-axi setup hooks", RepoMode: RepoNone, Schema: "setup-hooks", Backend: "local"},
 	{Path: []string{"update"}, Summary: "Check for or install a signed gl-axi release.", Usage: "gl-axi update [--check]", RepoMode: RepoNone, Flags: []FlagDefinition{{Name: "--check", Description: "Check only; do not replace the executable.", Boolean: true}}, Schema: "update", Backend: "local"},
-}
+}, planningDefinitions()...)
 
 func issueEditFlags() []FlagDefinition {
 	return []FlagDefinition{
@@ -176,7 +176,7 @@ func TopHelp() string {
 	out.WriteString("  -h, --help                    show contextual help\n")
 	out.WriteString("  -v, -V, --version             show version (the long form preserves the v1 handshake)\n")
 	out.WriteString("\nBackends:\n  bounded product operations and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
-	out.WriteString("\nSecurity boundary:\n  only MR ensure and guarded immediate squash merge may write;\n  issue edit validates and previews but refuses live mutation because GitLab has no enforceable issue revision;\n  no generic API, approve, comment/reply/resolve, close/reopen/delete,\n  label-resource or MR-label mutation, repository/release mutation,\n  secrets/variables, pipeline mutation, or alternate merge strategy.\n")
+	out.WriteString("\nSecurity boundary:\n  MR ensure, guarded squash merge and opted-in board issues may write;\n  board issues may initialize ordering and shift sibling positions;\n  issue edit validates and previews but refuses live mutation because GitLab has no enforceable issue revision;\n  no generic API, approve, comment/reply/resolve, close/reopen/delete,\n  label-resource or MR-label mutation, repository/release mutation,\n  secrets/variables, pipeline mutation, or alternate merge strategy.\n")
 	return out.String()
 }
 
@@ -226,7 +226,7 @@ func CommandReferenceMarkdown() string {
 			out.WriteString("Examples:\n\n```text\n" + strings.Join(definition.Examples, "\n") + "\n```\n\n")
 		}
 	}
-	out.WriteString("## Permanent denials\n\nGeneric API, every live issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT.\n")
+	out.WriteString("## Current undeclared operations\n\nGeneric API, direct issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.\n")
 	return out.String()
 }
 
@@ -242,7 +242,7 @@ func SkillMarkdown() string {
 		}
 		out.WriteString("- `" + definition.Usage + "` - " + definition.Summary + "\n")
 	}
-	out.WriteString("\n## Safety\n\n- Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.\n- Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.\n- Do not attempt generic API, live issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.\n- `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
+	out.WriteString("\n## Safety\n\n- Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.\n- Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.\n- Do not attempt generic API, direct issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.\n- `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.\n- `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.\n- `board issues` requires `--allow-ordering-initialization` and explicit scope/host. GitLab may initialize issue relative positions and shift sibling positions, including beyond displayed items; receipts never claim changes were measured. Do not use this command when mutation-free reads are required.\n- Never self-assert `--authority`; invoke guarded merge only through the pinned Firstmate lifecycle boundary after its separately shipped integration.\n- Output identifies `backend`, completeness, truncation, host, and repository. Treat incomplete results as incomplete.\n")
 	return out.String()
 }
 

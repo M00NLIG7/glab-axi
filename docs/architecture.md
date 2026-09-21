@@ -258,8 +258,10 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. All provider mutations outside the two MR write
-contracts remain denied; issue edit is validation-only.
+modify or integrate Firstmate. Apart from the two MR write contracts, only the
+explicitly acknowledged board issue query may cause provider ordering changes;
+its pinned contract is in `contracts/gitlab-planning/v19.3.0/`. Other provider
+mutations remain denied in this surface; issue edit is validation-only.
 
 ## Native authority and CI semantics
 

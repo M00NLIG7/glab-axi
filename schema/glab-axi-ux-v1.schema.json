@@ -26,17 +26,20 @@
         "message": {"type": "string", "maxLength": 4096},
         "retryable": {"type": "boolean"},
         "receipt": {
-          "$ref": "ux-v1/issue-edit.schema.json",
-          "properties": {
-            "edit": {
-              "properties": {"action": {"const": "refused"}}
-            }
-          }
+          "oneOf": [
+            {
+              "$ref": "ux-v1/issue-edit.schema.json",
+              "properties": {
+                "edit": {"properties": {"action": {"const": "refused"}}}
+              }
+            },
+            {"$ref": "ux-v1/board-ordering-receipt.schema.json"}
+          ]
         }
       },
       "allOf": [
         {
-          "if": {"required": ["receipt"]},
+          "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["edit"]}}},
           "then": {"properties": {"code": {"const": "safety_violation"}}}
         }
       ]

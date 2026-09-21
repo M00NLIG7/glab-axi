@@ -1,0 +1,69 @@
+{
+  "schema": "glab-axi/planning-consumer/v1",
+  "reference": {
+    "repository": "https://github.com/kunchenguid/gh-axi",
+    "commit": "2bffd9a5b60ded64d6c9851683b27a480173a7ee",
+    "sources": ["src/commands/project.ts", "src/commands/issue.ts"]
+  },
+  "provider": {
+    "tag": "v19.3.0-ee",
+    "tag_object": "25979d16d37d05ffbbb34f8ee74d5431664499ae",
+    "commit": "8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6",
+    "edition": "GitLab EE; core board and task hierarchy types also defined in CE source",
+    "transport": "POST /api/graphql through official glab 1.112.0 only",
+    "query_documents": "queries.json",
+    "runtime_version_attestation": false,
+    "compatibility": "Pinned 19.3 schema, not a claim of every historical or future server version; missing schema, permissions and tier-gated nulls fail closed"
+  },
+  "commands": [
+    {
+      "reference": "project list",
+      "argv": ["board", "list", "--group", "team/nested", "--hostname", "gitlab.com", "--format", "json"],
+      "schema": "board-list",
+      "write_capable": false,
+      "classification": "GitLab-native issue board inventory; explicit project or group, no owner inference or closed-board lifecycle"
+    },
+    {
+      "reference": "project view",
+      "argv": ["board", "view", "7", "-R", "team/nested/project", "--hostname", "gitlab.com", "--format", "json"],
+      "schema": "board-view",
+      "write_capable": false,
+      "classification": "Board metadata and bounded provider columns; open/closed columns are not board states; board scope filters applied but not projected"
+    },
+    {
+      "reference": "project item-list",
+      "argv": ["board", "issues", "7", "--list-id", "8", "--allow-ordering-initialization", "-R", "team/nested/project", "--hostname", "gitlab.com", "--format", "json"],
+      "schema": "board-issues",
+      "write_capable": true,
+      "classification": "Explicit opt-in native operation: provider board/list filters select real issues; GitLab may initialize issue ordering and shift siblings; not independent Projects-v2 items, not mutation-free"
+    },
+    {
+      "reference": "project field-list",
+      "argv": ["work-item", "fields", "42", "-R", "team/nested/project", "--hostname", "gitlab.com", "--format", "json"],
+      "schema": "work-item-fields",
+      "write_capable": false,
+      "classification": "Fixed work-item fields and visible widget types on one item; tier/type-specific; custom-field definitions and values remain unexposed, not full arbitrary-field parity"
+    },
+    {
+      "reference": "issue subissue list",
+      "argv": ["work-item", "hierarchy", "42", "-R", "team/nested/project", "--hostname", "gitlab.com", "--format", "json"],
+      "schema": "work-item-hierarchy",
+      "write_capable": false,
+      "classification": "Parent plus authorized direct children through HIERARCHY; depth one; not issue links; group epics require entitlement"
+    }
+  ],
+  "bounds": {
+    "limit_default": 30,
+    "limit_max": 1000,
+    "page_size_max": 100,
+    "pages_max": 10,
+    "page_bytes_max": 2097152,
+    "operation_bytes_max": 8388608,
+    "pure_read_seconds": 30,
+    "guarded_board_issues_seconds": 45,
+    "cursor_bytes_max": 1024,
+    "title_bytes_max": 1024,
+    "widget_types_max": 64
+  },
+  "denials": ["arbitrary query", "arbitrary field selection", "planning mutations other than acknowledged provider ordering initialization", "automatic retry", "rollback claim", "draft board items", "independent item archive", "closed board state", "recursive hierarchy completeness", "hidden-resource completeness"]
+}

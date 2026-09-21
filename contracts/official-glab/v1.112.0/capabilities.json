@@ -31,6 +31,41 @@
   },
   "operations": [
     {
+      "name": "board-list",
+      "kind": "fixed-graphql-query-page",
+      "argv": ["api", "graphql", "--method", "POST", "--hostname", "{host}", "--raw-field", "query={pinned_board_list_document}", "--raw-field", "fullPath={explicit_scope_path}", "--field", "first={bounded_page_size}"],
+      "contract": "contracts/gitlab-planning/v19.3.0/queries.json",
+      "input_policy": "Exactly one project/group path; only bounded first and opaque after variables; no arbitrary query or fields"
+    },
+    {
+      "name": "board-view",
+      "kind": "fixed-graphql-query-page",
+      "argv": ["api", "graphql", "--method", "POST", "--hostname", "{host}", "--raw-field", "query={pinned_board_view_document}", "--raw-field", "fullPath={explicit_scope_path}", "--field", "first={bounded_page_size}", "--raw-field", "board=gid://gitlab/Board/{positive_id}"],
+      "contract": "contracts/gitlab-planning/v19.3.0/queries.json",
+      "input_policy": "Only board and list metadata; never select issues or create default lists"
+    },
+    {
+      "name": "board-issues",
+      "kind": "guarded-fixed-graphql-query-with-ordering-side-effects",
+      "argv": ["api", "graphql", "--method", "POST", "--hostname", "{explicit_host}", "--raw-field", "query={pinned_board_issues_document}", "--raw-field", "fullPath={explicit_scope_path}", "--field", "first={bounded_page_size}", "--raw-field", "board=gid://gitlab/Board/{positive_id}", "--raw-field", "list=gid://gitlab/List/{positive_list_id}"],
+      "contract": "contracts/gitlab-planning/v19.3.0/queries.json",
+      "input_policy": "Requires per-invocation allow-ordering-initialization; may initialize missing positions and shift siblings beyond displayed items; no retry; receipt reports uncertain effects"
+    },
+    {
+      "name": "work-item-fields",
+      "kind": "fixed-graphql-query-object",
+      "argv": ["api", "graphql", "--method", "POST", "--hostname", "{host}", "--raw-field", "query={pinned_work_item_fields_document}", "--raw-field", "fullPath={explicit_scope_path}", "--raw-field", "iid={positive_iid}"],
+      "contract": "contracts/gitlab-planning/v19.3.0/queries.json",
+      "input_policy": "Direct namespace IID only; visible widget types, not arbitrary custom-field definitions or values"
+    },
+    {
+      "name": "work-item-hierarchy",
+      "kind": "fixed-graphql-query-page",
+      "argv": ["api", "graphql", "--method", "POST", "--hostname", "{host}", "--raw-field", "query={pinned_work_item_hierarchy_document}", "--raw-field", "fullPath={explicit_scope_path}", "--field", "first={bounded_page_size}", "--raw-field", "iid={positive_iid}"],
+      "contract": "contracts/gitlab-planning/v19.3.0/queries.json",
+      "input_policy": "HIERARCHY widget only; parent plus paginated authorized direct children; no recursive or issue-link equivalence"
+    },
+    {
       "name": "issue-list",
       "kind": "read-json-page",
       "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]

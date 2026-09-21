@@ -32,7 +32,8 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 			target.Host = host
 		}
 	}
-	if target.Repo == "" && parsed.Definition.RepoMode != RepoNone {
+	groupPlanning := isPlanningPath(parsed.Definition.Path) && parsed.Values["--group"] != ""
+	if target.Repo == "" && parsed.Definition.RepoMode != RepoNone && !groupPlanning {
 		identity, identityErr := gitremote.Origin(ctx, cwd)
 		if identityErr != nil {
 			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repository is required; run inside a GitLab checkout or pass -R namespace/project")
@@ -55,7 +56,7 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 	if err := safeurl.ValidateHost(target.Host); err != nil {
 		return Target{}, uxv1.Wrap(uxv1.CodeValidation, "invalid GitLab hostname", err)
 	}
-	if parsed.Definition.RepoMode != RepoNone {
+	if parsed.Definition.RepoMode != RepoNone && !groupPlanning {
 		if target.Repo == "" {
 			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repository is required; run inside a GitLab checkout or pass -R namespace/project")
 		}
