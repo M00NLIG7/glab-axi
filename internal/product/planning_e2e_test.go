@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
+	"gl-axi/internal/limits"
 	runtimepkg "gl-axi/internal/runtime"
 )
 
@@ -34,6 +36,10 @@ case "${GL_AXI_PLAN_MODE-}" in
  sleep) : > "$GL_AXI_PLAN_READY"; exec sleep 30 ;;
  forbidden) printf 'HTTP 403: fixture denied\n' >&2; exit 1 ;;
  absent) printf 'HTTP 404: fixture absent\n' >&2; exit 1 ;;
+ graphql-error) cat "$GL_AXI_PLAN_FIXTURE"; printf 'glab: field does not exist: %s\n' "$GITLAB_TOKEN" >&2; exit 1 ;;
+ invalid-json) cat "$GL_AXI_PLAN_FIXTURE"; printf '{'; exit 1 ;;
+ invalid-utf8) cat "$GL_AXI_PLAN_FIXTURE"; printf '\377'; exit 1 ;;
+ stderr-overflow) cat "$GL_AXI_PLAN_FIXTURE"; dd if=/dev/zero bs=8192 count=1 >&2 2>/dev/null; exit 1 ;;
 esac
 case "$*" in *after=next-page*) cat "$GL_AXI_PLAN_FIXTURE.next" ;; *) cat "$GL_AXI_PLAN_FIXTURE" ;; esac
 `
@@ -85,7 +91,7 @@ func TestPlanningExecutableAliasesEndToEnd(t *testing.T) {
 				if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 					t.Fatalf("decode: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
 				}
-				if (runErr == nil) != out.OK || stderr.Len() != 0 {
+				if (runErr == nil) != out.OK || stderr.Len() != 0 || !out.OK && cmd.ProcessState.ExitCode() != uxv1.ExitCode(out.Error) {
 					t.Fatalf("run=%v stderr=%s out=%s", runErr, stderr.String(), stdout.String())
 				}
 				recordBytes, _ := os.ReadFile(record)
@@ -116,7 +122,7 @@ func TestPlanningExecutableAliasesEndToEnd(t *testing.T) {
 						t.Fatalf("argv: %s", recorded)
 					}
 					if op == glab.OpBoardIssues {
-						if !strings.Contains(recorded, "board=gid://gitlab/Board/7") || !strings.Contains(recorded, "list=gid://gitlab/List/8") {
+						if !strings.Contains(recorded, "board=gid://gitlab/Board/7") || !strings.Contains(recorded, "list=gid://gitlab/List/8") || !strings.Contains(recorded, "workItemType { name }") {
 							t.Fatal("lost board/list binding")
 						}
 						var receipt PlanningOrderingReceipt
@@ -131,6 +137,92 @@ func TestPlanningExecutableAliasesEndToEnd(t *testing.T) {
 							t.Fatal("pure metadata fetched issues")
 						}
 					}
+				}
+				for _, itemType := range []string{"Issue", "Incident"} {
+					issue := planItem(7, false, false)
+					issue["workItemType"] = planJSON{"name": itemType}
+					board, _ := run(planArgs(glab.OpBoardIssues, group, 30), planDoc(glab.OpBoardIssues, group, issue), "")
+					doc := planDoc(glab.OpWorkItemFields, false)
+					planRoot(doc)["workItemType"] = planJSON{"name": itemType}
+					fields, _ := run(planArgs(glab.OpWorkItemFields, false, 30), doc, "")
+					var issues []PlanningItem
+					var workItem PlanningItem
+					if err := json.Unmarshal(board.Data["issues"], &issues); err != nil {
+						t.Fatal(err)
+					}
+					if err := json.Unmarshal(fields.Data["work_item"], &workItem); err != nil {
+						t.Fatal(err)
+					}
+					if !board.OK || !fields.OK || len(issues) != 1 || issues[0].Type != itemType || workItem.Type != issues[0].Type || workItem.IID != issues[0].IID || workItem.Namespace != issues[0].Namespace {
+						t.Fatalf("inconsistent %s type: board=%+v work-item=%+v", itemType, issues, workItem)
+					}
+				}
+			}
+			for _, op := range []glab.Operation{glab.OpBoardIssues, glab.OpWorkItemFields} {
+				for _, itemType := range []any{nil, planJSON{}, planJSON{"name": ""}, planJSON{"name": "bad\x00type"}, planJSON{"name": strings.Repeat("x", 129)}} {
+					item := planItem(7, false, false)
+					item["workItemType"] = itemType
+					doc := planDoc(op, false, item)
+					if op == glab.OpWorkItemFields {
+						planRoot(doc)["workItemType"] = itemType
+					}
+					out, _ := run(planArgs(op, false, 30), doc, "")
+					if out.OK || out.Error == nil || out.Error.Code != uxv1.CodeUpstream || out.Data != nil || out.Meta.Complete {
+						t.Fatalf("invalid type accepted: %s type=%v out=%+v", op, itemType, out)
+					}
+				}
+			}
+			for _, op := range []glab.Operation{glab.OpBoardList, glab.OpBoardIssues} {
+				for _, test := range []struct {
+					code string
+					want uxv1.Code
+				}{
+					{"undefinedField", uxv1.CodeUnsupported},
+					{"undefinedType", uxv1.CodeUnsupported},
+					{"argumentNotAccepted", uxv1.CodeUnsupported},
+					{"FORBIDDEN", uxv1.CodeForbidden},
+					{"forbidden", uxv1.CodeForbidden},
+					{"unknown", uxv1.CodeUpstream},
+					{"", uxv1.CodeUpstream},
+				} {
+					for _, mode := range []string{"", "graphql-error"} {
+						doc := planDoc(op, false)
+						doc["errors"] = []any{planJSON{"message": secret, "extensions": planJSON{"code": test.code}}}
+						out, recorded := run(planArgs(op, false, 30), doc, mode)
+						if out.OK || out.Error == nil || out.Error.Code != test.want || out.Error.Retryable || out.Data != nil || out.Meta.Complete || out.Meta.UpstreamVersion != glab.SupportedVersion || strings.Count(recorded, "query=query PlanningRead(") != 1 {
+							t.Fatalf("%s code=%s mode=%s out=%+v err=%+v argv=%s", op, test.code, mode, out, out.Error, recorded)
+						}
+						if op == glab.OpBoardIssues {
+							body, err := json.Marshal(out.Error.Receipt)
+							if err != nil {
+								t.Fatal(err)
+							}
+							var receipt struct {
+								Ordering PlanningOrderingReceipt `json:"board_ordering"`
+							}
+							if err := json.Unmarshal(body, &receipt); err != nil {
+								t.Fatal(err)
+							}
+							if !receipt.Ordering.Acknowledged || receipt.Ordering.Outcome != "may_have_occurred" || receipt.Ordering.RequestsAttempted != 1 || receipt.Ordering.BoardID != 7 || receipt.Ordering.ListID != 8 {
+								t.Fatalf("lost uncertain ordering receipt: %+v", receipt)
+							}
+						}
+					}
+				}
+				for _, mode := range []string{"invalid-json", "invalid-utf8", "stderr-overflow", "graphql-error"} {
+					doc := planDoc(op, false)
+					doc["errors"] = []any{planJSON{"extensions": planJSON{"code": "undefinedField"}}}
+					if mode == "graphql-error" {
+						doc["padding"] = strings.Repeat("x", limits.MaxJSONPageBytes)
+					}
+					out, recorded := run(planArgs(op, false, 30), doc, mode)
+					if out.OK || out.Error == nil || out.Error.Code != uxv1.CodeUpstream || out.Data != nil || out.Meta.Complete || strings.Count(recorded, "query=query PlanningRead(") != 1 {
+						t.Fatalf("invalid error response: %s mode=%s out=%+v err=%+v argv=%s", op, mode, out, out.Error, recorded)
+					}
+				}
+				out, recorded := run(planArgs(op, false, 30), planDoc(op, false), "graphql-error")
+				if out.OK || out.Error == nil || out.Error.Code != uxv1.CodeNotFound || out.Data != nil || strings.Count(recorded, "query=query PlanningRead(") != 1 {
+					t.Fatalf("non-GraphQL failure: %s out=%+v err=%+v argv=%s", op, out, out.Error, recorded)
 				}
 			}
 			doc := planDoc(glab.OpBoardList, false, planBoard(false, 1))

@@ -159,11 +159,7 @@ type planningResponse struct {
 			WorkItem *planningRawItem `json:"workItem"`
 		} `json:"namespace"`
 	} `json:"data"`
-	Errors []struct {
-		Extensions struct {
-			Code string `json:"code"`
-		} `json:"extensions"`
-	} `json:"errors"`
+	Errors glab.PlanningQueryErrors `json:"errors"`
 }
 
 func planningUnavailable(message string) error { return uxv1.NewError(uxv1.CodeUnsupported, message) }
@@ -293,10 +289,16 @@ func normalizePlanningItem(raw *planningRawItem, host string, workItem bool) (Pl
 		}
 		project = &p
 	}
-	itemType := "issue"
+	if raw.WorkItemType == nil {
+		return PlanningItem{}, false, malformed("work item type")
+	}
+	itemType := raw.WorkItemType.Name
+	if len(itemType) == 0 || len(itemType) > 128 || boundedEnum(itemType) == "unknown" {
+		return PlanningItem{}, false, malformed("work item type")
+	}
 	if workItem {
-		if raw.Namespace == nil || !validPlanningNamespaceID(raw.Namespace.ID, project == nil) || raw.WorkItemType == nil {
-			return PlanningItem{}, false, malformed("work item namespace or type")
+		if raw.Namespace == nil || !validPlanningNamespaceID(raw.Namespace.ID, project == nil) {
+			return PlanningItem{}, false, malformed("work item namespace")
 		}
 		if project != nil && path != raw.Namespace.FullPath {
 			return PlanningItem{}, false, planningIdentityError()
@@ -306,10 +308,6 @@ func normalizePlanningItem(raw *planningRawItem, host string, workItem bool) (Pl
 			if err := glab.ValidatePlanningScope("", path); err != nil {
 				return PlanningItem{}, false, planningIdentityError()
 			}
-		}
-		itemType = raw.WorkItemType.Name
-		if len(itemType) == 0 || len(itemType) > 128 || boundedEnum(itemType) == "unknown" {
-			return PlanningItem{}, false, malformed("work item type")
 		}
 	} else if project == nil {
 		return PlanningItem{}, false, planningIdentityError()
@@ -354,17 +352,8 @@ func readPlanning(ctx context.Context, c delegateClient, r glab.Request, meta *u
 	if err := decodeStrict(response.Body, &doc); err != nil {
 		return doc, err
 	}
-	if len(doc.Errors) > 0 {
-		// Do not surface arbitrary provider messages, queries or partial data.
-		for _, e := range doc.Errors {
-			switch e.Extensions.Code {
-			case "undefinedField", "undefinedType", "argumentNotAccepted":
-				return doc, planningUnavailable("GitLab does not support the pinned planning schema")
-			case "FORBIDDEN", "forbidden":
-				return doc, uxv1.NewError(uxv1.CodeForbidden, "GitLab denied the planning read")
-			}
-		}
-		return doc, uxv1.NewError(uxv1.CodeUpstream, "GitLab rejected the planning query; no partial result accepted")
+	if err := doc.Errors.Err(); err != nil {
+		return doc, err
 	}
 	if doc.Data == nil {
 		return doc, malformed("planning response")

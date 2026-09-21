@@ -1,6 +1,7 @@
 package glab
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,6 +19,40 @@ const (
 	OpWorkItemFields    Operation = "work-item-fields"
 	OpWorkItemHierarchy Operation = "work-item-hierarchy"
 )
+
+type PlanningQueryErrors []struct {
+	Extensions struct {
+		Code string `json:"code"`
+	} `json:"extensions"`
+}
+
+func (errs PlanningQueryErrors) Err() error {
+	if len(errs) == 0 {
+		return nil
+	}
+	for _, err := range errs {
+		switch err.Extensions.Code {
+		case "undefinedField", "undefinedType", "argumentNotAccepted":
+			return uxv1.NewError(uxv1.CodeUnsupported, "GitLab does not support the pinned planning schema")
+		case "FORBIDDEN", "forbidden":
+			return uxv1.NewError(uxv1.CodeForbidden, "GitLab denied the planning read")
+		}
+	}
+	return uxv1.NewError(uxv1.CodeUpstream, "GitLab rejected the planning query; no partial result accepted")
+}
+
+func planningQueryFailure(body []byte) error {
+	if len(body) > limits.MaxJSONPageBytes || !utf8.Valid(body) {
+		return nil
+	}
+	var response struct {
+		Errors PlanningQueryErrors `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil
+	}
+	return response.Errors.Err()
+}
 
 func isPlanningOperation(op Operation) bool {
 	switch op {
@@ -62,7 +97,7 @@ func planningQuery(op Operation, group bool) (string, error) {
 	case OpBoardView:
 		return head + `, $board: BoardID!) { scope: ` + scope + `(fullPath: $fullPath) { ` + planningScopeFields + ` board(id: $board) { ` + planningBoardFields + ` lists(first: $first, after: $after) { nodes { ` + planningListFields + ` } ` + planningPageInfo + ` } } } }`, nil
 	case OpBoardIssues:
-		return head + `, $board: BoardID!, $list: ListID!) { scope: ` + scope + `(fullPath: $fullPath) { ` + planningScopeFields + ` board(id: $board) { ` + planningBoardFields + ` lists(id: $list, first: 2) { nodes { ` + planningListFields + ` issues(first: $first, after: $after) { nodes { id iid title state webUrl project { ` + planningScopeFields + ` } } ` + planningPageInfo + ` } } ` + planningPageInfo + ` } } } }`, nil
+		return head + `, $board: BoardID!, $list: ListID!) { scope: ` + scope + `(fullPath: $fullPath) { ` + planningScopeFields + ` board(id: $board) { ` + planningBoardFields + ` lists(id: $list, first: 2) { nodes { ` + planningListFields + ` issues(first: $first, after: $after) { nodes { id iid title state webUrl workItemType { name } project { ` + planningScopeFields + ` } } ` + planningPageInfo + ` } } ` + planningPageInfo + ` } } } }`, nil
 	case OpWorkItemFields:
 		// Namespace.workItem is directly scoped; Group.workItems would include
 		// descendant projects and can confuse equal IIDs in different namespaces.

@@ -39,6 +39,10 @@ issues must belong to a descendant project, never merely a matching suffix.
 Cross-project/group hierarchy nodes retain their own validated namespace and
 project identity on the same host.
 
+Board entries and work items retain the provider's `workItemType.name`, such as
+`Issue` or `Incident`. The board entry's `Issue` global ID identifies its model,
+not its work-item type. Missing or malformed type names fail closed.
+
 Completeness describes the provider-authorized connection only. An inaccessible
 parent or hidden-only children are not reported as absent. Even a complete
 visible child page cannot prove that additional inaccessible children do not
@@ -100,6 +104,10 @@ Exact-revision side-effect sources:
   [EE list filters](https://gitlab.com/gitlab-org/gitlab/-/blob/8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6/ee/app/services/ee/boards/issues/list_service.rb):
   list/board selection and tier-dependent assignee/milestone/iteration/status
   columns remain provider-owned, not rewritten as guessed label membership.
+- [Board issue type filter](https://gitlab.com/gitlab-org/gitlab/-/blob/8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6/app/services/boards/issues/list_service.rb),
+  [incident definition](https://gitlab.com/gitlab-org/gitlab/-/blob/8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6/app/models/work_items/types_framework/system_defined/definitions/incident.rb),
+  and [Issue type](https://gitlab.com/gitlab-org/gitlab/-/blob/8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6/app/graphql/types/issue_type.rb):
+  incidents are board-eligible; `workItemType.name` preserves their provider type.
 - [Namespace work-item resolver](https://gitlab.com/gitlab-org/gitlab/-/blob/8f83039bebbbb61d3b7b8b7e2342d1deec1e14c6/app/graphql/resolvers/namespaces/work_item_resolver.rb):
   exact namespace IID, with group lookups gated by the `epics` licensed feature.
   A null response cannot distinguish absence, denial and entitlement, so the
@@ -121,6 +129,10 @@ Exact-revision side-effect sources:
   all other raw fields are string variables, and only bounded `first` uses
   numeric `--field`. No magic file/placeholder interpretation reaches caller
   strings, and official `--paginate` is never used.
+  GraphQL error JSON is written to stdout before a nonzero exit. The adapter
+  classifies bounded UTF-8 error documents before discarding failed-child output;
+  the same extension-code classifier handles successful child exits. Provider
+  messages and partial data are never emitted, and errors do not trigger retries.
 
 ## Validation ownership
 

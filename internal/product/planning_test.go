@@ -41,9 +41,9 @@ func planColumn(id int) planJSON {
 	return planJSON{"id": fmt.Sprintf("gid://gitlab/List/%d", id), "title": "Todo", "listType": "label", "position": 0, "label": planJSON{"id": "gid://gitlab/ProjectLabel/4", "title": "Todo", "color": "#112233"}}
 }
 func planItem(id int, workItem, group bool) planJSON {
-	kind, state, itemType := "Issue", "opened", any(nil)
+	kind, state, itemType := "Issue", "opened", planJSON{"name": "Issue"}
 	if workItem {
-		kind, state, itemType = "WorkItem", "OPEN", planJSON{"name": "Issue"}
+		kind, state = "WorkItem", "OPEN"
 	}
 	path, nsid, prefix := planPath, "gid://gitlab/Namespaces::ProjectNamespace/11", "/"
 	var project any = planScope(false)
