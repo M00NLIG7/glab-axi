@@ -123,7 +123,7 @@ func TestPinnedReadParityConsumerContract(t *testing.T) {
 	}
 }
 
-func TestReadSelectionPreservesRequiredFieldsAndByteBounds(t *testing.T) {
+func TestReadSelectionPreservesDefaultFieldsAndByteBounds(t *testing.T) {
 	for _, group := range []string{"issue", "mr"} {
 		for _, action := range []string{"list", "view"} {
 			for _, limit := range []int{0, 1, 2, 5, 16, 32, 131072} {
@@ -135,8 +135,10 @@ func TestReadSelectionPreservesRequiredFieldsAndByteBounds(t *testing.T) {
 					args := []string{group, action}
 					if action == "view" {
 						args = append(args, "42")
+					} else {
+						args = append(args, "--fields=description")
 					}
-					args = append(args, "--fields=description", "--body-limit="+strconv.Itoa(limit))
+					args = append(args, "--body-limit="+strconv.Itoa(limit))
 					if code := Run(context.Background(), readParityArgs(args), deps); code != 0 {
 						t.Fatalf("exit=%d %s", code, stdout)
 					}
@@ -165,7 +167,7 @@ func TestReadSelectionPreservesRequiredFieldsAndByteBounds(t *testing.T) {
 						t.Fatal(err)
 					}
 					description, _ := item["description"].(string)
-					if len(description) > limit || !utf8.ValidString(description) || item["iid"] != float64(42) || item["web_url"] == nil || item["state"] == nil || item["author"] != nil || item["labels"] != nil {
+					if len(description) > limit || !utf8.ValidString(description) || item["iid"] != float64(42) || item["web_url"] == nil || item["state"] != "opened" || item["author"] != "alice" || item["labels"] == nil || item["created_at"] == nil || item["updated_at"] == nil {
 						t.Fatalf("selection failed: %#v", item)
 					}
 					if !envelope.Meta.Complete || !envelope.Meta.Truncated || envelope.Meta.Reason != "field_limit" {
@@ -177,7 +179,7 @@ func TestReadSelectionPreservesRequiredFieldsAndByteBounds(t *testing.T) {
 	}
 }
 
-func TestReadSelectionValidatesIdentityBeforeProjection(t *testing.T) {
+func TestReadSelectionValidatesIdentityBeforeRendering(t *testing.T) {
 	for _, group := range []string{"issue", "mr"} {
 		for _, mutation := range []string{"host", "project", "nested-project", "kind", "iid", "url-iid", "query", "branch"} {
 			if mutation == "branch" && group != "mr" {
@@ -206,7 +208,7 @@ func TestReadSelectionValidatesIdentityBeforeProjection(t *testing.T) {
 				}
 				action := "view"
 				var source any = item
-				args := []string{group, action, "42", "--fields=author"}
+				args := []string{group, action, "42"}
 				if mutation == "branch" {
 					action = "list"
 					source = []any{item}
@@ -222,6 +224,64 @@ func TestReadSelectionValidatesIdentityBeforeProjection(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestReadSelectionAddsFieldsWithoutSuppressingDefaults(t *testing.T) {
+	for _, group := range []string{"issue", "mr"} {
+		t.Run(group, func(t *testing.T) {
+			source := readParityObject(group, "body", 42)
+			source["merge_status"] = "future_status"
+			source["head_pipeline"] = map[string]any{"id": 7, "status": "success", "web_url": "https://gitlab.com/group/project/-/pipelines/7"}
+			body, err := json.Marshal([]any{source})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields := []string{"", "author", "description", "description,author,labels,created_at,updated_at"}
+			if group == "mr" {
+				fields = append(fields, "base_sha,head_sha,head_pipeline,raw_merge_status")
+			}
+			var defaults map[string]any
+			for _, field := range fields {
+				delegate := &fakeDelegate{doFunc: func(context.Context, glab.Request) (glab.Response, error, bool) {
+					return glab.Response{Body: body}, nil, true
+				}}
+				stdout, _, deps := productTestDeps(t, delegate)
+				args := []string{group, "list"}
+				if field != "" {
+					args = append(args, "--fields="+field)
+				}
+				if code := Run(context.Background(), readParityArgs(args), deps); code != 0 {
+					t.Fatalf("exit=%d output=%s", code, stdout)
+				}
+				var envelope struct {
+					Data map[string][]map[string]any `json:"data"`
+				}
+				if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				key := "issues"
+				if group == "mr" {
+					key = "mrs"
+				}
+				items := envelope.Data[key]
+				if len(items) != 1 {
+					t.Fatalf("items=%#v", items)
+				}
+				item := items[0]
+				if strings.Contains(field, "description") {
+					if item["description"] != "body" {
+						t.Fatalf("description not added: %#v", item)
+					}
+					delete(item, "description")
+				}
+				if field == "" {
+					defaults = item
+				} else if !reflect.DeepEqual(item, defaults) {
+					t.Fatalf("fields=%q changed defaults: got=%#v want=%#v", field, item, defaults)
+				}
+			}
+		})
 	}
 }
 

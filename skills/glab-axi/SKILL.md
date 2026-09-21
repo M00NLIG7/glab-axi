@@ -18,10 +18,10 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
 - `glab-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `glab-axi issue list [filter/selection flags] [global flags]` - List project issues with typed filters and bounded field selection.
-- `glab-axi issue view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]` - View one project issue with bounded field/body selection.
+- `glab-axi issue view <iid> [--body-limit BYTES] [global flags]` - View one project issue with bounded descriptions.
 - `glab-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Validate one exact project issue edit without mutation.
 - `glab-axi mr list [filter/selection flags] [global flags]` - List project merge requests with typed filters and bounded field selection.
-- `glab-axi mr view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]` - View one merge request with bounded field/body selection.
+- `glab-axi mr view <iid> [--body-limit BYTES] [global flags]` - View one merge request with bounded descriptions.
 - `glab-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.
 - `glab-axi mr discussions <iid> [global flags]` - View bounded, read-only discussion evidence for one merge request.
 - `glab-axi mr diff <iid> [global flags]` - View a bounded, color-free merge-request diff.

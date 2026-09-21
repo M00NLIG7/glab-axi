@@ -134,9 +134,10 @@ gl-axi issue list [filter/selection flags] [global flags]
 
 List project issues with typed filters and bounded field selection.
 
-Selection changes only optional fields; required identity/state fields and validation always remain.
+Use --fields description,labels to add list fields while retaining defaults.
+Default fields and identity/state validation always remain.
 Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
-Use --fields description,labels to opt into list bodies or select view fields, and --body-limit to lower the cap.
+Use --body-limit to lower the description cap.
 meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
 See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
@@ -145,14 +146,14 @@ Backend: `official-glab`. Schema: `schema/ux-v1/issue-list.schema.json`.
 ## `issue view`
 
 ```text
-gl-axi issue view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]
+gl-axi issue view <iid> [--body-limit BYTES] [global flags]
 ```
 
-View one project issue with bounded field/body selection.
+View one project issue with bounded descriptions.
 
-Selection changes only optional fields; required identity/state fields and validation always remain.
+Default fields and identity/state validation always remain.
 Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
-Use --fields description,labels to opt into list bodies or select view fields, and --body-limit to lower the cap.
+Use --body-limit to lower the description cap.
 meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
 See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
@@ -181,9 +182,10 @@ gl-axi mr list [filter/selection flags] [global flags]
 
 List project merge requests with typed filters and bounded field selection.
 
-Selection changes only optional fields; required identity/state fields and validation always remain.
+Use --fields description,labels to add list fields while retaining defaults.
+Default fields and identity/state validation always remain.
 Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
-Use --fields description,labels to opt into list bodies or select view fields, and --body-limit to lower the cap.
+Use --body-limit to lower the description cap.
 meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
 See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
@@ -192,14 +194,14 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-list.schema.json`.
 ## `mr view`
 
 ```text
-gl-axi mr view <iid> [--fields FIELD,...] [--body-limit BYTES] [global flags]
+gl-axi mr view <iid> [--body-limit BYTES] [global flags]
 ```
 
-View one merge request with bounded field/body selection.
+View one merge request with bounded descriptions.
 
-Selection changes only optional fields; required identity/state fields and validation always remain.
+Default fields and identity/state validation always remain.
 Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
-Use --fields description,labels to opt into list bodies or select view fields, and --body-limit to lower the cap.
+Use --body-limit to lower the description cap.
 meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
 See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 

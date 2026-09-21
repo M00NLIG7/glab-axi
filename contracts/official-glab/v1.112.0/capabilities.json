@@ -96,8 +96,8 @@
       "name": "mr-list",
       "kind": "read-json-page",
       "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"],
-      "optional_argv_before_page": ["--all|--closed|--merged", "--label={exact_label} (repeatable, maximum 20)", "--author={username}", "--assignee={username}", "--milestone={title}", "--source-branch={branch}", "--target-branch={branch}", "--draft|--not-draft"],
-      "filter_evidence": "help.txt mr list; TestPinnedOfficialGlabReadFiltersTLS: exact source_branch/target_branch, username IDs, labels/milestone/state and wip=yes|no. Field/body selection is local and never forwarded."
+      "optional_argv_before_page": ["--all|--closed|--merged", "--label={exact_label} (repeatable, maximum 20)", "--author={username}", "--assignee={username}", "--source-branch={branch}", "--target-branch={branch}", "--draft|--not-draft"],
+      "filter_evidence": "help.txt mr list; TestPinnedOfficialGlabReadFiltersTLS: exact source_branch/target_branch, username IDs, labels/state and wip=yes|no. Field/body selection is local and never forwarded."
     },
     {
       "name": "mr-view",

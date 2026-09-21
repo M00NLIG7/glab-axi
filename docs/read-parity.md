@@ -12,13 +12,17 @@ Both `issue list` and `mr list` accept:
 
 | Flag | Contract |
 | --- | --- |
-| `--state` | `open`/`opened` (default), `closed`, `all`; MR also `merged`. GitLab `closed` excludes merged MRs. |
+| `--state` | `open` (default; returned state remains `opened`), `closed`, `all`; MR also `merged`. GitLab `closed` excludes merged MRs. |
 | `--label NAME` | Repeat up to 20 distinct exact names, requiring every label (AND). Commas, quotes/backslashes, control characters, padded names, leading dashes, and provider selector keywords are rejected rather than reinterpreted. |
 | `--author USERNAME` | One explicit username, not `@me` or an expression. |
 | `--assignee USERNAME` | One explicit username, not `@me` or a comma-separated set. |
-| `--milestone TITLE` | One exact title. Like labels, special provider selectors (`None`, `Any`, `Upcoming`, `Started`) are rejected case-insensitively. |
 
-Issues additionally accept `--sort created|updated` in descending order. The
+Issues additionally accept `--milestone TITLE` for one exact title. Provider
+selectors (`None`, `Any`, `Upcoming`, `Started`, `#upcoming`, `#started`,
+`No Milestone`, `Any Milestone`) are rejected case-insensitively before dependency
+or network work. MRs do not accept a milestone filter.
+
+Issues also accept `--sort created|updated` in descending order. The
 pinned provider does not establish a comment-count sort; popularity is not an
 alias for comment count.
 
@@ -43,35 +47,33 @@ with synthetic credentials, without using a real account or profile.
 
 ## Optional fields and descriptions
 
-`--fields FIELD,...` selects OPTIONAL normalized fields, not arbitrary GitLab
-JSON keys. This differs from the reference's additive `--fields`: explicit
-selection projects optional fields while keeping required identity/state fields.
-Without this flag the existing default output shape is unchanged.
+`--fields FIELD,...` adds declared normalized fields to lists, retaining every
+default field. Fields already included by default remain unchanged. Arbitrary
+GitLab JSON keys are not accepted, and views do not accept `--fields`.
 
 - Issue optional fields: `description`, `author`, `labels`, `created_at`, `updated_at`.
 - MR optional fields: the above plus `base_sha`, `head_sha`, `head_pipeline`, `raw_merge_status`.
-- Required identity/state fields always remain, including `iid`, `title`, `state`,
+- Default fields always remain, including `iid`, `title`, `state`,
   `web_url`, and MR source/target branches, draft/conflict/merge status. Selection
   cannot hide an invalid returned identity, URL or branch.
 - Selected absent optional values remain omitted, as in the existing resource
   schemas. Selection does not invent unavailable provider facts.
 - Lists omit descriptions by default. Select `description` to include them.
-- Views include descriptions by default. `--fields author,labels` omits the body.
+- Views include descriptions by default and retain their existing output shape.
 - `--body-limit N` lowers the description cap to 0..131072 UTF-8 bytes. The
-  default remains 131072. It requires a selected description (automatic on views
-  without `--fields`). Zero omits the body, reporting truncation if nonempty.
+  default remains 131072. It requires an included description (automatic on views;
+  lists require `--fields description`). Zero omits the body, reporting truncation if nonempty.
   Truncation never splits UTF-8 or exceeds the requested bytes, including markers.
 
 ```sh
 gl-axi issue list -R group/project --fields description,labels --body-limit 500 --limit 10 --format json
-gl-axi mr view 42 -R group/project --fields description,head_sha --body-limit 4096 --format json
+gl-axi mr view 42 -R group/project --body-limit 4096 --format json
 ```
 
 No schema widening is needed: these fields are already optional in the closed
 `schema/ux-v1/resources.schema.json` contracts. `meta.complete` describes item-set
-pagination, while `meta.truncated` also reports field cuts (`field_limit`). Explicit
-omission through field selection is not truncation. Existing page/display-limit
-reasons take precedence over field truncation.
+pagination, while `meta.truncated` also reports field cuts (`field_limit`).
+Existing page/display-limit reasons take precedence over field truncation.
 
 ## Bounds and compatibility
 
@@ -81,7 +83,7 @@ provider output and a 30-second read deadline. Exact-limit lists probe one furth
 page when necessary; the hard page limit never claims completeness. There is no
 unbounded `--full`, arbitrary `--json`, jq, raw API or new provider mutation.
 
-Host/project/resource identity is checked before projection, including exact IID
+Host/project/resource identity is checked before rendering, including exact IID
 for views. The existing root-path target contract does not accept a different
 nested project merely because its path ends with the requested namespace.
 

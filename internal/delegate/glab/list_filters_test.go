@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gl-axi/internal/contract/uxv1"
 )
 
 func TestListFiltersBuildClosedArgv(t *testing.T) {
@@ -22,6 +24,8 @@ func TestListFiltersBuildClosedArgv(t *testing.T) {
 		filters ListFilters
 		want    []string
 	}{
+		{OpIssueList, ListFilters{State: "open"}, nil},
+		{OpMRList, ListFilters{State: "open"}, nil},
 		{OpIssueList, ListFilters{State: "closed", Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob", Milestone: "release 2", Sort: "updated"}, []string{"--closed", "--label=triage", "--label=needs review", "--author=alice", "--assignee=bob", "--milestone=release 2", "--order=updated_at", "--sort=desc"}},
 		{OpMRList, ListFilters{State: "merged", SourceBranch: "feature/topic", TargetBranch: "main", NotDraft: true}, []string{"--merged", "--source-branch=feature/topic", "--target-branch=main", "--not-draft"}},
 		{OpMRList, ListFilters{State: "all", Draft: true}, []string{"--all", "--draft"}},
@@ -48,6 +52,30 @@ func TestListFiltersBuildClosedArgv(t *testing.T) {
 	} {
 		if _, err := build(Request{Operation: OpMRList, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 31, Filters: filters}); err == nil {
 			t.Fatalf("invalid filters accepted: %#v", filters)
+		}
+	}
+}
+
+func TestListFiltersRejectUnsupportedSelectorsBeforeDependencyWork(t *testing.T) {
+	for _, op := range []Operation{OpIssueList, OpMRList} {
+		filters := []ListFilters{{State: "opened"}}
+		for _, milestone := range []string{"None", "Any", "Upcoming", "Started", "#started", "#upcoming", "No Milestone", "Any Milestone", "#STARTED", "#UPCOMING", "no milestone", "ANY MILESTONE"} {
+			filters = append(filters, ListFilters{Milestone: milestone})
+		}
+		if op == OpMRList {
+			filters = append(filters, ListFilters{Milestone: "release 2"})
+		}
+		for _, filter := range filters {
+			t.Run(string(op)+"/"+filter.State+filter.Milestone, func(t *testing.T) {
+				client := NewClient(ClientConfig{Env: []string{}, LookPath: func(string) (string, error) {
+					t.Fatal("invalid filters reached dependency lookup")
+					return "", nil
+				}})
+				_, err := client.Do(context.Background(), Request{Operation: op, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 31, Filters: filter})
+				if err == nil || uxv1.AsError(err).Code != uxv1.CodeValidation {
+					t.Fatalf("error=%v", err)
+				}
+			})
 		}
 	}
 }
@@ -120,6 +148,8 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 		state, sort     string
 		draft, notDraft bool
 	}{
+		{OpIssueList, "open", "created", false, false},
+		{OpMRList, "open", "", false, false},
 		{OpIssueList, "closed", "updated", false, false},
 		{OpIssueList, "all", "created", false, false},
 		{OpMRList, "all", "", true, false},
@@ -127,10 +157,12 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 		{OpMRList, "closed", "", false, false},
 	} {
 		op := test.op
-		filters := ListFilters{State: test.state, Sort: test.sort, Draft: test.draft, NotDraft: test.notDraft, Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob", Milestone: "release 2"}
+		filters := ListFilters{State: test.state, Sort: test.sort, Draft: test.draft, NotDraft: test.notDraft, Labels: []string{"triage", "needs review"}, Author: "alice", Assignee: "bob"}
 		if op == OpMRList {
 			filters.SourceBranch = "feature/topic"
 			filters.TargetBranch = "main"
+		} else {
+			filters.Milestone = "release 2"
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		response, err := client.Do(ctx, Request{Operation: op, Host: logicalHost, Repo: "group/project", Page: 2, PerPage: 31, Filters: filters})
@@ -159,8 +191,12 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 				query = u.Query()
 			}
 		}
-		want := url.Values{"page": {"2"}, "per_page": {"31"}, "state": {filters.State}, "labels": {"triage,needs review"}, "milestone": {"release 2"}, "author_id": {"7"}, "assignee_id": {"8"}}
+		want := url.Values{"page": {"2"}, "per_page": {"31"}, "state": {filters.State}, "labels": {"triage,needs review"}, "author_id": {"7"}, "assignee_id": {"8"}}
+		if filters.State == "open" {
+			want.Set("state", "opened")
+		}
 		if op == OpIssueList {
+			want.Set("milestone", "release 2")
 			want.Set("order_by", test.sort+"_at")
 			want.Set("sort", "desc")
 			want.Set("in", "title,description")

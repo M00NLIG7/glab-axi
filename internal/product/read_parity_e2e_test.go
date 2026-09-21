@@ -45,6 +45,23 @@ fi
 			if err := os.WriteFile(filepath.Join(dir, "glab"), []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
+			for _, group := range []string{"issue", "mr"} {
+				for _, action := range []string{"list", "view"} {
+					t.Run("help "+group+" "+action, func(t *testing.T) {
+						command := exec.Command(binary, group, action, "--help")
+						command.Dir = dir
+						command.Env = []string{"PATH=" + dir, "HOME=" + dir}
+						output, err := command.CombinedOutput()
+						if err != nil {
+							t.Fatalf("help: %v: %s", err, output)
+						}
+						help := string(output)
+						if strings.Contains(help, "--fields") != (action == "list") || strings.Contains(help, "--milestone") != (group == "issue" && action == "list") || strings.Contains(help, "open|opened") || !strings.Contains(help, "--body-limit") {
+							t.Fatalf("unexpected help: %s", help)
+						}
+					})
+				}
+			}
 			for _, test := range []struct {
 				name            string
 				args            []string
@@ -54,7 +71,11 @@ fi
 				{"filtered issues", []string{"issue", "list", "--state=closed", "--label=triage", "--label=needs review", "--author=alice", "--assignee=bob", "--milestone=release 2", "--sort=updated", "--fields=description,labels", "--body-limit=16"}, "issue list --output json --closed --label=triage --label=needs review --author=alice --assignee=bob --milestone=release 2 --order=updated_at --sort=desc --page 1 --per-page 31 -R group/project", true},
 				{"filtered MRs", []string{"mr", "list", "--state=merged", "--source-branch=feature/topic", "--target-branch=main", "--not-draft", "--fields=description", "--body-limit=16"}, "mr list --output json --merged --source-branch=feature/topic --target-branch=main --not-draft --page 1 --per-page 31 -R group/project", true},
 				{"issue body", []string{"issue", "view", "42", "--body-limit=16"}, "issue view 42 --output json -R group/project", true},
-				{"MR projection", []string{"mr", "view", "42", "--fields=author"}, "mr view 42 --output json -R group/project", false},
+				{"MR body", []string{"mr", "view", "42", "--body-limit=16"}, "mr view 42 --output json -R group/project", true},
+				{"issue defaults", []string{"issue", "view", "42"}, "issue view 42 --output json -R group/project", true},
+				{"MR defaults", []string{"mr", "view", "42"}, "mr view 42 --output json -R group/project", true},
+				{"open issues", []string{"issue", "list", "--state=open", "--fields=author"}, "issue list --output json --page 1 --per-page 31 -R group/project", false},
+				{"open MRs", []string{"mr", "list", "--state=open", "--fields=author"}, "mr list --output json --page 1 --per-page 31 -R group/project", false},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					record := filepath.Join(t.TempDir(), "calls")
@@ -74,6 +95,40 @@ fi
 					}
 					if stderr.Len() != 0 || !json.Valid(stdout.Bytes()) || strings.Contains(stdout.String(), `"description":`) != test.wantDescription {
 						t.Fatalf("stdout=%s stderr=%s", &stdout, &stderr)
+					}
+					var envelope struct {
+						Data struct {
+							Issue  Issue          `json:"issue"`
+							Issues []Issue        `json:"issues"`
+							MR     MergeRequest   `json:"mr"`
+							MRs    []MergeRequest `json:"mrs"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+						t.Fatal(err)
+					}
+					if test.args[0] == "issue" {
+						item := envelope.Data.Issue
+						if test.args[1] == "list" {
+							if len(envelope.Data.Issues) != 1 {
+								t.Fatalf("issues=%#v", envelope.Data.Issues)
+							}
+							item = envelope.Data.Issues[0]
+						}
+						if item.Author != "alice" || len(item.Labels) != 2 || item.CreatedAt == nil || item.UpdatedAt == nil || item.State != "opened" {
+							t.Fatalf("default fields lost: %#v", item)
+						}
+					} else {
+						item := envelope.Data.MR
+						if test.args[1] == "list" {
+							if len(envelope.Data.MRs) != 1 {
+								t.Fatalf("mrs=%#v", envelope.Data.MRs)
+							}
+							item = envelope.Data.MRs[0]
+						}
+						if item.Author != "alice" || len(item.Labels) != 2 || item.CreatedAt == nil || item.UpdatedAt == nil || item.State != "opened" || item.BaseSHA == "" || item.HeadSHA == "" {
+							t.Fatalf("default fields lost: %#v", item)
+						}
 					}
 					calls, err := os.ReadFile(record)
 					if err != nil {

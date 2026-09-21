@@ -11,19 +11,18 @@ import (
 	"gl-axi/internal/limits"
 )
 
-const readSelectionDetails = "Selection changes only optional fields; required identity/state fields and validation always remain.\nDefaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.\nUse --fields description,labels to opt into list bodies or select view fields, and --body-limit to lower the cap.\nmeta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.\nSee docs/read-parity.md for filter semantics, field names, and remaining reference differences."
+const readSelectionDetails = "Default fields and identity/state validation always remain.\nDefaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.\nUse --body-limit to lower the description cap.\nmeta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.\nSee docs/read-parity.md for filter semantics, field names, and remaining reference differences."
 
 func readListFlags(mr bool) []FlagDefinition {
-	state := "open|opened|closed|all"
+	state := "open|closed|all"
 	if mr {
-		state = "open|opened|closed|merged|all"
+		state = "open|closed|merged|all"
 	}
 	flags := []FlagDefinition{
-		{Name: "--state", Value: state, Description: "GitLab state; defaults to opened. Closed excludes merged MRs."},
+		{Name: "--state", Value: state, Description: "GitLab state; defaults to open (returned as opened). Closed excludes merged MRs."},
 		{Name: "--label", Value: "NAME", Description: "Require every exact label; repeat up to 20 times. No commas or provider selector keywords.", Repeatable: true},
 		{Name: "--author", Value: "USERNAME", Description: "Exact author username (not @me)."},
 		{Name: "--assignee", Value: "USERNAME", Description: "Exact assignee username (not @me)."},
-		{Name: "--milestone", Value: "TITLE", Description: "Exact milestone title, not provider selector keywords."},
 	}
 	if mr {
 		flags = append(flags,
@@ -32,19 +31,21 @@ func readListFlags(mr bool) []FlagDefinition {
 			FlagDefinition{Name: "--draft", Boolean: true, Description: "Only draft MRs; mutually exclusive with --not-draft."},
 			FlagDefinition{Name: "--not-draft", Boolean: true, Description: "Only non-draft MRs."})
 	} else {
-		flags = append(flags, FlagDefinition{Name: "--sort", Value: "created|updated", Description: "Descending creation or update time. Comment-count sorting is not supported."})
+		flags = append(flags,
+			FlagDefinition{Name: "--milestone", Value: "TITLE", Description: "Exact milestone title, not provider selectors (None, Any, Upcoming, Started, #upcoming, #started, No Milestone, Any Milestone)."},
+			FlagDefinition{Name: "--sort", Value: "created|updated", Description: "Descending creation or update time. Comment-count sorting is not supported."})
 	}
-	return append(flags, readSelectionFlags(mr)...)
-}
-
-func readSelectionFlags(mr bool) []FlagDefinition {
 	fields := "description,author,labels,created_at,updated_at"
 	if mr {
 		fields += ",base_sha,head_sha,head_pipeline,raw_merge_status"
 	}
+	flags = append(flags, FlagDefinition{Name: "--fields", Value: "FIELD,...", Description: "Add optional fields: " + fields + ". Default fields always remain; description adds list bodies."})
+	return append(flags, readBodyFlags()...)
+}
+
+func readBodyFlags() []FlagDefinition {
 	return []FlagDefinition{
-		{Name: "--fields", Value: "FIELD,...", Description: "Select optional fields: " + fields + ". Required identity/state fields always remain. Omit for existing defaults."},
-		{Name: "--body-limit", Value: "BYTES", Description: "Description cap 0..131072 UTF-8 bytes (default 131072); list requires --fields description. Never raises provider/operation bounds."},
+		{Name: "--body-limit", Value: "BYTES", Description: "Description cap 0..131072 UTF-8 bytes (default 131072); requires an included description. Never raises provider/operation bounds."},
 	}
 }
 
@@ -58,7 +59,6 @@ func listFilters(parsed Parsed) glab.ListFilters {
 }
 
 type readSelection struct {
-	fields    map[string]bool // nil preserves the pre-existing defaults
 	body      bool
 	bodyLimit int
 }
@@ -72,14 +72,14 @@ func parseReadSelection(parsed Parsed) (readSelection, error) {
 				allowed[field] = true
 			}
 		}
-		selection.fields = map[string]bool{}
+		fields := map[string]bool{}
 		for _, field := range strings.Split(raw, ",") {
-			if !allowed[field] || selection.fields[field] {
+			if !allowed[field] || fields[field] {
 				return selection, uxv1.NewError(uxv1.CodeValidation, "--fields must contain distinct supported optional field names")
 			}
-			selection.fields[field] = true
+			fields[field] = true
 		}
-		selection.body = selection.fields["description"]
+		selection.body = fields["description"]
 	}
 	if raw := parsed.Values["--body-limit"]; raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -132,8 +132,6 @@ func (s readSelection) description(raw string) (string, bool, error) {
 	return raw[:cut] + marker, true, nil
 }
 
-func (s readSelection) keep(field string) bool { return s.fields == nil || s.fields[field] }
-
 func (s readSelection) issue(item upstreamIssue, target Target, iid int64) (Issue, bool, error) {
 	out, cut, err := normalizeIssue(item, target.Host, target.Repo, false)
 	if err != nil {
@@ -144,18 +142,6 @@ func (s readSelection) issue(item upstreamIssue, target Target, iid int64) (Issu
 	}
 	description, bodyCut, err := s.description(item.Description)
 	out.Description = description
-	if !s.keep("author") {
-		out.Author = ""
-	}
-	if !s.keep("labels") {
-		out.Labels = nil
-	}
-	if !s.keep("created_at") {
-		out.CreatedAt = nil
-	}
-	if !s.keep("updated_at") {
-		out.UpdatedAt = nil
-	}
 	return out, cut || bodyCut, err
 }
 
@@ -172,30 +158,6 @@ func (s readSelection) mr(item upstreamMR, target Target, iid int64, filters gla
 	}
 	description, bodyCut, err := s.description(item.Description)
 	out.Description = description
-	if !s.keep("author") {
-		out.Author = ""
-	}
-	if !s.keep("labels") {
-		out.Labels = nil
-	}
-	if !s.keep("created_at") {
-		out.CreatedAt = nil
-	}
-	if !s.keep("updated_at") {
-		out.UpdatedAt = nil
-	}
-	if !s.keep("base_sha") {
-		out.BaseSHA = ""
-	}
-	if !s.keep("head_sha") {
-		out.HeadSHA = ""
-	}
-	if !s.keep("head_pipeline") {
-		out.HeadPipeline = nil
-	}
-	if !s.keep("raw_merge_status") {
-		out.RawMergeStatus = ""
-	}
 	return out, cut || bodyCut, err
 }
 

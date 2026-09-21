@@ -30,7 +30,7 @@ func (f ListFilters) Validate(operation Operation) error {
 		return invalid()
 	}
 	switch f.State {
-	case "", "open", "opened", "closed", "all":
+	case "", "open", "closed", "all":
 	case "merged":
 		if operation != OpMRList {
 			return invalid()
@@ -61,8 +61,14 @@ func (f ListFilters) Validate(operation Operation) error {
 		}
 		seen[label] = true
 	}
-	if f.Milestone != "" && !literalFilter(f.Milestone) {
-		return invalid()
+	if f.Milestone != "" {
+		if operation != OpIssueList || !literalFilter(f.Milestone) {
+			return invalid()
+		}
+		switch strings.ToLower(f.Milestone) {
+		case "#started", "#upcoming", "no milestone", "any milestone":
+			return invalid()
+		}
 	}
 	if f.Sort != "" && (operation != OpIssueList || f.Sort != "created" && f.Sort != "updated") {
 		return invalid()
