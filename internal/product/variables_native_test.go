@@ -61,6 +61,11 @@ type nativeVariableFixture struct {
 func newNativeVariableFixture(t *testing.T, class, mode string, mappedWeb bool) *nativeVariableFixture {
 	t.Helper()
 	dir := t.TempDir()
+	// Native config requires its containing directory to be explicitly private;
+	// do not assume testing.TempDir's child-directory mode satisfies that guard.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	f := &nativeVariableFixture{host: "gitlab.com", web: "https://gitlab.com", mode: mode}
 	if mappedWeb {
 		f.host = "gitlab.private.example"
