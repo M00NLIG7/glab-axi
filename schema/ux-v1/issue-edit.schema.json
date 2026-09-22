@@ -74,9 +74,10 @@
         "warning"
       ],
       "properties": {
-        "action": {"enum": ["preview", "unchanged", "updated", "reconciled_update", "ambiguous"]},
+        "action": {"enum": ["preview", "unchanged", "updated", "reconciled_update", "ambiguous", "refused"]},
         "outcome": {"enum": ["not_applied", "observed_applied", "unknown"]},
         "dry_run": {"type": "boolean"},
+        "refusal_reason": {"const": "native_auth_required"},
         "concurrency": {"const": "best_effort"},
         "warning": {"const": "GitLab cannot enforce an atomic expected revision or numeric label identity on this write. Concurrent edits or label renames between checks and PUT can race; receipts describe observed state, not exclusive authorship."},
         "identity": {
@@ -132,6 +133,11 @@
       },
       "allOf": [
         {
+          "if": {"properties": {"action": {"const": "refused"}}},
+          "then": {"required": ["refusal_reason"]},
+          "else": {"not": {"required": ["refusal_reason"]}}
+        },
+        {
           "if": {"properties": {"action": {"const": "ambiguous"}}, "required": ["action"]},
           "then": {"not": {"required": ["resulting_updated_at"]}, "properties": {"outcome": {"const": "unknown"}}},
           "else": {"required": ["resulting_updated_at"]}
@@ -141,7 +147,7 @@
           "then": {"properties": {"outcome": {"const": "observed_applied"}, "changed_fields": {"minItems": 1}}}
         },
         {
-          "if": {"properties": {"action": {"enum": ["preview", "unchanged"]}}},
+          "if": {"properties": {"action": {"enum": ["preview", "unchanged", "refused"]}}},
           "then": {"properties": {"outcome": {"const": "not_applied"}}}
         },
         {

@@ -92,6 +92,7 @@ type issueEditResult struct {
 	Action             string            `json:"action"`
 	Outcome            string            `json:"outcome"`
 	DryRun             bool              `json:"dry_run"`
+	RefusalReason      string            `json:"refusal_reason,omitempty"`
 	Concurrency        string            `json:"concurrency"`
 	Warning            string            `json:"warning"`
 	Identity           issueEditIdentity `json:"identity"`
@@ -134,11 +135,11 @@ type issueEditReadBudget struct {
 
 func (b *issueEditReadBudget) add(body []byte) error {
 	if len(body) > limits.MaxJSONPageBytes {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab issue-edit response exceeded the JSON page limit")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab issue-edit response exceeded the JSON page limit")
 	}
 	b.bytes += len(body)
 	if b.bytes > limits.MaxOperationBytes {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab issue-edit data exceeded the operation limit")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab issue-edit data exceeded the operation limit")
 	}
 	return nil
 }
@@ -154,7 +155,20 @@ func validateIssueEditParsed(parsed Parsed) error {
 	if err := safeurl.ValidateProject(parsed.Values["--repo"]); err != nil {
 		return uxv1.Wrap(uxv1.CodeValidation, "invalid repository target", err)
 	}
-	if got, want := parsed.Values["--expected-url"], canonicalIssueURL(parsed.Values["--hostname"], parsed.Values["--repo"], iid); got != want {
+	if parsed.Values["--auth-source"] == "native" {
+		// The configured web host/prefix may differ from the logical host.
+		// Check URL syntax and exact resource suffix now; bind its complete
+		// authority to the one opened native client before any request.
+		raw := parsed.Values["--expected-url"]
+		u, parseErr := url.Parse(raw)
+		suffix := "/" + parsed.Values["--repo"] + "/-/issues/" + strconv.FormatInt(iid, 10)
+		if parseErr != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.String() != raw || !strings.HasSuffix(u.EscapedPath(), suffix) {
+			return uxv1.NewError(uxv1.CodeSafety, "--expected-url must select the exact native project issue without query or fragment")
+		}
+		if err := safeurl.ValidateHost(u.Hostname()); err != nil {
+			return uxv1.NewError(uxv1.CodeSafety, "invalid issue web host")
+		}
+	} else if got, want := parsed.Values["--expected-url"], canonicalIssueURL(parsed.Values["--hostname"], parsed.Values["--repo"], iid); got != want {
 		return uxv1.NewError(uxv1.CodeSafety, "--expected-url does not exactly match the selected GitLab issue")
 	}
 	switch parsed.Values["--expected-state"] {
@@ -238,13 +252,9 @@ func validRequestedIssueLabel(value string) bool {
 	})
 }
 
-func executeIssueEdit(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
+func executeIssueEditWithClient(ctx context.Context, client issueEditClient, target issueEditTarget, parsed Parsed, requested issueEditRequested, meta uxv1.Meta) (commandOutput, error) {
 	iid, _ := issueEditIID(parsed)
 	expectedAt, _ := parseIssueEditTimestamp(parsed.Values["--expected-updated-at"])
-	requested, err := loadIssueEditRequested(parsed)
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
 	expectedURL := parsed.Values["--expected-url"]
 	expectedState := parsed.Values["--expected-state"]
 	budget := &issueEditReadBudget{}
@@ -320,6 +330,13 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 	if len(plan.changedFields) == 0 {
 		return issueEditReceipt("unchanged", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta), nil
 	}
+	if parsed.Values["--auth-source"] != "native" {
+		result := issueEditReceipt("refused", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta)
+		result.meta.Reason = "native_auth_required"
+		failure := uxv1.NewError(uxv1.CodeSafety, "live issue edits require --auth-source native; the default official-glab path remains validation-only")
+		failure.Receipt = result.data
+		return result, failure
+	}
 	return applyIssueEdit(ctx, client, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, resolvedAdd, resolvedRemove, meta, budget)
 }
 
@@ -351,9 +368,9 @@ func loadIssueEditRequested(parsed Parsed) (issueEditRequested, error) {
 	return requested, nil
 }
 
-func loadIssueEditProject(ctx context.Context, client delegateClient, target Target, meta *uxv1.Meta, budget *issueEditReadBudget) (issueEditProject, error) {
+func loadIssueEditProject(ctx context.Context, client issueEditClient, target issueEditTarget, meta *uxv1.Meta, budget *issueEditReadBudget) (issueEditProject, error) {
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpIssueEditProject, Host: target.Host, Repo: target.Repo})
-	if response.UpstreamVersion != "" {
+	if meta.Backend == "official-glab" && response.UpstreamVersion != "" {
 		meta.UpstreamVersion = response.UpstreamVersion
 	}
 	if err != nil {
@@ -362,19 +379,22 @@ func loadIssueEditProject(ctx context.Context, client delegateClient, target Tar
 	if err := budget.add(response.Body); err != nil {
 		return issueEditProject{}, err
 	}
+	if err := validateUniqueJSON(response.Body, '{', "issue-edit project"); err != nil {
+		return issueEditProject{}, err
+	}
 	var project issueEditProject
 	if err := decodeStrict(response.Body, &project); err != nil {
 		return issueEditProject{}, err
 	}
-	if project.ID < 1 || project.PathWithNamespace != target.Repo || project.WebURL != canonicalProjectURL(target.Host, target.Repo) {
-		return issueEditProject{}, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue-edit project identity")
+	if project.ID < 1 || project.PathWithNamespace != target.Repo || project.WebURL != target.projectURL {
+		return issueEditProject{}, uxv1.NewError(uxv1.CodeSafety, "GitLab returned a different issue-edit project identity")
 	}
 	return project, nil
 }
 
-func loadIssueEditIssue(ctx context.Context, client delegateClient, target Target, iid int64, meta *uxv1.Meta, budget *issueEditReadBudget) (upstreamIssue, error) {
+func loadIssueEditIssue(ctx context.Context, client issueEditClient, target issueEditTarget, iid int64, meta *uxv1.Meta, budget *issueEditReadBudget) (upstreamIssue, error) {
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpIssueEditView, Host: target.Host, Repo: target.Repo, IID: iid})
-	if response.UpstreamVersion != "" {
+	if meta.Backend == "official-glab" && response.UpstreamVersion != "" {
 		meta.UpstreamVersion = response.UpstreamVersion
 	}
 	if err != nil {
@@ -387,6 +407,9 @@ func loadIssueEditIssue(ctx context.Context, client delegateClient, target Targe
 }
 
 func decodeIssueEditIssue(body []byte) (upstreamIssue, error) {
+	if err := validateUniqueJSON(body, '{', "issue-edit issue"); err != nil {
+		return upstreamIssue{}, err
+	}
 	var fields map[string]json.RawMessage
 	if err := decodeStrict(body, &fields); err != nil {
 		return upstreamIssue{}, err
@@ -395,7 +418,7 @@ func decodeIssueEditIssue(body []byte) (upstreamIssue, error) {
 		value, ok := fields[name]
 		isNull := bytes.Equal(bytes.TrimSpace(value), []byte("null"))
 		if !ok || (isNull && name != "description") {
-			return upstreamIssue{}, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an incomplete issue-edit issue document")
+			return upstreamIssue{}, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an incomplete issue-edit issue document")
 		}
 	}
 	var issue upstreamIssue
@@ -405,7 +428,7 @@ func decodeIssueEditIssue(body []byte) (upstreamIssue, error) {
 	return issue, nil
 }
 
-func loadIssueEditLabels(ctx context.Context, client delegateClient, target Target, meta *uxv1.Meta, budget *issueEditReadBudget) ([]issueEditLabel, error) {
+func loadIssueEditLabels(ctx context.Context, client issueEditClient, target issueEditTarget, meta *uxv1.Meta, budget *issueEditReadBudget) ([]issueEditLabel, error) {
 	labels := make([]issueEditLabel, 0)
 	seenIDs := make(map[int64]bool)
 	for page := 1; page <= limits.MaxPages; page++ {
@@ -415,7 +438,7 @@ func loadIssueEditLabels(ctx context.Context, client delegateClient, target Targ
 		response, err := client.Do(ctx, glab.Request{
 			Operation: glab.OpIssueEditLabelList, Host: target.Host, Repo: target.Repo, Page: page, PerPage: issueEditPageSize,
 		})
-		if response.UpstreamVersion != "" {
+		if meta.Backend == "official-glab" && response.UpstreamVersion != "" {
 			meta.UpstreamVersion = response.UpstreamVersion
 		}
 		if err != nil {
@@ -424,19 +447,22 @@ func loadIssueEditLabels(ctx context.Context, client delegateClient, target Targ
 		if err := budget.add(response.Body); err != nil {
 			return nil, err
 		}
+		if err := validateUniqueJSON(response.Body, '[', "issue-edit labels"); err != nil {
+			return nil, err
+		}
 		var pageLabels []issueEditLabel
 		if err := decodeStrict(response.Body, &pageLabels); err != nil {
 			return nil, err
 		}
 		if len(pageLabels) > issueEditPageSize {
-			return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned too many issue-edit labels in one page")
+			return nil, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned too many issue-edit labels in one page")
 		}
 		for _, label := range pageLabels {
 			if label.ID < 1 || !validProviderIssueLabel(label.Name) {
-				return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned invalid issue-edit label identity")
+				return nil, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned invalid issue-edit label identity")
 			}
 			if seenIDs[label.ID] {
-				return nil, uxv1.NewError(uxv1.CodeSafety, "official glab returned duplicate issue-edit label identities")
+				return nil, uxv1.NewError(uxv1.CodeSafety, "GitLab returned duplicate issue-edit label identities")
 			}
 			seenIDs[label.ID] = true
 			labels = append(labels, label)
@@ -492,7 +518,7 @@ func sameIssueEditLabelIdentities(left, right []issueEditLabel) bool {
 	return true
 }
 
-func validateIssueEditExpected(record upstreamIssue, target Target, projectID, iid, expectedIssueID int64, expectedURL, expectedState string, expectedAt time.Time) error {
+func validateIssueEditExpected(record upstreamIssue, target issueEditTarget, projectID, iid, expectedIssueID int64, expectedURL, expectedState string, expectedAt time.Time) error {
 	if err := validateIssueEditIdentity(record, target, projectID, iid, expectedIssueID, expectedURL, expectedState); err != nil {
 		return err
 	}
@@ -504,27 +530,27 @@ func validateIssueEditExpected(record upstreamIssue, target Target, projectID, i
 
 // expectedIssueID is zero only for the first read that establishes the global
 // issue identity. Every subsequent validation read pins it.
-func validateIssueEditIdentity(record upstreamIssue, target Target, projectID, iid, expectedIssueID int64, expectedURL, expectedState string) error {
+func validateIssueEditIdentity(record upstreamIssue, target issueEditTarget, projectID, iid, expectedIssueID int64, expectedURL, expectedState string) error {
 	if record.ID < 1 || (expectedIssueID > 0 && record.ID != expectedIssueID) || record.IID != iid || record.ProjectID != projectID {
-		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue identity")
+		return uxv1.NewError(uxv1.CodeSafety, "GitLab returned a different issue identity")
 	}
-	if record.WebURL != expectedURL || record.WebURL != canonicalIssueURL(target.Host, target.Repo, iid) {
-		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue URL")
+	if record.WebURL != expectedURL || record.WebURL != target.issueURL {
+		return uxv1.NewError(uxv1.CodeSafety, "GitLab returned a different issue URL")
 	}
 	if record.State != "opened" && record.State != "closed" {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid issue state")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an invalid issue state")
 	}
 	if record.State != expectedState {
 		return uxv1.NewError(uxv1.CodeConflict, "issue state does not match --expected-state")
 	}
 	if record.UpdatedAt == nil || record.UpdatedAt.IsZero() {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid issue updated_at")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an invalid issue updated_at")
 	}
 	if record.Title == "" || len(record.Title) > limits.MaxTitleBytes || !validIssueEditText(record.Title) {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid issue title")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an invalid issue title")
 	}
 	if len(record.Description) > limits.MaxDescriptionBytes || !validIssueEditText(record.Description) {
-		return uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid issue description")
+		return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an invalid issue description")
 	}
 	if _, err := canonicalIssueEditLabels(record.Labels); err != nil {
 		return err
@@ -564,7 +590,7 @@ func canonicalIssueEditLabels(values []string) ([]string, error) {
 	seen := make([]string, 0, len(out))
 	for _, value := range out {
 		if !validProviderIssueLabel(value) {
-			return nil, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an invalid issue label")
+			return nil, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an invalid issue label")
 		}
 		total += len(value)
 		if total > limits.MaxOperationBytes {
@@ -572,7 +598,7 @@ func canonicalIssueEditLabels(values []string) ([]string, error) {
 		}
 		for _, prior := range seen {
 			if strings.EqualFold(prior, value) {
-				return nil, uxv1.NewError(uxv1.CodeSafety, "official glab returned duplicate or ambiguous issue labels")
+				return nil, uxv1.NewError(uxv1.CodeSafety, "GitLab returned duplicate or ambiguous issue labels")
 			}
 		}
 		seen = append(seen, value)
@@ -724,13 +750,21 @@ func issueEditLabelSetValue(values []string) issueEditLabelSetEvidence {
 	return evidence
 }
 
-func issueEditReceipt(action string, dryRun bool, target Target, project issueEditProject, issue upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, meta uxv1.Meta) commandOutput {
+func issueEditReceipt(action string, dryRun bool, target issueEditTarget, project issueEditProject, issue upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, meta uxv1.Meta) commandOutput {
 	updatedAt := ""
 	if issue.UpdatedAt != nil {
 		updatedAt = issue.UpdatedAt.UTC().Format(time.RFC3339Nano)
 	}
 	changedFields := make([]string, len(plan.changedFields))
 	copy(changedFields, plan.changedFields)
+	changes := plan.changes
+	if meta.Backend == "native" {
+		// Proposed private text has not necessarily crossed the native response
+		// credential scanner (especially previews and failed writes). Never
+		// render it verbatim in a native receipt.
+		changes.Title = issueEditHashedTextChange(changes.Title)
+		changes.Description = issueEditHashedTextChange(changes.Description)
+	}
 	edit := issueEditResult{
 		Action: action, Outcome: "not_applied", DryRun: dryRun,
 		Concurrency: "best_effort", Warning: issueEditRaceWarning,
@@ -740,10 +774,12 @@ func issueEditReceipt(action string, dryRun bool, target Target, project issueEd
 		},
 		Expected:           issueEditExpected{WebURL: expectedURL, State: expectedState, UpdatedAt: expectedAt.UTC().Format(time.RFC3339Nano)},
 		ChangedFields:      changedFields,
-		Changes:            plan.changes,
+		Changes:            changes,
 		ResultingUpdatedAt: updatedAt,
 	}
 	switch action {
+	case "refused":
+		edit.RefusalReason = "native_auth_required"
 	case "updated", "reconciled_update":
 		edit.Outcome = "observed_applied"
 	case "ambiguous":
@@ -751,6 +787,21 @@ func issueEditReceipt(action string, dryRun bool, target Target, project issueEd
 		edit.ResultingUpdatedAt = ""
 	}
 	return commandOutput{data: issueEditOutput{Edit: edit}, meta: meta}
+}
+
+func issueEditHashedTextChange(change *issueEditTextChange) *issueEditTextChange {
+	if change == nil {
+		return nil
+	}
+	copyChange := *change
+	for _, evidence := range []*issueEditTextEvidence{&copyChange.Before, &copyChange.After} {
+		if evidence.Value != nil {
+			sum := sha256.Sum256([]byte(*evidence.Value))
+			evidence.SHA256 = hex.EncodeToString(sum[:])
+			evidence.Value = nil
+		}
+	}
+	return &copyChange
 }
 
 func issueEditValidationContextError(err error) error {

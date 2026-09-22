@@ -49,8 +49,7 @@ func TestIssueEditProviderContractPinsNonAtomicSingleAttempt(t *testing.T) {
 	if fixture.Request.Method != "PUT" || fixture.Request.Path != "projects/{validated_numeric_project_id}/issues/{iid}" || !reflect.DeepEqual(fixture.Request.Fields, []string{"title", "description", "add_labels", "remove_labels"}) || fixture.Request.Encoding != "comma-separated exact names" || !fixture.Request.NoReplacement || !fixture.Request.NoTimestamp || fixture.Request.Attempts != 1 || fixture.Concurrency.Atomic || fixture.Concurrency.Labels || fixture.Concurrency.Contract != "best_effort" || fixture.Concurrency.Race == "" {
 		t.Fatalf("provider semantics=%#v", fixture)
 	}
-	inv, err := build(Request{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", ID: 101, IID: 42, InputFile: filepath.Join(t.TempDir(), "request.json")})
-	if err != nil || !inv.write || inv.outputKind != outputJSON {
-		t.Fatalf("write invocation=%#v err=%v", inv, err)
+	if _, err := build(Request{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", ID: 101, IID: 42, InputFile: filepath.Join(t.TempDir(), "request.json")}); err == nil {
+		t.Fatal("official-glab builder exposed the native-only issue mutation")
 	}
 }

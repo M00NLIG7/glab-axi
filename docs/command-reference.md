@@ -149,12 +149,12 @@ Backend: `official-glab`. Schema: `schema/ux-v1/issue-view.schema.json`.
 ## `issue edit`
 
 ```text
-gl-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]
+gl-axi issue edit <iid> [--auth-source native] -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]
 ```
 
 Edit one exact project issue with best-effort drift checks.
 
-Requires caller-bound URL, state, and updated-at evidence.
+Requires caller-bound URL, state, and updated-at evidence. Live changes require explicit --auth-source native; omission keeps delegated preview/no-op validation and refuses mutation without switching credentials.
 Title and description are accepted only through private files; slash-leading description lines are rejected to prevent implicit GitLab quick actions. Label additions/removals resolve exact identities; scoped-label replacement requires explicit removal.
 Two preflight reads detect drift, then one PUT sends only changed fields. Bounded post-read verification reconciles ambiguous responses without retry.
 GitLab cannot enforce an atomic expected revision or numeric label identity on writes: concurrent edits or label renames can race between checks and PUT. Receipts prove observed state, not exclusive authorship.

@@ -5,6 +5,12 @@ label additions/removals. It supersedes the historical validation-only `v1.json`
 retained as evidence of the previous surface. The reference comparison is pinned
 to gh-axi `2bffd9a5b60ded64d6c9851683b27a480173a7ee`, `editIssue`.
 
+Live edits require `--auth-source native`; one existing native credential and
+configured API/web authority cover the complete operation via `productnative`.
+The native and official accounts need not match. Omission keeps delegated
+preview/no-op behavior and refuses mutation with `native_auth_required`; no
+automatic selection, profile export, redirect, retry or fallback is permitted.
+
 Explicit host/project, IID, canonical URL, expected state and timestamp bind two
 preflight issue snapshots. Private content files and complete bounded label
 catalogs protect inputs. One PUT targets the validated numeric project ID and
@@ -26,5 +32,6 @@ race. The provider semantics and fixed argv evidence are in
 
 Assignees, milestones, attachments and GitHub organization issue types remain
 explicit parity gaps, not supported or silently emulated features. Other issue
-write families have separate contracts. No frozen native `glab-axi/v1` behavior
+write families have separate contracts. Persisted native config and self-managed
+mapping in the shipped Windows CLI remain unproven. No frozen native `glab-axi/v1` behavior
 changes. Both `gl-axi` and `glab-axi` expose the same `glab-axi/ux-v1` command.

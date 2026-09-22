@@ -30,6 +30,8 @@ func writeIssueEditTestCAProfile(t *testing.T, home, host, caPath string) {
 	}
 }
 
+// Negative dependency evidence only. Product builders reject this mutation;
+// native issue-edit tests must prove that these redirects cannot be followed.
 func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 	binary := officialGlabTestBinary()
 	if binary == "" {
@@ -115,8 +117,9 @@ func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 			}
 			done := make(chan result, 1)
 			go func() {
-				response, err := client.Do(ctx, Request{Operation: OpIssueEditUpdate, Host: host, Repo: "group/project", ID: 101, IID: 42, InputFile: input})
-				done <- result{response, err}
+				args := []string{"api", "--method", "PUT", "--hostname", host, "projects/101/issues/42", "--input", input, "--header", "Content-Type: application/json"}
+				body, err := client.runCapture(ctx, args, host, 2<<20, true, false, OpIssueEditUpdate)
+				done <- result{Response{Body: body, Write: true, UpstreamVersion: SupportedVersion}, err}
 			}()
 			select {
 			case record := <-records:
@@ -140,13 +143,20 @@ func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 			case <-time.After(6 * time.Second):
 				t.Fatal("unbounded child")
 			}
-			select {
-			case extra := <-records:
-				t.Fatalf("unexpected follow-up after one PUT: method=%s path=%s total_requests=%d", extra.method, extra.requestURI, attempts.Load())
-			default:
+			wantRequests := int32(1)
+			if mode == "301" || mode == "302" || mode == "303" {
+				wantRequests = 2 // pinned defect, never an allowed product behavior
+				select {
+				case followup := <-records:
+					if followup.method != "GET" || followup.requestURI != "/api/v4/projects/101/issues/42/redirected" || len(followup.body) != 0 {
+						t.Fatalf("unexpected upstream redirect behavior: %#v", followup)
+					}
+				default:
+					t.Fatal("pinned official redirect behavior changed; refresh the dependency evidence")
+				}
 			}
-			if attempts.Load() != 1 {
-				t.Fatalf("requests=%d", attempts.Load())
+			if attempts.Load() != wantRequests {
+				t.Fatalf("requests=%d want=%d", attempts.Load(), wantRequests)
 			}
 		})
 	}

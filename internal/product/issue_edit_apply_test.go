@@ -16,6 +16,7 @@ import (
 )
 
 func TestIssueEditSuccessfulSingleTypedMutation(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, field := range []string{"title", "description", "clear description", "labels", "combined"} {
 		t.Run(field, func(t *testing.T) {
 			before, after := issueEditFixture(), issueEditFixture()
@@ -72,6 +73,7 @@ func TestIssueEditSuccessfulSingleTypedMutation(t *testing.T) {
 }
 
 func TestIssueEditReconciliationNeverRetries(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, failure := range []string{"lost response", "timeout", "canceled transport", "400", "401", "403", "404", "409", "429", "500", "redirect", "malformed", "incomplete", "oversized"} {
 		for _, observed := range []bool{true, false} {
 			t.Run(failure+"/observed="+map[bool]string{true: "yes", false: "no"}[observed], func(t *testing.T) {
@@ -110,6 +112,7 @@ func TestIssueEditReconciliationNeverRetries(t *testing.T) {
 }
 
 func TestIssueEditPostWriteDriftAndUnverifiableOutcomes(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, phase := range []string{"response", "canonical"} {
 		for _, drift := range []string{"id", "iid", "project", "host", "url", "state", "title", "description", "labels", "older timestamp", "missing timestamp"} {
 			t.Run(phase+"/"+drift, func(t *testing.T) {
@@ -160,6 +163,7 @@ func TestIssueEditPostWriteDriftAndUnverifiableOutcomes(t *testing.T) {
 }
 
 func TestIssueEditLabelIdentityDrift(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, phase := range []string{"preflight", "postwrite"} {
 		for _, drift := range []string{"renamed", "reused", "ambiguous"} {
 			t.Run(phase+"/"+drift, func(t *testing.T) {
@@ -199,6 +203,7 @@ func TestIssueEditLabelIdentityDrift(t *testing.T) {
 }
 
 func TestIssueEditReconciliationFailureAndCancellation(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, mode := range []string{"read error", "malformed", "missing", "oversized", "cancel", "deadline", "read deadline"} {
 		t.Run(mode, func(t *testing.T) {
 			before, after := issueEditFixture(), issueEditFixture()

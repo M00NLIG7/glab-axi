@@ -8,6 +8,7 @@ import (
 )
 
 func TestIssueEditScopedLabelsRequireExplicitReplacement(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, mode := range []string{"implicit replacement", "explicit replacement", "two additions"} {
 		t.Run(mode, func(t *testing.T) {
 			before, after := issueEditFixture(), issueEditFixture()

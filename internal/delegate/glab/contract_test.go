@@ -22,7 +22,6 @@ func TestPinnedRequestBuildersEmitOnlyDeclaredArgv(t *testing.T) {
 		{Request{Operation: OpIssueEditProject, Host: "gitlab.com", Repo: "group/subgroup/project"}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject"}},
 		{Request{Operation: OpIssueEditView, Host: "gitlab.com", Repo: "group/subgroup/project", IID: 7}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/issues/7"}},
 		{Request{Operation: OpIssueEditLabelList, Host: "gitlab.com", Repo: "group/subgroup/project", Page: 2, PerPage: 100}, []string{"api", "--method", "GET", "--hostname", "gitlab.com", "projects/group%2Fsubgroup%2Fproject/labels?include_ancestor_groups=true&page=2&per_page=100"}},
-		{Request{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/subgroup/project", ID: 101, IID: 7, InputFile: input}, []string{"api", "--method", "PUT", "--hostname", "gitlab.com", "projects/101/issues/7", "--input", input, "--header", "Content-Type: application/json"}},
 		{Request{Operation: OpMRList, Host: "gitlab.com", Repo: "group/project", Page: 1, PerPage: 100}, []string{"mr", "list", "--output", "json", "--page", "1", "--per-page", "100", "-R", "group/project"}},
 		{Request{Operation: OpMRView, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"mr", "view", "8", "--output", "json", "-R", "group/project"}},
 		{Request{Operation: OpMRDiff, Host: "gitlab.com", Repo: "group/project", IID: 8}, []string{"mr", "diff", "8", "--color", "never", "-R", "group/project"}},
@@ -108,7 +107,7 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		}
 		declared[operation.Name] = true
 	}
-	for _, operation := range []Operation{OpBoardList, OpBoardView, OpBoardIssues, OpWorkItemFields, OpWorkItemHierarchy, OpIssueList, OpIssueView, OpIssueEditProject, OpIssueEditView, OpIssueEditLabelList, OpIssueEditUpdate, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpMRDiscussionsTargetProject, OpMRDiscussionsSourceProject, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
+	for _, operation := range []Operation{OpBoardList, OpBoardView, OpBoardIssues, OpWorkItemFields, OpWorkItemHierarchy, OpIssueList, OpIssueView, OpIssueEditProject, OpIssueEditView, OpIssueEditLabelList, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpMRDiscussionsTargetProject, OpMRDiscussionsSourceProject, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
 		if !declared[string(operation)] {
 			t.Fatalf("operation %q has no pinned fixture", operation)
 		}
@@ -192,6 +191,7 @@ func TestRequestBuilderRejectsInjectionBeforeExecution(t *testing.T) {
 		{Operation: OpIssueView, Host: "gitlab.com", Repo: "-R", IID: 1},
 		{Operation: OpIssueEditView, Host: "gitlab.com", Repo: "group/project", IID: 0},
 		{Operation: OpIssueEditLabelList, Host: "gitlab.com", Repo: "group/project", Page: 11, PerPage: 100},
+		{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", ID: 101, IID: 1, InputFile: filepath.Join(t.TempDir(), "payload.json")},
 		{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", IID: 1, InputFile: filepath.Join(t.TempDir(), "payload.json")},
 		{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", ID: 101, IID: 0, InputFile: filepath.Join(t.TempDir(), "payload.json")},
 		{Operation: OpIssueEditUpdate, Host: "gitlab.com", Repo: "group/project", ID: 101, IID: 1, InputFile: "relative.json"},

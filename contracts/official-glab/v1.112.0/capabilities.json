@@ -91,13 +91,6 @@
       "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/labels?include_ancestor_groups=true&page={page}&per_page={per_page}"]
     },
     {
-      "name": "issue-edit-update",
-      "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{project_id}/issues/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "validated numeric project ID and IID; private JSON containing only changed title, description, add_labels, remove_labels; one attempt, no retry",
-      "provider_evidence": "issue-edit-provider.json"
-    },
-    {
       "name": "mr-list",
       "kind": "read-json-page",
       "argv": ["mr", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]

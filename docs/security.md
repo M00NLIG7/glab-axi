@@ -44,7 +44,7 @@ native HTTP transport.
 - fixed internal API routes only where official v1.112.0 lacks safe JSON
   commands; MR discussion and canonical project-identity routes are GET-only,
   the fork route accepts only a provider-bound positive project ID, issue-edit
-  owns exact project/issue/label GETs and one validated numeric-target PUT,
+  owns exact project/issue/label GETs; its live PUT is native-only,
   and public `api` remains denied;
 - MR discussion evidence binds canonical source and target project IDs, paths,
   and URLs to MR global/project IDs, IID, branches, base/head SHAs, URL, and
@@ -121,6 +121,16 @@ hashes intent only, not a transmitted payload. `retry_safe` and
 are supported. The [temporary parity gaps](../contracts/issue-writes/review-blockers.md)
 remain explicit; the increment does not claim full issue parity or authorize
 collateral content/quick-action effects.
+
+Live issue editing requires explicit `--auth-source native`. The shared
+`productnative` client is opened once after private input validation and owns
+one existing native credential and configured authority for the full sequence.
+It never acquires the official profile or assumes account equivalence. Omission
+preserves the delegated preview/no-op lane and refuses actual changes with
+`native_auth_required`, without trying native auth. The underlying official
+CLI's 301/302/303 follow-up GET behavior is negative evidence, not a supported
+mutation route. Native redirects and retries are disabled before transmission.
+Windows persisted config/self-managed mapping remains an unproven limitation.
 
 Issue editing requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds

@@ -38,7 +38,8 @@ GitLab project (not Rune).
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before
    official-glab execution.
-9. Against isolated synthetic issue fixtures only, run issue edit with exact
+9. Against isolated synthetic issue fixtures only, run issue edit with explicit
+   `--auth-source native` and exact
    URL, state, and `updated_at`. Exercise title, description, description clear,
    label deltas, and combined edits through both compiled executable names.
    Require successful one-PUT receipts and canonical verification; no-op and
@@ -49,8 +50,10 @@ GitLab project (not Rune).
    reads; every path has at most one PUT and no rollback. Check page/byte/time
    bounds and cancellation. Receipts must disclose the non-atomic race and
    distinguish observed state from attribution. Use the pinned official package
-   TLS fixture to prove label-name deltas, numeric target, no retries or redirects,
-   private payload, and synthetic-credential confidentiality.
+   TLS fixture only as negative redirect evidence. Compiled native CLI/TLS
+   fixtures must prove label-name deltas, numeric target, one credential/authority
+   throughout, no retries or redirects, private payload and confidentiality.
+   Omitted/invalid selectors must never silently switch to native or fall back.
 10. In the disposable project only, run MR ensure twice. The second invocation
    must replay/update the exact MR and never create a duplicate. Exercise an
    applied-but-ambiguous update whose exact official view carries the head in

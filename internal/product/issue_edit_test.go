@@ -169,9 +169,9 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 		Schema  string `json:"schema"`
 		Surface string `json:"surface"`
 		GlabAXI struct {
-			RequiredEnvelope        string `json:"required_envelope"`
-			RequiredBackend         string `json:"required_backend"`
-			RequiredUpstreamVersion string `json:"required_upstream_version"`
+			RequiredEnvelope       string `json:"required_envelope"`
+			RequiredBackend        string `json:"required_backend"`
+			DefaultUpstreamVersion string `json:"default_upstream_version"`
 		} `json:"glab_axi"`
 		PlannedInvocation struct {
 			RequiredExplicitInputs []string `json:"required_explicit_inputs"`
@@ -201,17 +201,17 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
-	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v2" || contract.Surface != "best-effort exact-identity GitLab issue edit" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "official-glab" || contract.GlabAXI.RequiredUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.AmbiguityContract.Error != string(uxv1.CodeAmbiguousUpdate) || contract.AmbiguityContract.Action != "ambiguous" || contract.AmbiguityContract.Outcome != "unknown" || contract.AmbiguityContract.ReceiptSchema != contract.SuccessContract.DataSchema || contract.ProviderContract.IssueReads != 2 || contract.ProviderContract.MutationAttempts != 1 || contract.ProviderContract.PostReads != 1 || contract.ProviderContract.LabelCatalog != "complete bounded project and ancestor catalog, twice before and once after a write when labels are requested" || contract.ProviderContract.ProviderPrecondition != issueEditRaceWarning {
+	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v2" || contract.Surface != "best-effort exact-identity GitLab issue edit" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "native" || contract.GlabAXI.DefaultUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.AmbiguityContract.Error != string(uxv1.CodeAmbiguousUpdate) || contract.AmbiguityContract.Action != "ambiguous" || contract.AmbiguityContract.Outcome != "unknown" || contract.AmbiguityContract.ReceiptSchema != contract.SuccessContract.DataSchema || contract.ProviderContract.IssueReads != 2 || contract.ProviderContract.MutationAttempts != 1 || contract.ProviderContract.PostReads != 1 || contract.ProviderContract.LabelCatalog != "complete bounded project and ancestor catalog, twice before and once after a write when labels are requested" || contract.ProviderContract.ProviderPrecondition != issueEditRaceWarning {
 		t.Fatalf("unexpected issue-edit contract: %#v", contract)
 	}
-	wantInputs := []string{"iid", "nested_project", "host", "canonical_issue_url", "expected_state", "expected_updated_at", "at_least_one_field_change"}
+	wantInputs := []string{"iid", "nested_project", "host", "canonical_issue_url", "expected_state", "expected_updated_at", "at_least_one_field_change", "auth_source_native"}
 	wantActions := []string{"preview", "unchanged", "updated", "reconciled_update"}
 	wantFields := []string{"title", "description", "add_labels", "remove_labels"}
 	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || !reflect.DeepEqual(contract.SuccessContract.Outcomes, []string{"not_applied", "observed_applied"}) || !reflect.DeepEqual(contract.ProviderContract.RequestedFields, wantFields) || len(contract.PlannedInvocation.ForbiddenFields) != 9 {
 		t.Fatalf("incomplete issue-edit contract: %#v", contract)
 	}
 	result, err := Parse([]string{
-		"issue", "edit", "42", "--repo", "group/project", "--hostname", "gitlab.com",
+		"issue", "edit", "42", "--auth-source", "native", "--repo", "group/project", "--hostname", "gitlab.com",
 		"--expected-url", issueEditTestURL, "--expected-state", "opened", "--expected-updated-at", issueEditTestTimestamp,
 		"--title-file", "/private/title", "--add-label", "triage", "--add-label", "ready", "--dry-run", "--format", "json",
 	})
@@ -219,7 +219,7 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 		t.Fatalf("contract invocation failed to parse: result=%#v error=%v", result, err)
 	}
 	parsed := result.Command
-	if strings.Join(parsed.Definition.Path, " ") != "issue edit" || parsed.Positionals[0] != "42" || !parsed.Booleans["--dry-run"] || !reflect.DeepEqual(parsed.MultiValues["--add-label"], []string{"triage", "ready"}) {
+	if strings.Join(parsed.Definition.Path, " ") != "issue edit" || parsed.Positionals[0] != "42" || parsed.Values["--auth-source"] != "native" || !parsed.Booleans["--dry-run"] || !reflect.DeepEqual(parsed.MultiValues["--add-label"], []string{"triage", "ready"}) {
 		t.Fatalf("contract invocation changed meaning: %#v", parsed)
 	}
 }
@@ -250,7 +250,7 @@ func TestIssueEditSchemasPinStructuredAmbiguity(t *testing.T) {
 		t.Fatal(err)
 	}
 	edit := receiptSchema.Properties.Edit.Properties
-	if !reflect.DeepEqual(edit.Action.Enum, []string{"preview", "unchanged", "updated", "reconciled_update", "ambiguous"}) || !reflect.DeepEqual(edit.Outcome.Enum, []string{"not_applied", "observed_applied", "unknown"}) || edit.Warning.Const != issueEditRaceWarning {
+	if !reflect.DeepEqual(edit.Action.Enum, []string{"preview", "unchanged", "updated", "reconciled_update", "ambiguous", "refused"}) || !reflect.DeepEqual(edit.Outcome.Enum, []string{"not_applied", "observed_applied", "unknown"}) || edit.Warning.Const != issueEditRaceWarning {
 		t.Fatalf("unexpected receipt schema: %#v", edit)
 	}
 
@@ -269,7 +269,7 @@ func TestIssueEditSchemasPinStructuredAmbiguity(t *testing.T) {
 								Edit struct {
 									Properties struct {
 										Action struct {
-											Const string `json:"const"`
+											Enum []string `json:"enum"`
 										} `json:"action"`
 									} `json:"properties"`
 								} `json:"edit"`
@@ -284,7 +284,7 @@ func TestIssueEditSchemasPinStructuredAmbiguity(t *testing.T) {
 		t.Fatal(err)
 	}
 	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
-	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "ambiguous" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
+	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || !reflect.DeepEqual(variants[0].Properties.Edit.Properties.Action.Enum, []string{"ambiguous", "refused"}) || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }

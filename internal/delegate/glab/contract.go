@@ -23,12 +23,14 @@ const (
 type Operation string
 
 const (
-	OpIssueList                  Operation = "issue-list"
-	OpIssueView                  Operation = "issue-view"
-	OpIssueEditProject           Operation = "issue-edit-project"
-	OpIssueEditView              Operation = "issue-edit-view"
-	OpIssueEditLabelList         Operation = "issue-edit-label-list"
-	OpIssueEditUpdate            Operation = "issue-edit-update"
+	OpIssueList          Operation = "issue-list"
+	OpIssueView          Operation = "issue-view"
+	OpIssueEditProject   Operation = "issue-edit-project"
+	OpIssueEditView      Operation = "issue-edit-view"
+	OpIssueEditLabelList Operation = "issue-edit-label-list"
+	// OpIssueEditUpdate identifies the product-native edit only. build must
+	// reject it: the pinned official CLI can follow mutation redirects.
+	OpIssueEditUpdate            Operation = "issue-edit-native-update"
 	OpMRList                     Operation = "mr-list"
 	OpMRView                     Operation = "mr-view"
 	OpMRDiff                     Operation = "mr-diff"
@@ -312,17 +314,6 @@ func build(request Request) (invocation, error) {
 		query := url.Values{"state": {"opened"}, "source_branch": {request.Source}, "target_branch": {request.Target}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}.Encode()
 		endpoint := "projects/" + escapedRepo + "/merge_requests?" + query
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpIssueEditUpdate:
-		if request.ID < 1 || request.IID < 1 {
-			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "issue edit requires positive project ID and issue IID")
-		}
-		if err := validatePrivateInputPath(request.InputFile); err != nil {
-			return invocation{}, err
-		}
-		// Bind the mutation to the validated numeric project, not a reusable path.
-		endpoint := fmt.Sprintf("projects/%d/issues/%d", request.ID, request.IID)
-		args := []string{"api", "--method", "PUT", "--hostname", request.Host, endpoint, "--input", request.InputFile, "--header", "Content-Type: application/json"}
-		return invocation{args: args, host: request.Host, maxStdout: limits.MaxJSONPageBytes, write: true, outputKind: outputJSON}, nil
 	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge:
 		if err := validatePrivateInputPath(request.InputFile); err != nil {
 			return invocation{}, err

@@ -19,7 +19,7 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `glab-axi issue list [global flags]` - List project issues.
 - `glab-axi issue view <iid> [global flags]` - View one project issue.
-- `glab-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Edit one exact project issue with best-effort drift checks.
+- `glab-axi issue edit <iid> [--auth-source native] -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Edit one exact project issue with best-effort drift checks.
 - `glab-axi mr list [global flags]` - List project merge requests.
 - `glab-axi mr view <iid> [global flags]` - View one merge request.
 - `glab-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.

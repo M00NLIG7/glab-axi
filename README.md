@@ -40,7 +40,7 @@ gl-axi auth status [--hostname H]
 
 gl-axi issue list|view
 gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
-gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # best-effort guarded edit; --dry-run previews
+gl-axi issue edit IID --auth-source native ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # best-effort edit; --dry-run previews
 gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
@@ -147,6 +147,15 @@ glab-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 -
 }
 ```
 
+Live issue editing requires deliberate `--auth-source native` selection. One
+existing native environment/keyring credential and configured API/web authority
+serve all preflights, catalog pages, mutation, and reconciliation. It never
+invokes official glab, exports its profile, retries, follows redirects, or falls
+back to another identity. The native account may differ from official glab.
+Omitting the selector keeps the existing official-glab preview/no-op lane;
+actual changes return `safety_violation` / `native_auth_required` before PUT.
+The frozen native-v1 lane and other product defaults are unchanged.
+
 Issue editing requires explicit host/project plus the issue's canonical URL,
 current `opened` or `closed` state, and exact `updated_at`. Supported fields are
 **title, description (body), and label additions/removals**. Text enters through
@@ -169,14 +178,18 @@ intended content, and preservation of the observed unrelated title/body/labels.
 names rather than IDs. Concurrent edits or label renames can race between checks
 and PUT; a removed name may even be recreated by GitLab's `add_labels` behavior.
 Postchecks detect observed divergence but cannot prevent or roll back that race.
-Receipts disclose `best_effort` concurrency. `updated` or `reconciled_update` with
+Native receipts report private text changes as byte counts and SHA-256 digests,
+not verbatim proposed content. Receipts disclose `best_effort` concurrency.
+`updated` or `reconciled_update` with
 `observed_applied` means the intended state was observed, not exclusive authorship
 or proof no concurrent write occurred. Unverifiable outcomes return
 `ambiguous_update` with an `ambiguous`/`unknown` receipt under `error.receipt` and
 never retry. Inspect the issue before another edit.
 
 Assignees, milestones, attachments, and GitHub organization issue types remain
-explicit edit-parity gaps, not fake work-item equivalents. See the versioned
+explicit edit-parity gaps, not fake work-item equivalents. Shipped Windows
+persisted-native-config and self-managed authority mapping remain unproven;
+this change does not claim general Windows native-auth support. See the versioned
 [`contracts/issue-edit/v2.json`](contracts/issue-edit/v2.json).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
@@ -416,17 +429,9 @@ make build
 ```
 
 CI additionally downloads without installing the checksum-pinned official
-<<<<<<< HEAD
 `glab` package and runs the
 [offline dependency contracts](contracts/official-glab/v1.112.0/).
 That directory owns the versioned evidence and MIT license.
-=======
-`glab` package and executes its version/help contract plus isolated TLS
-fake-server ensure, exact-MR-view normalization, guarded issue-edit
-validation, and guarded-merge contracts.
-The authoritative evidence and MIT license are under
-[`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
->>>>>>> e652d26 (Preserve guarded issue edit source before native transport integration)
 
 ## Distribution and updates
 

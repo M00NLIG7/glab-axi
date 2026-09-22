@@ -11,6 +11,7 @@ import (
 )
 
 func TestIssueEditRejectsQuickActionInputBeforeProvider(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, body := range []string{"/close", "ordinary\n/assign @someone", " \t/label other", "```\n/merge\n```", "text\r/confidential", "/unknown-future-action"} {
 		t.Run(fmt.Sprintf("%q", body), func(t *testing.T) {
 			delegate := &fakeDelegate{}
@@ -31,6 +32,7 @@ func TestIssueEditRejectsQuickActionInputBeforeProvider(t *testing.T) {
 }
 
 func TestIssueEditHardPageAndByteBounds(t *testing.T) {
+	Run := runIssueEditStateMachine
 	for _, phase := range []string{"preflight", "postwrite"} {
 		for _, mode := range []string{"pages", "page bytes", "operation bytes", "too many labels"} {
 			t.Run(phase+"/"+mode, func(t *testing.T) {

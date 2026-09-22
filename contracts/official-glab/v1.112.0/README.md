@@ -37,11 +37,14 @@ paginated discussion GET routes and exposes no note mutation. The source-project
 route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
-schema. Issue editing pins project, issue, and label-catalog GET routes plus one
-numeric-project issue PUT consuming private JSON with only changed title,
-description, and label deltas. `issue-edit-provider.json` records provider
-semantics: label names can be recreated, `updated_at` is not an expected revision,
-and best-effort prechecks/postchecks cannot close the residual check/write race.
+schema. Issue editing delegates only its project, issue, and label-catalog GET
+routes. The pinned CLI follows 301/302/303 after PUT with an unapproved GET;
+`TestPinnedOfficialGlabIssueEditTLS` retains that negative evidence. No issue PUT
+is exposed by the official adapter. Explicit `--auth-source native` uses the
+landed shared native boundary instead, for the entire edit operation.
+`issue-edit-provider.json` records provider semantics used by the native edit:
+label names can be recreated, `updated_at` is not an expected revision, and
+prechecks/postchecks cannot close the residual check/write race.
 `issue-writes.json` and test-only probes retain characterization evidence, not a
 supported delegated issue-write backend: pinned glab follows 301/302/303 to another
 authority while forwarding a synthetic Private-Token. New public issue writes
@@ -66,7 +69,7 @@ Filtered job reads are not used by guarded merge's complete jobs/bridges proof.
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
 ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
-single-attempt guarded issue edits, test-only issue-write characterization and
+issue-read and negative redirect evidence, test-only issue-write characterization and
 guarded-merge requests with synthetic credentials; it never contacts a live
 GitLab API.
 Updating official `glab` requires a new versioned directory, fresh

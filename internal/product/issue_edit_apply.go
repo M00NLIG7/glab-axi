@@ -2,6 +2,7 @@ package product
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"gl-axi/internal/contract/uxv1"
@@ -17,7 +18,7 @@ func issueEditLabelNames(labels []issueEditLabel) []string {
 	return names
 }
 
-func applyIssueEdit(ctx context.Context, client delegateClient, target Target, project issueEditProject, before upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, add, remove []issueEditLabel, meta uxv1.Meta, budget *issueEditReadBudget) (commandOutput, error) {
+func applyIssueEdit(ctx context.Context, client issueEditClient, target issueEditTarget, project issueEditProject, before upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, add, remove []issueEditLabel, meta uxv1.Meta, budget *issueEditReadBudget) (commandOutput, error) {
 	if err := validateIssueEditDescription(plan.desired.Description); err != nil {
 		return commandOutput{meta: meta}, err
 	}
@@ -34,18 +35,18 @@ func applyIssueEdit(ctx context.Context, client delegateClient, target Target, p
 	// not a compare-and-swap, and it must never be retried after any outcome.
 	writeCtx, cancelWrite := context.WithTimeout(ctx, limits.IssueEditMutation)
 	response, writeErr := client.Do(writeCtx, glab.Request{
-		Operation: glab.OpIssueEditUpdate, Host: target.Host, Repo: target.Repo,
+		Operation: issueEditUpdateOperation, Host: target.Host, Repo: target.Repo,
 		ID: project.ID, IID: before.IID, InputFile: input,
 	})
 	cancelWrite()
-	if response.UpstreamVersion != "" {
-		meta.UpstreamVersion = response.UpstreamVersion
-	}
 	responseVerified := false
 	unsafeResponse := false
 	if writeErr == nil {
 		if err := budget.add(response.Body); err == nil {
-			if issue, err := decodeIssueEditIssue(response.Body); err == nil {
+			if json.Valid(response.Body) {
+				unsafeResponse = validateUniqueJSON(response.Body, '{', "issue-edit response") != nil || issueEditResponseIdentityConflict(response.Body, before)
+			}
+			if issue, err := decodeIssueEditIssue(response.Body); err == nil && !unsafeResponse {
 				// An intelligible but wrong identity/poststate is not repaired by
 				// an unrelated later read that happens to show the desired state.
 				err = validateIssueEditPoststate(issue, target, project.ID, before, plan)
@@ -97,7 +98,27 @@ func applyIssueEdit(ctx context.Context, client delegateClient, target Target, p
 	return result, failure
 }
 
-func validateIssueEditPoststate(actual upstreamIssue, target Target, projectID int64, before upstreamIssue, plan issueEditPlan) error {
+// Do not hide a known wrong identity behind other missing response fields.
+// Malformed/lost JSON may reconcile; a readable conflicting identity may not.
+func issueEditResponseIdentityConflict(body []byte, before upstreamIssue) bool {
+	var identity struct {
+		ID        *int64  `json:"id"`
+		IID       *int64  `json:"iid"`
+		ProjectID *int64  `json:"project_id"`
+		WebURL    *string `json:"web_url"`
+		State     *string `json:"state"`
+	}
+	if err := decodeStrict(body, &identity); err != nil {
+		return true
+	}
+	return identity.ID != nil && *identity.ID != before.ID ||
+		identity.IID != nil && *identity.IID != before.IID ||
+		identity.ProjectID != nil && *identity.ProjectID != before.ProjectID ||
+		identity.WebURL != nil && *identity.WebURL != before.WebURL ||
+		identity.State != nil && *identity.State != before.State
+}
+
+func validateIssueEditPoststate(actual upstreamIssue, target issueEditTarget, projectID int64, before upstreamIssue, plan issueEditPlan) error {
 	if err := validateIssueEditIdentity(actual, target, projectID, before.IID, before.ID, before.WebURL, before.State); err != nil {
 		return err
 	}

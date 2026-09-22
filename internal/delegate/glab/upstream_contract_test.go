@@ -552,10 +552,10 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	}
 }
 
-// TestPinnedOfficialGlabIssueEditTLS pins fixed issue-edit GETs and the single
-// numeric-project PUT, including transport failures and redirect refusal.
+// TestPinnedOfficialGlabIssueEditTLS pins fixed issue-edit GETs and negative
+// evidence of official PUT redirects. Product issue writes are native-only.
 func TestPinnedOfficialGlabIssueEditTLS(t *testing.T) {
-	t.Run("single mutation", testPinnedOfficialGlabIssueEditMutationTLS)
+	t.Run("underlying redirect evidence", testPinnedOfficialGlabIssueEditMutationTLS)
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")

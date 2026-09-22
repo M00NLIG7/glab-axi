@@ -182,8 +182,14 @@ the descriptor to prevent path-swap reads.
 
 ## Issue edit: best-effort guarded mutation
 
-Product `issue edit` supports title, description, and label deltas with drift
-checks and bounded reconciliation. Its parser requires an explicit host and nested project,
+Product `issue edit --auth-source native` supports title, description, and label
+deltas with drift checks and bounded reconciliation. After validating private
+input, it opens the shared `productnative` client once and uses its selected
+credential and configured API/web authority for the entire operation. The
+feature adapter selects only its closed routes; it owns no credential resolver
+or HTTP policy. Native and official identities are not assumed equivalent.
+Omitting the selector preserves delegated preview/no-op validation and returns
+`native_auth_required` for live changes before any PUT. No fallback occurs. Its parser requires an explicit host and nested project,
 canonical positive IID and issue URL, `opened` or `closed` expected state, exact
 RFC 3339 `updated_at`, and at least one title, description, or label request.
 It validates these values before target or child discovery. Content comes only
@@ -228,15 +234,19 @@ cannot prove the absence of concurrent writes. Receipts explicitly disclose
 `best_effort` and the race; `observed_applied` proves observed state, not which
 actor applied it. No-op fields are not sent and unrelated labels are never replaced.
 
-Receipts include bound identity, caller evidence, ordered changes, before/after
-values or bounded SHA-256 evidence, and requested label IDs. Only verified
+Receipts include bound identity, caller evidence, ordered changes, and requested
+label IDs. Native private-text evidence is always byte counts and SHA-256 digests,
+including previews or rejected payloads; unverified proposed content cannot bypass
+the native response credential scanner by appearing verbatim in a receipt.
+The default delegated preview retains its bounded values/digests. Only verified
 results include `resulting_updated_at`; unknown outcomes do not recycle prestate
 as a result. Budgets are 20 seconds preflight, 15 mutation, 10 verification within
 45 total, retaining caller cancellation. All response bytes share the 8 MiB
 operation cap, with 2 MiB/page and 10 pages/catalog.
 
 `contracts/issue-edit/v2.json` supersedes the historical validation-only v1.
-Assignees, milestones, attachments, and GitHub organization types remain explicit
+Persisted native config and self-managed mapping on the shipped Windows CLI
+remain unproven. Assignees, milestones, attachments, and GitHub organization types remain explicit
 parity gaps; GitLab incident/task types are not treated as equivalents. Creation,
 comments, state changes, hierarchy and boards are separate contracts.
 

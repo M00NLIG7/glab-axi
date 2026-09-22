@@ -1,6 +1,8 @@
 {
   "schema": "glab-axi/issue-edit-provider-evidence/v1",
-  "official_glab": {"version": "1.112.0", "commit": "816e3a52411aba73d90237859fdc6ecbc86bd169", "client_go": "v2.53.0"},
+  "official_glab": {"version": "1.112.0", "commit": "816e3a52411aba73d90237859fdc6ecbc86bd169", "client_go": "v2.53.0", "issue_write_available": false},
+  "execution_backend": "explicit product-native for the complete edit operation",
+  "delegated_defect": "Pinned official glab follows 301/302/303 after PUT with a GET to the redirected path. Negative TLS evidence is retained; the product adapter exposes no issue PUT.",
   "provider_sources": [
     {"url": "https://gitlab.com/gitlab-org/gitlab/-/blob/v18.3.0-ee/doc/api/issues.md#edit-an-issue", "evidence": "PUT /projects/:id/issues/:issue_iid accepts numeric project ID, title, description, comma-separated add_labels and remove_labels. add_labels creates a project label if the name does not exist. labels replaces the set. updated_at sets the time with elevated rights; it is not an expected revision."},
     {"url": "https://gitlab.com/gitlab-org/api/client-go/-/blob/v2.53.0/issues.go", "symbol": "UpdateIssueOptions, UpdateIssue", "evidence": "Title, Description, AddLabels, RemoveLabels are supported; UpdateIssue uses HTTP PUT with project ID and IID. No expected revision field."},
@@ -11,5 +13,5 @@
   "request": {"method": "PUT", "path": "projects/{validated_numeric_project_id}/issues/{iid}", "body_fields": ["title", "description", "add_labels", "remove_labels"], "label_encoding": "comma-separated exact names", "no_replacement_labels": true, "no_updated_at_setter": true, "attempts_maximum": 1},
   "concurrency": {"atomic_revision_check": false, "numeric_label_precondition": false, "contract": "best_effort", "race": "Concurrent issue changes can be overwritten after checks; deleted/renamed label names can be recreated or reused. Postchecks detect observed divergence, not exclusive authorship, and never roll back."},
   "isolated_wire_test": "TestPinnedOfficialGlabIssueEditTLS",
-  "test_scope": "Pinned official package against local TLS synthetic endpoints only. Verifies GET/PUT argv, JSON label-name deltas, numeric project target, output/credential bounds, and exactly one attempt for success, rejection, throttling, server failure, malformed/lost response, redirects, timeout and cancellation. Does not claim a live GitLab integration test."
+  "test_scope": "Pinned official-package TLS tests retain GET behavior and the negative PUT redirect evidence. Product-native feature TLS and compiled CLI tests specify exactly one PUT, no redirect follow-up or retry, one full-operation native identity/authority, bounded reconciliation and confidentiality. No live GitLab integration or fixed-upstream claim."
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -83,6 +84,32 @@ func TestIssueEditNativeSelectorAndInputRefuseBeforeCredentials(t *testing.T) {
 	}
 }
 
+func TestIssueEditNativePrivateReceiptDoesNotEchoProposedText(t *testing.T) {
+	for _, preview := range []bool{true, false} {
+		t.Run(map[bool]string{true: "preview", false: "rejected payload"}[preview], func(t *testing.T) {
+			f := newIssueEditNativeFixture(t)
+			f.after.Title = f.token // runtime sentinel only, never stored in config
+			args := append(f.args(t), "--auth-source", "native")
+			if preview {
+				args = append(args, "--dry-run")
+			}
+			stdout, _, deps := f.dependencies(t)
+			code := Run(context.Background(), args, deps)
+			f.assertConfidential(t, stdout.String())
+			f.assertRequests(t, -1, 0)
+			if preview && code != 0 {
+				t.Fatalf("preview failed: %s", stdout)
+			}
+			if !preview {
+				assertIssueEditAmbiguous(t, code, stdout.Bytes())
+			}
+			if !strings.Contains(stdout.String(), `"sha256":`) {
+				t.Fatal("private text receipt omitted digest evidence")
+			}
+		})
+	}
+}
+
 func TestIssueEditNativeUnavailableNeverFallsBack(t *testing.T) {
 	for _, mode := range []string{"credential unavailable", "host unconfigured"} {
 		t.Run(mode, func(t *testing.T) {
@@ -116,7 +143,7 @@ func TestIssueEditNativeDefaultRemainsNonMutating(t *testing.T) {
 }
 
 func TestIssueEditNativePrestateAndNoOp(t *testing.T) {
-	for _, mode := range []string{"preview", "noop", "wrong issue", "stale", "drift", "label reused"} {
+	for _, mode := range []string{"preview", "noop", "wrong issue", "stale", "drift", "label reused", "duplicate project", "duplicate issue"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newIssueEditNativeFixture(t)
 			f.mode = mode
@@ -146,7 +173,7 @@ func TestIssueEditNativePrestateAndNoOp(t *testing.T) {
 }
 
 func TestIssueEditNativeAmbiguousTransportReconcilesWithoutRetry(t *testing.T) {
-	for _, mode := range []string{"lost", "server failure", "malformed", "unapplied", "wrong response", "read failure"} {
+	for _, mode := range []string{"lost", "server failure", "malformed", "unapplied", "wrong response", "partial wrong identity", "duplicate response", "read failure"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newIssueEditNativeFixture(t)
 			f.mode = mode
@@ -259,6 +286,9 @@ type issueEditNativeFixture struct {
 
 func newIssueEditNativeFixture(t *testing.T) *issueEditNativeFixture {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("persisted native config and self-managed mapping remain unproven on Windows")
+	}
 	f := &issueEditNativeFixture{host: "git.issue-edit.example", webBase: "https://web.issue-edit.example/gitlab", token: strings.Join([]string{"synthetic", "issue", "native", "credential"}, "-")}
 	f.before = issueEditFixture()
 	f.before.WebURL = f.webBase + "/group/project/-/issues/42"
@@ -305,9 +335,17 @@ func (f *issueEditNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
 	write := func(value any) { _ = json.NewEncoder(w).Encode(value) }
 	switch r.Method + " " + r.URL.EscapedPath() {
 	case "GET /gitlab/api/v4/projects/group%2Fproject":
+		if f.mode == "duplicate project" {
+			_, _ = w.Write([]byte(`{"id":101,"id":202}`))
+			return
+		}
 		write(issueEditProject{ID: 101, PathWithNamespace: "group/project", WebURL: f.webBase + "/group/project"})
 	case "GET /gitlab/api/v4/projects/group%2Fproject/issues/42":
 		f.issueReads++
+		if f.mode == "duplicate issue" {
+			_, _ = w.Write([]byte(`{"id":1001,"id":2002}`))
+			return
+		}
 		if f.mode == "read failure" && f.issueReads == 3 {
 			w.WriteHeader(503)
 			return
@@ -358,6 +396,10 @@ func (f *issueEditNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
 			write(map[string]string{"message": f.token})
 		case "malformed":
 			_, _ = w.Write([]byte(`{"id":`))
+		case "partial wrong identity":
+			_, _ = w.Write([]byte(`{"id":2002}`))
+		case "duplicate response":
+			_, _ = w.Write([]byte(`{"id":1001,"id":2002}`))
 		case "wrong response":
 			issue := f.after
 			issue.ID++
