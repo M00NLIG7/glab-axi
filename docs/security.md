@@ -51,8 +51,10 @@ native HTTP transport.
   normalized threads repeat that binding, preserve provider ordering, expose
   explicit resolution state, omit note/author URLs, and remain within thread,
   nested-note, field, aggregate-body, page, and operation limits;
-- a display, page, nested-record, or field truncation always sets
-  `complete:false`; malformed, unsupported, unavailable, or drifting identity
+- completeness and truncation follow each command's contract; the
+  [planning contract](../contracts/gitlab-planning/v19.3.0/README.md#comparison-and-material-differences)
+  distinguishes collection completeness from field truncation;
+  malformed, unsupported, unavailable, or drifting identity
   returns a controlled incomplete error instead of partial trusted evidence.
 
 Approved environment credentials pass directly to official glab for headless
@@ -66,8 +68,18 @@ profile or token source.
 
 ## Provider-write boundary
 
-The only product provider-write families are MR ensure/create-or-update and the
-pinned guarded immediate squash merge.
+The product provider-write families are MR ensure/create-or-update, pinned
+guarded immediate squash merge, and explicitly opted-in board issue enumeration.
+
+`board issues` requires `--allow-ordering-initialization`, an explicit host,
+and exact project/group, board and list selectors before any child work. The
+pinned GitLab EE 19.3.0 GraphQL resolver can initialize missing relative positions
+and shift sibling positions, including beyond displayed issues. This is not a
+mutation-free read. The success receipt and failures after delegation disclose
+`may_have_occurred`, not a changed-record count. No automatic retry or rollback
+is attempted. Default `board list` and `board view` never select issues; all
+query documents and tier differences are pinned in
+`contracts/gitlab-planning/v19.3.0/`.
 
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
@@ -129,7 +141,7 @@ additionally requires:
   preserves only a recognized framed rejection, and otherwise
   `ambiguous_merge` prevents a blind retry.
 
-Generic API, every live issue mutation or creation, alternate/unguarded merge,
+Generic API, direct issue editing or creation, alternate/unguarded merge,
 approval, comment/note/reply/resolve, merge-request or label-resource mutation,
 close/reopen/delete, repository/release mutation, secrets/variables, and
 pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview

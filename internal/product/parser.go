@@ -256,6 +256,11 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 			return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag.Name)
 		}
 	}
+	if isPlanningPath(definition.Path) {
+		if err := validatePlanningParsed(parsed); err != nil {
+			return Parsed{}, err
+		}
+	}
 	if err := validateParsedCommand(parsed); err != nil {
 		return Parsed{}, err
 	}

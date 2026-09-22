@@ -328,6 +328,91 @@ Check for or install a signed gl-axi release.
 
 Backend: `local`. Schema: `schema/ux-v1/update.schema.json`.
 
-## Permanent denials
+## `board list`
 
-Generic API, every live issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT.
+```text
+gl-axi board list (-R PROJECT | --group GROUP) [global flags]
+```
+
+List GitLab issue boards in one project or group.
+
+Requires exactly one explicit -R NAMESPACE/PROJECT or --group FULL/PATH.
+GitLab 19.3 schema; availability depends on provider version, tier and permissions.
+Only authorized resources are visible. No generic GraphQL authority.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/board-list.schema.json`.
+
+## `board view`
+
+```text
+gl-axi board view <board-id> (-R PROJECT | --group GROUP) [global flags]
+```
+
+View an issue board and its bounded list/column definitions.
+
+Requires exactly one explicit -R NAMESPACE/PROJECT or --group FULL/PATH.
+GitLab 19.3 schema; availability depends on provider version, tier and permissions.
+Only authorized resources are visible. No generic GraphQL authority.
+The limit counts columns, including provider-returned open/closed columns.
+List types are filters, not arbitrary custom fields. Hidden columns are not board lifecycle states.
+Board scope filters are applied by GitLab, not projected as editable fields.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/board-view.schema.json`.
+
+## `board issues`
+
+```text
+gl-axi board issues <board-id> --list-id ID --allow-ordering-initialization --hostname HOST (-R PROJECT | --group GROUP) [global flags]
+```
+
+List board issues with explicit consent to possible ordering initialization.
+
+Requires exactly one explicit -R NAMESPACE/PROJECT or --group FULL/PATH.
+GitLab 19.3 schema; availability depends on provider version, tier and permissions.
+Only authorized resources are visible. No generic GraphQL authority.
+--list-id is required; get list IDs from board view.
+GitLab applies the list and board filters. An issue can appear in multiple lists.
+These are real issues, not independent Projects-v2 items, drafts or archived items.
+GitLab EE 19.3.0 BoardList.issues may initialize missing issue relative positions and shift sibling positions, including beyond displayed items.
+Requires --allow-ordering-initialization on every invocation and an explicit host. No automatic retry or rollback; the receipt does not claim the side effect occurred.
+Boards exist in Free/Premium/Ultimate; advanced board/list filters depend on tier. The version is a pinned schema baseline, not a server-version attestation.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/board-issues.schema.json`.
+
+## `work-item fields`
+
+```text
+gl-axi work-item fields <iid> (-R PROJECT | --group GROUP) [global flags]
+```
+
+List visible widget types and fixed fields for one work item.
+
+Requires exactly one explicit -R NAMESPACE/PROJECT or --group FULL/PATH.
+GitLab 19.3 schema; availability depends on provider version, tier and permissions.
+Only authorized resources are visible. No generic GraphQL authority.
+Reports widget availability on this exact item, not arbitrary custom-field definitions or values.
+Widget absence does not prove a tier entitlement. CUSTOM_FIELDS, if present, is a widget only.
+Group work items require the provider's epics entitlement. Equal IIDs in other namespaces are not substitutes.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/work-item-fields.schema.json`.
+
+## `work-item hierarchy`
+
+```text
+gl-axi work-item hierarchy <iid> (-R PROJECT | --group GROUP) [global flags]
+```
+
+Read the parent and bounded direct children of one work item.
+
+Requires exactly one explicit -R NAMESPACE/PROJECT or --group FULL/PATH.
+GitLab 19.3 schema; availability depends on provider version, tier and permissions.
+Only authorized resources are visible. No generic GraphQL authority.
+Reads the HIERARCHY widget, never issue links. Depth is exactly one; no recursive tree claim.
+Completeness covers authorized direct children only, not hidden descendants.
+Absent widgets, denied parents and hidden-only children fail explicitly rather than appearing empty.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/work-item-hierarchy.schema.json`.
+
+## Current undeclared operations
+
+Generic API, direct issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

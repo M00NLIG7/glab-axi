@@ -8,8 +8,9 @@ Agent Skill use the `gl-axi` identity. The repository remains
 Two deliberately separate backends share one executable:
 
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
-  reads, exact-identity issue-edit validation, two MR write contracts, and human
-  login to **official `glab` 1.112.0 (`816e3a52`)**; and
+  reads, exact-identity issue-edit validation, two MR write contracts,
+  [opted-in board issue enumeration](#gitlab-native-planning), and human login
+  to **official `glab` 1.112.0 (`816e3a52`)**; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -50,11 +51,15 @@ gl-axi setup hooks
 gl-axi update [--check]
 ```
 
-Use current Git context or command-first `-R/--repo namespace/project` and
-`--hostname host`; space and equals forms are accepted. A `gitlab.com` remote
-may supply both defaults. Any self-managed remote must be paired with explicit
-`--hostname` or `GITLAB_HOST` authority so an untrusted remote cannot select
-where an environment credential is sent. `--limit` never raises hard limits.
+For board and work-item commands, see
+[GitLab-native planning](#gitlab-native-planning).
+
+Commands that permit inferred targets use current Git context or command-first
+`-R/--repo namespace/project` and `--hostname host`; space and equals forms are
+accepted. A `gitlab.com` remote may supply both defaults. Any self-managed
+remote must be paired with explicit `--hostname` or `GITLAB_HOST` authority so
+an untrusted remote cannot select where an environment credential is sent.
+`--limit` never raises hard limits.
 TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
@@ -150,8 +155,7 @@ label names, so it cannot atomically bind the validated issue and label
 identities. Consequently,
 every non-no-op live request returns `safety_violation` with a deterministic
 `refused`/`not_applied` receipt under `error.receipt` before any PUT. The
-official-glab adapter exposes no issue-write operation. The approved surface
-and exclusions are pinned under
+approved issue-edit surface and exclusions are pinned under
 [`contracts/issue-edit`](contracts/issue-edit/).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
@@ -166,12 +170,39 @@ accepts a custom message. The pinned Firstmate contract is
 under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 
-The permanent denial boundary includes generic API, every live issue mutation,
+The current denial boundary includes generic API, direct issue editing,
 issue creation, unguarded or alternate merge, approve,
 comment/note/reply/resolve, merge-request and label-resource mutation,
 close/reopen/delete, repository/release writes, secrets/variables, and
 pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
+
+## GitLab-native planning
+
+```sh
+gl-axi board list --group team/nested --hostname gitlab.com
+gl-axi board view 7 -R team/nested/project --hostname gitlab.com
+gl-axi work-item fields 42 -R team/nested/project --hostname gitlab.com
+gl-axi work-item hierarchy 42 -R team/nested/project --hostname gitlab.com
+```
+
+Board columns are provider filters, not independent Projects-v2 item objects.
+Work-item fields report visible widget types and fixed attributes, not arbitrary
+custom-field definitions or values. Hierarchy means one parent and bounded,
+authorized direct children, not issue links or a recursively complete tree.
+Group work items require GitLab's epics entitlement; null/unavailable data is
+never silently presented as an empty collection.
+
+`board issues <board-id> --list-id ID --allow-ordering-initialization --hostname HOST`
+also requires exactly one `-R PROJECT` or `--group GROUP`. This is **not a pure
+read**: GitLab may initialize issue relative positions and shift sibling
+positions, including beyond displayed items. Every invocation requires the
+explicit acknowledgment. Receipts report possible effects, never invented
+successful changes. Without it there is no child or provider request.
+
+The [pinned GitLab 19.3 contract](contracts/gitlab-planning/v19.3.0/) documents
+schema, version/tier differences, bounded pagination and remaining semantic
+differences. Board/list metadata reads never fetch issues behind the scenes.
 
 ## `glab-axi` compatibility alias
 

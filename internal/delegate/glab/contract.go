@@ -58,20 +58,24 @@ const (
 )
 
 type Request struct {
-	Operation  Operation
-	Host       string
-	Repo       string
-	ID         int64
-	IID        int64
-	PipelineID int64
-	Page       int
-	PerPage    int
-	Tag        string
-	Scope      string
-	Query      string
-	Source     string
-	Target     string
-	InputFile  string
+	Operation                   Operation
+	Host                        string
+	Repo                        string
+	ID                          int64
+	IID                         int64
+	PipelineID                  int64
+	Page                        int
+	PerPage                     int
+	Tag                         string
+	Scope                       string
+	Query                       string
+	Source                      string
+	Target                      string
+	InputFile                   string
+	Group                       string
+	ListID                      int64
+	Cursor                      string
+	AllowOrderingInitialization bool
 }
 
 type invocation struct {
@@ -92,6 +96,9 @@ const (
 func build(request Request) (invocation, error) {
 	if err := validateHost(request.Host); err != nil {
 		return invocation{}, err
+	}
+	if isPlanningOperation(request.Operation) {
+		return buildPlanning(request)
 	}
 	if operationNeedsRepo(request.Operation) {
 		if err := safeurl.ValidateProject(request.Repo); err != nil {

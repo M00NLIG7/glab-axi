@@ -219,6 +219,9 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
+	if isPlanningPath(parsed.Definition.Path) {
+		return executePlanning(ctx, client, target, parsed, meta)
+	}
 	switch path {
 	case "auth status":
 		version, err := client.AuthStatus(ctx, target.Host)

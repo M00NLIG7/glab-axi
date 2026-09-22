@@ -272,16 +272,18 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 			Error struct {
 				Properties struct {
 					Receipt struct {
-						Ref        string `json:"$ref"`
-						Properties struct {
-							Edit struct {
-								Properties struct {
-									Action struct {
-										Const string `json:"const"`
-									} `json:"action"`
-								} `json:"properties"`
-							} `json:"edit"`
-						} `json:"properties"`
+						OneOf []struct {
+							Ref        string `json:"$ref"`
+							Properties struct {
+								Edit struct {
+									Properties struct {
+										Action struct {
+											Const string `json:"const"`
+										} `json:"action"`
+									} `json:"properties"`
+								} `json:"edit"`
+							} `json:"properties"`
+						} `json:"oneOf"`
 					} `json:"receipt"`
 				} `json:"properties"`
 			} `json:"error"`
@@ -290,7 +292,8 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 	if err := json.Unmarshal(data, &envelopeSchema); err != nil {
 		t.Fatal(err)
 	}
-	if envelopeSchema.Properties.Error.Properties.Receipt.Ref != "ux-v1/issue-edit.schema.json" || envelopeSchema.Properties.Error.Properties.Receipt.Properties.Edit.Properties.Action.Const != "refused" {
+	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
+	if len(variants) != 2 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }

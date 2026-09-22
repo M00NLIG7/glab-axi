@@ -33,10 +33,11 @@ executable named `glab`.
 
 ## Product command registry
 
-`internal/product/registry.go` is executable policy, not only documentation. It
-owns every command path, usage, repository requirement, accepted command flag,
-backend, output schema, and write classification. Top/parent/leaf help, the
-Agent Skill, and `docs/command-reference.md` derive from that registry.
+`internal/product/registry.go` assembles executable policy, including the planning
+definitions in `internal/product/planning.go`. The registry owns every command
+path, usage, repository requirement, accepted command flag, backend, output
+schema, and write classification. Top/parent/leaf help, the Agent Skill, and
+`docs/command-reference.md` derive from that registry.
 
 Parsing is command-first and fail-closed. Only declared global flags are
 accepted; `-R`, `--repo`, and long flags support space or equals forms. Duplicate
@@ -44,12 +45,12 @@ aliases, unknown flags, NUL/newline values, excess positionals, and undeclared
 subcommands fail before target resolution. Permanent denial names have a
 separate `security_boundary` error and never construct a child process.
 
-Host precedence is explicit `--hostname`, `GITLAB_HOST`, an exact
-`gitlab.com` origin, then `gitlab.com`. Repository precedence is explicit
-`-R/--repo`, then local origin. A self-managed origin may supply the repository
-only after explicit hostname/environment authority; an arbitrary SSH remote
-never chooses where an approved environment credential is sent. Git context
-never exposes a native credential or changes the native API authority mapping.
+Common target selection is documented in
+[Product commands](../README.md#product-commands); command-specific requirements
+are in the [generated command reference](command-reference.md). Where host
+inference is permitted, precedence is explicit `--hostname`, `GITLAB_HOST`, an
+exact `gitlab.com` origin, then `gitlab.com`. Git context never exposes a native
+credential or changes the native API authority mapping.
 
 ## Pinned official-glab adapter
 
@@ -258,8 +259,10 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. All provider mutations outside the two MR write
-contracts remain denied; issue edit is validation-only.
+modify or integrate Firstmate. Apart from the two MR write contracts, only the
+explicitly acknowledged board issue query may cause provider ordering changes;
+its pinned contract is in `contracts/gitlab-planning/v19.3.0/`. Other provider
+mutations remain denied in this surface; issue edit is validation-only.
 
 ## Native authority and CI semantics
 

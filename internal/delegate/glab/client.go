@@ -260,6 +260,11 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 		return nil, contextFailure(ctx, "official glab operation")
 	}
 	if waitErr != nil {
+		if isPlanningOperation(operation) {
+			if err := planningQueryFailure(stdout.buffer.Bytes()); err != nil {
+				return nil, err
+			}
+		}
 		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write, operation)
 	}
 	return stdout.buffer.Bytes(), nil
