@@ -611,6 +611,13 @@ func TestLoginOutputFailureTerminatesDelegatedPTYChild(t *testing.T) {
 		t.Run(test.mode, func(t *testing.T) {
 			script, record := fakeGlab(t)
 			ready := filepath.Join(t.TempDir(), "ready")
+			overflow := filepath.Join(t.TempDir(), "overflow")
+			if test.mode == "login-overflow" {
+				// Keep shell-side payload generation out of the termination deadline.
+				if err := os.WriteFile(overflow, bytes.Repeat([]byte{'x'}, 9<<20), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			terminals := newLoginTestTerminals(t)
 			client := NewClient(ClientConfig{
 				Path: script,
@@ -618,6 +625,7 @@ func TestLoginOutputFailureTerminatesDelegatedPTYChild(t *testing.T) {
 					"GLAB_AXI_FAKE_RECORD="+record,
 					"GLAB_AXI_FAKE_MODE="+test.mode,
 					"GLAB_AXI_FAKE_READY="+ready,
+					"GLAB_AXI_FAKE_OUTPUT_FILE="+overflow,
 				),
 				Stdin: terminals.stdin.slave, Stdout: terminals.stdout.slave, Stderr: terminals.stderr.slave,
 				IsTerminal: func() bool { return true }, Keyring: &probeKeyring{},
@@ -876,7 +884,7 @@ if [ "${1:-}" = "auth" ] && [ "${2:-}" = "login" ]; then
     if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
       : > "${GLAB_AXI_FAKE_READY}"
     fi
-    dd if=/dev/zero bs=1048576 count=9 2>/dev/null | tr '\000' x
+    cat "${GLAB_AXI_FAKE_OUTPUT_FILE}"
     IFS= read -r _ignored
   fi
   if [ "${GLAB_AXI_FAKE_MODE:-}" = "login-malformed" ]; then
