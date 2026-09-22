@@ -20,7 +20,7 @@
             "interactive_required", "dependency_missing", "dependency_unsupported",
             "authentication_error", "forbidden", "not_found", "conflict",
             "rate_limited", "upstream_error", "safety_violation", "canceled",
-            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge"
+            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge", "ambiguous_variable"
           ]
         },
         "message": {"type": "string", "maxLength": 4096},
@@ -29,11 +29,13 @@
           "oneOf": [
             {
               "$ref": "ux-v1/issue-edit.schema.json",
-              "properties": {
-                "edit": {"properties": {"action": {"const": "refused"}}}
-              }
+              "properties": {"edit": {"properties": {"action": {"const": "refused"}}}}
             },
-            {"$ref": "ux-v1/board-ordering-receipt.schema.json"}
+            {"$ref": "ux-v1/board-ordering-receipt.schema.json"},
+            {
+              "$ref": "ux-v1/ci-variable-mutation.schema.json",
+              "properties": {"variable": {"properties": {"outcome": {"enum": ["not_applied", "ambiguous"]}}}}
+            }
           ]
         }
       },
@@ -41,6 +43,10 @@
         {
           "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["edit"]}}},
           "then": {"properties": {"code": {"const": "safety_violation"}}}
+        },
+        {
+          "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["variable"]}}},
+          "then": {"properties": {"code": {"enum": ["validation_error", "authentication_error", "forbidden", "not_found", "conflict", "rate_limited", "ambiguous_variable"]}}}
         }
       ]
     },
@@ -50,7 +56,7 @@
       "additionalProperties": false,
       "required": ["complete", "truncated"],
       "properties": {
-        "backend": {"enum": ["official-glab", "native-v1", "local"]},
+        "backend": {"enum": ["official-glab", "native", "native-v1", "local"]},
         "host": {"type": "string", "maxLength": 253},
         "repo": {"type": "string", "maxLength": 1024},
         "complete": {"type": "boolean"},

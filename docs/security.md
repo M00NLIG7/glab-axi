@@ -143,7 +143,7 @@ additionally requires:
 
 Generic API, direct issue editing or creation, alternate/unguarded merge,
 approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-close/reopen/delete, repository/release mutation, secrets/variables, and
+issue/MR close/reopen/delete, repository/release mutation, and
 pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview
 changes no issue field or label.
 
@@ -183,6 +183,19 @@ Destination-parent directories and the process account remain operator-controlle
 a malicious process with the same OS account can
 modify owned data, and no filesystem API here claims isolation from that
 account's full privileges.
+
+## Project CI variable controls
+
+See [CI variables](ci-variables.md) and `contracts/ci-variables/v1.json` for the
+separate guarded project list/set/delete contract. The complete operation uses
+one explicitly selected native client, without official-profile fallback. Provider
+values/descriptions are removed at each read boundary, never rendered. Both list families expose only
+safe metadata; ordinary variables cannot alias masked, hidden, or protected
+entries. Mutations require explicit host/project/scope, expected numeric project
+identity, confirmation, and exact private previous-value plus metadata guards.
+One mutation is followed by bounded reconciliation; receipts disclose the lack
+of provider CAS and immutable variable identity. Unsupported version/capability,
+incomplete inventories, class transitions, and uncertain outcomes fail closed.
 
 ## Native v1 controls
 

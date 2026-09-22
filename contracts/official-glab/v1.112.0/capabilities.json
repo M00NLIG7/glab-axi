@@ -247,6 +247,6 @@
     "repository mutation",
     "release mutation",
     "pipeline trigger, retry, cancel, or delete",
-    "secret or variable access"
+    "secret or variable operations (require the separate explicit product-native contract)"
   ]
 }

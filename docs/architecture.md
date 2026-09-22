@@ -296,10 +296,19 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. Apart from the two MR write contracts, only the
-explicitly acknowledged board issue query may cause provider ordering changes;
-its pinned contract is in `contracts/gitlab-planning/v19.3.0/`. Other provider
-mutations remain denied in this surface; issue edit is validation-only.
+modify or integrate Firstmate. The explicitly acknowledged board issue query
+may cause provider ordering changes, pinned in `contracts/gitlab-planning/v19.3.0/`.
+The separate guarded project CI-variable contracts are described in
+[CI variables](ci-variables.md). Other mutations remain denied in this surface;
+issue edit is validation-only.
+
+CI-variable operations require explicit native selection and use one shared
+`productnative.Client` for their complete operation. Feature-owned numeric-project
+routes and exact scope filters never use the official profile. `internal/civariable`
+removes values/descriptions at each inventory read boundary, retaining only
+metadata and non-serialized private equality results. Complete bounded inventories,
+not error strings, prove absence and prestate. Help and owned schemas are generated
+through `go run ./cmd/gen-product`.
 
 ## Native authority and CI semantics
 

@@ -91,6 +91,9 @@ func (b *mergeReadBudget) add(body []byte) error {
 // of target discovery, credential resolution, executable lookup, and child work.
 func validateParsedCommand(parsed Parsed) error {
 	path := strings.Join(parsed.Definition.Path, " ")
+	if isVariableDefinition(parsed.Definition) {
+		return validateVariableParsed(parsed)
+	}
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}

@@ -1,5 +1,12 @@
 # Official `glab` v1.112.0 adapter contract
 
+Project CI-variable operations are not delegated through this contract. They
+require the separate explicit native path in `../../ci-variables/v1.json`.
+`TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS` retains synthetic
+negative evidence: the pinned upstream follows 301/302/303 with credentials and
+replays DELETE on 307/308 to another target. This is not fixed upstream and
+must not be represented as native/official profile equivalence.
+
 This directory pins the only official GitLab CLI release accepted by the
 `glab-axi/ux-v1` delegated backend.
 

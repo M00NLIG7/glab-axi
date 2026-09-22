@@ -27,6 +27,7 @@ const (
 	CodeAmbiguousCreate       Code = "ambiguous_create"
 	CodeAmbiguousUpdate       Code = "ambiguous_update"
 	CodeAmbiguousMerge        Code = "ambiguous_merge"
+	CodeAmbiguousVariable     Code = "ambiguous_variable"
 )
 
 // Error is the stable product failure. Cause and StatusCode are retained only
@@ -142,7 +143,7 @@ func ExitCode(err error) int {
 		return 4
 	case CodeNotFound:
 		return 5
-	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge:
+	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge, CodeAmbiguousVariable:
 		return 6
 	case CodeRateLimited:
 		return 7

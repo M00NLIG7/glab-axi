@@ -27,8 +27,6 @@ type ParseResult struct {
 var deniedTop = map[string]string{
 	"api":      "generic API authority is permanently outside gl-axi",
 	"workflow": "GitLab uses pipelines and jobs; workflow is not a safe GitLab alias",
-	"secret":   "secret values are outside gl-axi's metadata boundary",
-	"variable": "GitLab variable responses can expose values and are outside this release",
 }
 
 var deniedNested = map[string]map[string]string{
@@ -189,6 +187,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 			}
 			spec, ok := specs[name]
 			if !ok {
+				if isVariableDefinition(definition) {
+					return Parsed{}, uxv1.NewError(uxv1.CodeUnsupported, "unsupported CI variable flag; values must use private input")
+				}
 				return Parsed{}, uxv1.NewError(uxv1.CodeUnsupported, "unsupported flag: "+name)
 			}
 			if seen[spec.canonical] && !spec.repeatable {

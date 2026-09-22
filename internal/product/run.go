@@ -227,6 +227,9 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	if isPlanningPath(parsed.Definition.Path) {
 		return executePlanning(ctx, client, target, parsed, meta)
 	}
+	if isVariableDefinition(parsed.Definition) {
+		return executeVariables(ctx, target, parsed, meta, deps)
+	}
 	switch path {
 	case "auth status":
 		version, err := client.AuthStatus(ctx, target.Host)

@@ -449,6 +449,112 @@ Absent widgets, denied parents and hidden-only children fail explicitly rather t
 
 Backend: `official-glab`. Schema: `schema/ux-v1/work-item-hierarchy.schema.json`.
 
+## `secret list`
+
+```text
+gl-axi secret list --auth-source native [global flags] --scope SCOPE
+```
+
+Manage project CI/CD secret metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-list.schema.json`.
+
+## `secret set`
+
+```text
+gl-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+```
+
+Manage project CI/CD secret metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+Unavailable on Windows until private-file ACL verification is supported.
+One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
+Existing entries require exact class/type/protected/raw and a private expected-value file.
+secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
+
+## `secret delete`
+
+```text
+gl-axi secret delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+```
+
+Manage project CI/CD secret metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+Unavailable on Windows until private-file ACL verification is supported.
+One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
+Existing entries require exact class/type/protected/raw and a private expected-value file.
+secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
+
+## `variable list`
+
+```text
+gl-axi variable list --auth-source native [global flags] --scope SCOPE
+```
+
+Manage project CI/CD variable metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-list.schema.json`.
+
+## `variable set`
+
+```text
+gl-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+```
+
+Manage project CI/CD variable metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+Unavailable on Windows until private-file ACL verification is supported.
+One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
+Existing entries require exact class/type/protected/raw and a private expected-value file.
+secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
+
+## `variable delete`
+
+```text
+gl-axi variable delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+```
+
+Manage project CI/CD variable metadata with exact-scope guards.
+
+Requires explicit native environment/keyring authentication for the full operation; no official-profile fallback or account-equivalence claim.
+Requires GitLab 17.6 or newer. Lists never emit values or descriptions.
+secret lists hidden, masked, and protected classes distinctly; variable lists only ordinary unmasked, unhidden, unprotected entries.
+No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
+Unavailable on Windows until private-file ACL verification is supported.
+One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
+Existing entries require exact class/type/protected/raw and a private expected-value file.
+secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
+
+Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
+
 ## Current undeclared operations
 
-Generic API, direct issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen/delete, repository mutation, release mutation, secrets/variables, and pipeline/job mutation are denied. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, direct issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, issue/MR close/reopen/delete, repository mutation, release mutation, and pipeline/job mutation are denied. CI variable set/delete are separately guarded native-only operations. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
