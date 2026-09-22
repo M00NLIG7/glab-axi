@@ -200,7 +200,12 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 		return commandOutput{meta: meta}, err
 	}
 	meta.Host, meta.Repo = target.Host, target.Repo
-	client := deps.delegate()
+	var client delegateClient
+	if parsed.Values["--auth-source"] != "native" {
+		client = deps.delegate()
+	} else {
+		meta.Backend = "native"
+	}
 	if path == "auth login" {
 		// Human authorization follows only caller cancellation. The ordinary
 		// noninteractive operation deadline is too short for a human prompt.
@@ -260,6 +265,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	case "job list":
 		items, listMeta, err := fetchJobs(ctx, client, target, parsed)
 		return listOutput("jobs", items, meta, listMeta), err
+	case "job artifacts", "job download", "release download":
+		return executeNativeDownload(ctx, parsed, deps, meta)
 	case "job view":
 		return executeJobView(ctx, client, target, parsed, meta)
 	case "job trace":

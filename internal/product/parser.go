@@ -173,7 +173,7 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		specs["-R"] = flagSpec{canonical: "--repo", value: true}
 		specs["--repo"] = flagSpec{canonical: "--repo", value: true}
 	}
-	for _, flag := range definition.Flags {
+	for _, flag := range definitionFlags(definition) {
 		specs[flag.Name] = flagSpec{canonical: flag.Name, value: !flag.Boolean, repeatable: flag.Repeatable}
 	}
 	seen := map[string]bool{}
@@ -251,7 +251,7 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 	if definition.RequireExplicitRepo && parsed.Values["--repo"] == "" {
 		return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: --repo")
 	}
-	for _, flag := range definition.Flags {
+	for _, flag := range definitionFlags(definition) {
 		if flag.Required && parsed.Values[flag.Name] == "" && len(parsed.MultiValues[flag.Name]) == 0 && !parsed.Booleans[flag.Name] {
 			return Parsed{}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag.Name)
 		}
@@ -260,6 +260,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 		if err := validatePlanningParsed(parsed); err != nil {
 			return Parsed{}, err
 		}
+	}
+	if err := validateNativeSelection(parsed); err != nil {
+		return Parsed{}, err
 	}
 	if err := validateParsedCommand(parsed); err != nil {
 		return Parsed{}, err

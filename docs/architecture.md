@@ -12,7 +12,11 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
      |
      `-> product registry and strict parser
           |-> local help/setup/signed update
-          `-> typed official-glab adapter (exactly 1.112.0 / 816e3a52)
+          |-> declared --auth-source native download operations
+          |    -> native config/resolver + productnative bounded HTTP
+          |    -> exact identities + safedownload transactional publication
+          |    -> glab-axi/ux-v1 TOON/JSON
+          `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
                -> bounded child execution
                -> typed normalization
@@ -23,9 +27,10 @@ Both executable names enter the same router; only the version handshake retains
 the selected name. The router recognizes the exact legacy automation forms
 before creating an official-glab adapter. `--contract glab-axi/v1` is the explicit alias. Native
 commands do not resolve PATH, inspect official config, emit update notices, or
-fall back to product authentication. Product commands likewise do not read or
-export the native keyring. The two credential stores are intentionally not
-interoperated.
+fall back to product authentication. Default product commands do not read the
+native keyring. Declared product-native leaves explicitly reuse the existing
+native resolver, never the official profile. The two credential stores are not
+copied, exported, or automatically interoperated.
 
 `cmd/glab-compat` imports the native typed core for one pinned legacy consumer.
 It never spawns `gl-axi`, and normal product builds/releases never produce an
@@ -51,6 +56,38 @@ are in the [generated command reference](command-reference.md). Where host
 inference is permitted, precedence is explicit `--hostname`, `GITLAB_HOST`, an
 exact `gitlab.com` origin, then `gitlab.com`. Git context never exposes a native
 credential or changes the native API authority mapping.
+
+## Explicit product-native boundary and downloads
+
+`Definition.NativeAuth` enables the single shared `--auth-source native`
+selector; `RequireNativeAuth` also requires deliberate selection on new
+native-only leaves. `openNative` opens one `internal/productnative.Client` per
+complete operation, using existing native configuration, credential resolution
+and TLS patterns. The client owns the selected authority/credential, refuses
+all redirects and automatic retries, uses fresh HTTP/1.1 connections to avoid
+HTTP/2 refused-stream replay, and bounds requests, responses and lifetime.
+The [download contract](../contracts/downloads/v1.json) owns these bounds,
+including the shorter outer deadline applied by the product dispatcher.
+Feature handlers retain their own route/identity/expected-state authority.
+This internal request interface does not expose generic user HTTP authority.
+
+`internal/safedownload` pins destination-parent directory descriptors and uses
+exclusive creation plus atomic no-replace directory publication. It never
+merges into an existing destination. Archive parsing is bounded before ZIP file
+table allocation, and complete path/type/collision/size/CRC validation precedes
+content writes. Unix uses no-follow openat operations and rename-exclusive
+publication; Windows uses relative NT handles, reparse-point refusal, private
+DACLs and handle-based no-replace publication. Rollback removes only recorded
+operation-owned entries, not arbitrary destination contents.
+
+Job artifact selection binds project, job, pipeline, ref and commit before and
+after download. Release selection binds project, tag/commit and exact link
+ID/name, with complete paginated catalogs and matching project-backed package
+or raw-job routes. Generic package bytes are checked against provider SHA-256
+and size. Job archive CRC/size and local SHA-256 receipts do not pretend to be a
+provider digest. All redirect/CDN/external-link cases fail closed in this
+increment; direct authenticated private responses are supported. The provider
+and consumer evidence is in `contracts/downloads/v1.json`.
 
 ## Pinned official-glab adapter
 

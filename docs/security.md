@@ -9,7 +9,7 @@ signing key. Git remotes, PATH entries, official child output/stderr, provider
 JSON, URLs, pagination, redirects, proxies, traces/diffs, update servers, and existing
 agent config are untrusted.
 
-The product and native lanes have different trust properties and always report
+The delegated and native backends have different trust properties and report
 the backend. Official-glab results do not inherit claims made by the stricter
 native HTTP transport.
 
@@ -147,6 +147,43 @@ close/reopen/delete, repository/release mutation, secrets/variables, and
 pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview
 changes no issue field or label.
 
+## Explicit product-native downloads
+
+Only registered native-capable leaves accept `--auth-source native`; the new
+download leaves require it, explicit host/project and exact resource selectors.
+The existing native resolver/configuration is reused, without a new store,
+profile parser, credential export or fallback. One identity/authority covers
+all metadata, selection, transfer and recheck requests. Native and official
+profiles may represent different accounts.
+
+The product-native client rejects every automatic redirect, including
+same-origin cross-path writes, before transmission of a second request. It
+never automatically retries. Credential/Host/cookie/framing overrides are
+refused; request paths cannot override the configured API origin. Bounded
+response headers exclude cookies, credentials and Location; pagination values
+remain untrusted and are never automatically followed. Existing delegated
+commands retain their defaults and do not inherit these stronger claims.
+
+Downloads publish only into a new directory. Archive entry/path/expansion/CRC
+checks complete before extracted-content writes. Links, devices, traversal,
+collisions, ZIP64 and nonportable paths fail closed. Unix directory-relative
+no-follow operations and Windows relative handles/reparse checks protect
+writes; rollback removes only recorded owned entries. Publication never
+replaces an existing file or directory. A foreign entry introduced into staging
+is preserved and reported as incomplete cleanup, not recursively deleted.
+Cooperative cancellation before publication returns `canceled` after owned
+cleanup; incomplete cleanup takes precedence and returns `safety_violation`.
+A process crash or forced kill can leave private staging.
+
+Private direct artifact/package responses are supported. No credential-free
+CDN/storage transfer or arbitrary external release link is claimed: redirects
+are controlled refusals. Integrity evidence differs by asset kind and is
+specified in the [download contract](../contracts/downloads/v1.json).
+Destination-parent directories and the process account remain operator-controlled:
+a malicious process with the same OS account can
+modify owned data, and no filesystem API here claims isolation from that
+account's full privileges.
+
 ## Native v1 controls
 
 - exact host/API/web origin and project identity;
@@ -172,6 +209,10 @@ redirects are rejected before forwarding credentials.
 
 ## Hard limits
 
+Product-native transport and download bounds are owned by the
+[download contract](../contracts/downloads/v1.json), including the client
+lifetime and the shorter download CLI deadline.
+
 | Input/output | Limit |
 |---|---:|
 | host | 253 bytes |
@@ -189,7 +230,8 @@ redirects are rejected before forwarding credentials.
 | issue-edit validation | 20 s preflight (30 s outer read budget), no PUT |
 | guarded merge phases | 20 s preflight / 15 s PUT / 10 s reconcile (45 s total) |
 | pagination | 10 pages / 1,000 items (merge jobs + bridges combined) |
-| release download metadata | 100 entries |
+| existing release-view metadata | 100 entries |
+| ZIP/file paths | portable ASCII / 1,024 bytes per relative path / 255 bytes per component |
 | trace tail | 256 KiB |
 | product diff | 1 MiB |
 | release executable/custody | 128 MiB |

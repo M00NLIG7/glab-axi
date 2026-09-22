@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/M00NLIG7/glab-axi/schema/ux-v1/download.schema.json",
+  "title": "Bounded no-clobber download receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["download"],
+  "properties": {
+    "download": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "project_id", "project", "sha", "destination", "bytes", "sha256", "checksum", "files", "expanded_bytes"],
+      "properties": {
+        "kind": {"enum": ["job_artifacts", "release_asset"]},
+        "project_id": {"type": "integer", "minimum": 1},
+        "project": {"type": "string", "minLength": 3, "maxLength": 1024},
+        "pipeline_id": {"type": "integer", "minimum": 1},
+        "job_id": {"type": "integer", "minimum": 1},
+        "ref": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "tag": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "asset_id": {"type": "integer", "minimum": 1},
+        "asset_name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "package_id": {"type": "integer", "minimum": 1},
+        "package_file_id": {"type": "integer", "minimum": 1},
+        "destination": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "bytes": {"type": "integer", "minimum": 0, "maximum": 67108864},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "checksum": {"enum": ["provider_sha256_and_size", "sha256_receipt_only", "zip_crc32_and_size;sha256_receipt_only"]},
+        "files": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "expanded_bytes": {"type": "integer", "minimum": 0, "maximum": 268435456}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "job_artifacts"}}}, "then": {"required": ["pipeline_id", "job_id", "ref"], "properties": {"checksum": {"const": "zip_crc32_and_size;sha256_receipt_only"}}}},
+        {"if": {"properties": {"kind": {"const": "release_asset"}}}, "then": {"required": ["tag", "asset_id", "asset_name"], "properties": {"files": {"const": 1}}}},
+        {"if": {"properties": {"checksum": {"const": "provider_sha256_and_size"}}}, "then": {"required": ["package_id", "package_file_id"]}}
+      ]
+    }
+  }
+}

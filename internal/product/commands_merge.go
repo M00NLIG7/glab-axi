@@ -94,6 +94,9 @@ func validateParsedCommand(parsed Parsed) error {
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}
+	if path == "job artifacts" || path == "job download" || path == "release download" {
+		return validateDownloadParsed(parsed)
+	}
 	if path != "mr merge" {
 		return nil
 	}

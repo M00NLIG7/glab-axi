@@ -10,7 +10,9 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)**; and
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Declared download
+  commands explicitly opt into existing native authentication with
+  `--auth-source native`, without an official-profile fallback; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -42,7 +44,9 @@ gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
 gl-axi pipeline list|view
 gl-axi job list|view|trace
+gl-axi job artifacts|download ID ... --auth-source native  # exact job/pipeline/ref/commit
 gl-axi release list|view
+gl-axi release download TAG ... --auth-source native      # exact link ID/name/commit
 gl-axi repo list|view
 gl-axi label list
 gl-axi search issues|mrs|repos|commits|code
@@ -252,6 +256,39 @@ available to official `glab` for headless product operations. The native lane
 separately supports `GL_AXI_TOKEN` and its `GLAB_AXI_TOKEN` compatibility name,
 with ambiguity checks and the shared keyring. See
 [authentication](docs/authentication.md).
+
+## Safe downloads
+
+`job artifacts` reads job-owned archive metadata. `job download` downloads and
+extracts one exact job's ZIP, not a pipeline-wide artifact collection. Both
+require explicit host/project, pipeline ID, expected ref and commit SHA.
+`release download` selects an exact tag/commit and link ID/name from a complete
+bounded catalog. It supports that project's generic-package files (provider
+SHA-256 and size verified) and raw job-artifact links at the release commit.
+The exact link name supplied as `--asset-name` must be a portable filename and
+becomes the output filename. Release assets are not automatically extracted.
+
+Downloads require `--auth-source native`; they use the existing native
+configuration and environment/keyring resolver for the whole operation. That
+account can differ from the official profile. They neither discover `glab` nor
+export its credential, and never silently switch accounts or retry transfers.
+
+`--destination` must be an absolute, nonexistent directory with an existing
+symlink-free parent. Windows requires a drive-letter path; UNC paths are refused.
+Publication is atomic and no-clobber. ZIP paths, types, collisions, size and CRC
+are validated before extracted files are written;
+links, devices, ZIP64, traversal and archive bombs are refused. Paths are
+portable ASCII, and extracted files have private, non-executable permissions.
+Maximum transfer is 64 MiB; ZIP expansion is 256 MiB with 1,000 paths and 128
+directories. Errors/cancellation clean only operation-owned staging entries.
+
+All redirects, external release links and unproved CDN/storage transfers fail
+closed. This supports authenticated private direct responses, but is **not** a
+claim of every GitLab deployment or release-link equivalent: redirected assets
+remain an explicit limitation. The [download contract](contracts/downloads/v1.json)
+specifies the integrity evidence for each asset kind, route restrictions and bounds,
+including the CLI deadline. See [authentication](docs/authentication.md) and
+command help for the exact selectors.
 
 ## Standalone native contract
 

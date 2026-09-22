@@ -3,7 +3,7 @@
 `gl-axi` has two intentionally separate authentication lanes. There is no
 automatic fallback, import, export, or token copy between them.
 
-## Product lane: official glab profile
+## Default product lane: official glab profile
 
 A human on a real terminal runs:
 
@@ -11,7 +11,7 @@ A human on a real terminal runs:
 gl-axi auth login --hostname gitlab.com
 ```
 
-The product accepts only `--hostname`; it does not expose official glab's token,
+Product login accepts only `--hostname`; it does not expose official glab's token,
 job-token, stdin, insecure-storage, web, device, API-protocol, or Git-protocol
 flags. It delegates the exact argv below only after checking the official
 binary/version and secure-store policy:
@@ -96,9 +96,32 @@ will use that selected authenticated host but never expose insecure TLS/storage
 flags. Native private-host REST remains separately configured as described
 below.
 
+## Explicit product-native operations
+
+Declared download leaves require `--auth-source native`. The selector is not a
+global authentication switch: existing commands/defaults and frozen native-v1
+remain unchanged. Native selection requires explicit `--hostname` and, for
+project-scoped commands, explicit `--repo`. Missing/invalid selectors fail
+before credential resolution or networking.
+
+One operation resolves the existing native authority and credential once and
+uses them for all preflights, pages, byte requests, rechecks and receipts. It
+never reads the official profile, exports its token, invokes a glab child, or
+falls back after failure. The native account may differ from official glab;
+no identity equivalence is inferred. Native configuration below applies,
+including private-host API/web mapping and CA/proxy settings.
+
+The product-native HTTP boundary (`internal/productnative`) refuses every
+automatic redirect before a second request, including same-origin path changes.
+It performs no automatic retry. Credentials stay in process and only the
+configured API origin receives them. Response metadata is bounded/allowlisted;
+cookies, auth headers and Location are not exposed. Provider-bound external
+CDN transfer is not currently implemented and cannot be substituted with an
+unvalidated arbitrary URL request.
+
 ## Native v1 lane: noninteractive credential
 
-Native `glab-axi/v1` resolution checks:
+Native `glab-axi/v1` and explicitly selected product-native resolution check:
 
 1. `GL_AXI_TOKEN`
 2. the `GLAB_AXI_TOKEN` compatibility name
