@@ -7,7 +7,58 @@ import (
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/limits"
+	"gl-axi/internal/privatefile"
 )
+
+func validateMREnsureParsed(parsed Parsed) error {
+	selection, err := parseMRCreationMetadata(parsed)
+	if err != nil {
+		return err
+	}
+	if selection != nil && parsed.Values["--auth-source"] != "native" {
+		return uxv1.NewError(uxv1.CodeSecurityBoundary, "creation metadata requires explicit --auth-source native")
+	}
+	if parsed.Values["--auth-source"] == "native" {
+		_, _, err = readMREnsureContent(parsed)
+	}
+	return err
+}
+
+func readMREnsureContent(parsed Parsed) (string, string, error) {
+	for _, flag := range []string{"--source", "--target", "--title-file", "--description-file"} {
+		if parsed.Values[flag] == "" {
+			return "", "", uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag)
+		}
+	}
+	if err := validBranch(parsed.Values["--source"]); err != nil {
+		return "", "", err
+	}
+	if err := validBranch(parsed.Values["--target"]); err != nil {
+		return "", "", err
+	}
+	title, err := privatefile.Read(parsed.Values["--title-file"], limits.MaxTitleBytes, true)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(title) == "" {
+		return "", "", uxv1.NewError(uxv1.CodeValidation, "merge request title must not be empty")
+	}
+	description, err := privatefile.Read(parsed.Values["--description-file"], limits.MaxDescriptionBytes, false)
+	if err != nil {
+		return "", "", err
+	}
+	if parsed.Values["--auth-source"] == "native" {
+		if err := validateMRContentActions(description); err != nil {
+			return "", "", err
+		}
+	}
+	selection, err := parseMRCreationMetadata(parsed)
+	if err != nil {
+		return "", "", err
+	}
+	title, err = selection.title(title)
+	return title, description, err
+}
 
 // Creation selection never replaces an existing MR's collections. Numeric
 // identities avoid username/name lookup ambiguity and implicit label creation.

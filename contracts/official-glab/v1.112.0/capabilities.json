@@ -207,31 +207,12 @@
     {
       "name": "mr-ensure-create",
       "kind": "fixed-api-write-json-object",
-      "input_policy": "source_branch, target_branch, title, description; optional creation-only assignee_ids and reviewer_ids (1..20 unique positive integers), milestone_id (positive integer); draft is the pinned Draft: title prefix, never a generic JSON field",
       "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
     },
     {
       "name": "mr-ensure-update",
       "kind": "fixed-api-write-json-object",
       "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"]
-    },
-    {
-      "name": "mr-state-update",
-      "kind": "fixed-api-write-json-object-one-attempt",
-      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "state_event is exactly close or reopen; private one-field body; observational preflight and postcondition, no provider revision enforcement"
-    },
-    {
-      "name": "mr-note-create",
-      "kind": "fixed-api-write-json-object-one-attempt",
-      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/notes", "--input", "{private_json_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "body only; private prose without quick actions or emoji-only reaction; no merge_request_diff_head_sha or other authority"
-    },
-    {
-      "name": "mr-note-view",
-      "kind": "fixed-api-read-json-object",
-      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/notes/{id}"],
-      "input_policy": "positive note ID attributable to the successful POST response, never a latest-note lookup"
     },
     {
       "name": "mr-merge-project",
@@ -263,11 +244,11 @@
     "public api passthrough",
     "unguarded or alternate-strategy merge",
     "approve",
-    "issue commenting, MR reply, or discussion resolution mutation",
+    "comment, note, reply, or discussion resolution mutation (ordinary MR writes require the native backend)",
     "issue field or label mutation and issue creation",
     "merge request label mutation, existing rich metadata replacement, or ready title rewrite",
     "label-resource mutation",
-    "issue close/reopen or any deletion",
+    "close, reopen, or delete (ordinary MR state writes require the native backend)",
     "repository mutation",
     "release mutation",
     "pipeline trigger, retry, cancel, or delete",

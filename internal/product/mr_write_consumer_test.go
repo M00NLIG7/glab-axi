@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"gl-axi/internal/contract/uxv1"
-	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
 )
 
@@ -23,7 +22,7 @@ func TestPinnedMRWriteConsumerGrammar(t *testing.T) {
 		Reference                struct{ Repository, Commit, Source string } `json:"reference"`
 		Envelope                 string                                      `json:"envelope"`
 		Backend                  string                                      `json:"backend"`
-		UpstreamVersion          string                                      `json:"upstream_version"`
+		AuthSource               string                                      `json:"auth_source"`
 		Commands                 []string                                    `json:"ordinary_commands"`
 		RequiredFlags            []string                                    `json:"required_flags"`
 		NoteInput                string                                      `json:"note_input"`
@@ -35,7 +34,7 @@ func TestPinnedMRWriteConsumerGrammar(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.Schema != "glab-axi/mr-writes-consumer-contract/v1" || fixture.Reference.Repository != "https://github.com/kunchenguid/gh-axi" || fixture.Reference.Commit != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || fixture.Reference.Source != "src/commands/pr.ts" || fixture.Envelope != uxv1.Schema || fixture.Backend != "official-glab" || fixture.UpstreamVersion != glab.SupportedVersion || fixture.ProviderRevisionEnforced || fixture.MaximumMutationAttempts != 1 || fixture.NoteReconciliation != "attributable-post-id-then-exact-readback-never-latest-note" {
+	if fixture.Schema != "glab-axi/mr-writes-consumer-contract/v1" || fixture.Reference.Repository != "https://github.com/kunchenguid/gh-axi" || fixture.Reference.Commit != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || fixture.Reference.Source != "src/commands/pr.ts" || fixture.Envelope != uxv1.Schema || fixture.Backend != "native" || fixture.AuthSource != "native" || fixture.ProviderRevisionEnforced || fixture.MaximumMutationAttempts != 1 || fixture.NoteReconciliation != "attributable-post-id-then-exact-readback-never-latest-note" {
 		t.Fatalf("invalid consumer contract identity: %#v", fixture)
 	}
 	if !reflect.DeepEqual(fixture.Commands, []string{"comment", "note", "close", "reopen"}) || !reflect.DeepEqual(fixture.CreationFlags, []string{"--assignee-id", "--reviewer-id", "--milestone-id", "--draft"}) {
@@ -46,7 +45,7 @@ func TestPinnedMRWriteConsumerGrammar(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, action := range fixture.Commands {
-		args := mrWriteArgs(action, "opened")
+		args := append(mrWriteArgs(action, "opened"), "--auth-source", "native")
 		if action == "comment" || action == "note" {
 			args = append(args, fixture.NoteInput, body)
 		}

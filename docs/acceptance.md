@@ -82,15 +82,18 @@ fallback.
 
 ## Ordinary MR write regression fixtures
 
-Run `go test ./internal/product -run 'TestMRWrite|TestMREnsureCreationMetadata|TestMRCreationMetadata'`.
+Run `go test ./internal/product -run 'TestMRWrite|TestMRNative|TestMREnsureCreationMetadata|TestMRCreationMetadata|TestPinnedMRWriteConsumerGrammar'`.
 Both executable names exercise synthetic TLS note and close/reopen flows,
 identity/preflight/post-write drift, malformed or lost responses, no-ops and
 one-write counts. Invalid input and quick actions produce zero dependency work.
 Private body and creation selection tests cover bounds, cancellation, stable
 numeric identities and refusal to replace unseen existing metadata. Optional
-`TestPinnedOfficialGlabMRWritesTLS` tests the actual pinned package offline against
-a synthetic TLS server; it is included in the official-package CI job. No live
-mutation or production profile is part of these tests.
+`TestPinnedOfficialGlabMRWriteRedirectEvidenceTLS` records the old CLI's unsafe
+redirect behavior using a synthetic token; native integration separately requires
+zero redirected requests. The compiled MR tests exercise native persisted config
+and API/web mapping on non-Windows platforms. Windows persisted-native-config and
+self-managed mapping remain unproven. No live mutation or production profile is
+part of these tests.
 
 ## Safe read-only Rune MR/CI
 

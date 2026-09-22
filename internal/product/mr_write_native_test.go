@@ -1,8 +1,7 @@
 package product
 
-// These feature-integration tests are prepared against the shared product-native
-// interface. They intentionally require the native-only MR registry/routing
-// integration; they are not evidence that the unlanded boundary is available.
+// Feature integration exercises the landed native boundary through Run, never
+// a competing test transport or official-profile fallback.
 
 import (
 	"bytes"
@@ -13,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -69,13 +69,20 @@ type mrNativeFixture struct {
 
 func newMRNativeFixture(t *testing.T, state string) *mrNativeFixture {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows persisted-native-config and self-managed mapping remain unproven")
+	}
 	f := &mrNativeFixture{t: t, state: state, noteBody: "A synthetic ordinary note.\n"}
 	f.keyring = &mrNativeKeyring{token: strings.Join([]string{"synthetic", "native", "mr", "sentinel"}, "-")}
 	f.server = testgitlab.New(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	dir := t.TempDir()
+	ca, err := f.server.CAFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.New()
-	if err := cfg.Put(mrWriteTestHost, config.Host{GitHosts: []string{mrWriteTestHost}, APIBase: f.server.HTTP.URL + "/gitlab/api/v4", WebBase: mrNativeWebBase, ProxyDisabled: true}); err != nil {
+	if err := cfg.Put(mrWriteTestHost, config.Host{GitHosts: []string{mrWriteTestHost}, APIBase: f.server.HTTP.URL + "/gitlab/api/v4", WebBase: mrNativeWebBase, CABundle: ca, ProxyDisabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(dir, "config.json")
@@ -363,6 +370,22 @@ func TestMRNativeCreationMetadataUsesOneNativeIdentity(t *testing.T) {
 	defer f.mu.Unlock()
 	if f.writes != 1 {
 		t.Fatalf("native creation attempts=%d", f.writes)
+	}
+}
+
+func TestMRNativeCreationSelectorsRequireExplicitOptIn(t *testing.T) {
+	for _, flags := range [][]string{{"--draft"}, {"--assignee-id", "7"}, {"--reviewer-id", "8"}, {"--milestone-id", "9"}} {
+		var stdout bytes.Buffer
+		deps := Dependencies{Runtime: productRuntimeNoDiscovery(t, &stdout), NewDelegate: func() delegateClient { t.Fatal("creation metadata selected the official profile"); return nil }}
+		keyring := &mrNativeKeyring{}
+		deps.Runtime.Keyring = keyring
+		args := append(ensureArgs(t, "title", "body"), flags...)
+		if code := Run(context.Background(), args, deps); code != 2 {
+			t.Fatalf("missing native opt-in exit=%d output=%s", code, stdout.String())
+		}
+		if keyring.gets != 0 || keyring.writes != 0 {
+			t.Fatal("missing opt-in touched the keyring")
+		}
 	}
 }
 

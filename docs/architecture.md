@@ -14,7 +14,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> local help/setup/signed update
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> feature-owned download / issue-write / CI-variable / deletion handlers
+          |    -> feature-owned download / issue-write / MR-write / CI-variable / deletion handlers
           |    -> exact identities; downloads use safedownload publication
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
@@ -288,8 +288,13 @@ otherwise unverifiable results remain ambiguous.
 
 ## Ordinary MR notes, lifecycle, and creation metadata
 
+`mr_native.go` opens the landed shared native client exactly once after feature
+input validation, and maps a closed MR operation set to its fixed routes. It
+reuses shipped ensure reconciliation without an official child or profile
+fallback, preserving full-operation native identity and configured API/web bases.
 `commands_mr_write.go` reuses discussion identity and note normalization for
-explicit same-project MR comment/note and close/reopen commands. It requires
+explicit same-project MR comment/note and close/reopen commands, requiring
+`--auth-source native`. It requires
 caller URL, source/target branches, head and state, and checks a stable preflight
 snapshot including base and updated-at before one mutation. The final read must
 retain numeric/project identity, exact URL, branches and base/head. Notes require
@@ -299,7 +304,8 @@ Receipts explicitly deny provider revision enforcement; these APIs have no CAS.
 Phase budgets are 20/15/10 seconds inside the 45-second write deadline.
 
 `mr_creation_metadata.go` extends ensure with creation-only numeric assignee IDs,
-reviewer IDs, milestone ID and draft title prefix. Existing matches must already
+reviewer IDs, milestone ID and draft title prefix, requiring explicit native
+authentication. Existing default title/body ensure remains delegated. Existing matches must already
 have the selected metadata and exact content; no stale collection replacement is
 attempted. The ordinary endpoint's lack of expected revision and ready's title
 rewrite leave rich existing edits and ready pending. Labels may implicitly create

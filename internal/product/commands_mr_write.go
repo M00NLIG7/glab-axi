@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"errors"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -60,9 +61,17 @@ func validateMRWriteParsed(parsed Parsed) error {
 	if safeurl.ValidateHost(parsed.Values["--hostname"]) != nil || safeurl.ValidateProject(parsed.Values["--repo"]) != nil {
 		return uxv1.NewError(uxv1.CodeValidation, "explicit valid host and repository are required")
 	}
-	if parsed.Values["--expected-url"] != canonicalMRURL(parsed.Values["--hostname"], parsed.Values["--repo"], iid) {
-		return uxv1.NewError(uxv1.CodeSafety, "--expected-url does not exactly match the selected merge request")
+	rawURL := parsed.Values["--expected-url"]
+	selectedURL, urlErr := url.Parse(rawURL)
+	suffix := "/" + parsed.Values["--repo"] + "/-/merge_requests/" + strconv.FormatInt(iid, 10)
+	if urlErr != nil || selectedURL.Scheme != "https" || selectedURL.Host == "" || selectedURL.User != nil || selectedURL.RawQuery != "" || selectedURL.Fragment != "" || !strings.HasSuffix(rawURL, suffix) || selectedURL.String() != rawURL {
+		return uxv1.NewError(uxv1.CodeSafety, "--expected-url must be an exact HTTPS URL for the selected project and IID")
 	}
+	if _, err := safeurl.NewAuthority(selectedURL.Host, "https://"+selectedURL.Host+"/api/v4", strings.TrimSuffix(rawURL, suffix)); err != nil {
+		return uxv1.NewError(uxv1.CodeSafety, "--expected-url contains an invalid web authority")
+	}
+	// Configured native web/API hosts may differ from the logical hostname.
+	// executeNativeMR binds this syntactically exact URL before any request.
 	if safeurl.ValidateBranch(parsed.Values["--expected-source"]) != nil || safeurl.ValidateBranch(parsed.Values["--expected-target"]) != nil || parsed.Values["--expected-source"] == parsed.Values["--expected-target"] {
 		return uxv1.NewError(uxv1.CodeValidation, "distinct valid expected source and target branches are required")
 	}
@@ -92,18 +101,25 @@ func readMRNoteBody(path string) (string, error) {
 	if !strings.ContainsFunc(prose, func(r rune) bool { return unicode.IsLetter(r) && !unicode.Is(unicode.Common, r) }) {
 		return "", uxv1.NewError(uxv1.CodeValidation, "note must contain prose, not only an emoji reaction")
 	}
-	if strings.ContainsFunc(body, func(r rune) bool { return unicode.Is(unicode.Cf, r) || unicode.IsControl(r) && r != '\n' && r != '\t' }) {
-		return "", uxv1.NewError(uxv1.CodeValidation, "note contains unsupported control characters")
-	}
-	for _, line := range strings.Split(body, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "/") {
-			return "", uxv1.NewError(uxv1.CodeSecurityBoundary, "GitLab quick actions are not permitted in note content")
-		}
+	if err := validateMRContentActions(body); err != nil {
+		return "", err
 	}
 	return body, nil
 }
 
-func executeMRWrite(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
+func validateMRContentActions(body string) error {
+	if strings.ContainsFunc(body, func(r rune) bool { return unicode.Is(unicode.Cf, r) || unicode.IsControl(r) && r != '\n' && r != '\t' }) {
+		return uxv1.NewError(uxv1.CodeValidation, "MR content contains unsupported control characters")
+	}
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "/") {
+			return uxv1.NewError(uxv1.CodeSecurityBoundary, "GitLab quick actions are not permitted in MR content")
+		}
+	}
+	return nil
+}
+
+func executeMRWrite(ctx context.Context, client mrOperationClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
 	iid, _ := mergeIID(parsed)
 	action := parsed.Definition.Path[1]
 	isNote := action == "comment" || action == "note"
@@ -130,7 +146,7 @@ func executeMRWrite(ctx context.Context, client delegateClient, target Target, p
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	if project.WebURL != canonicalProjectURL(target.Host, target.Repo) {
+	if project.WebURL != mrTargetProjectURL(target) {
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeSafety, "project URL is not the exact selected project")
 	}
 	load := func(readCtx context.Context) (mrWriteSnapshot, error) {
@@ -174,9 +190,9 @@ func executeMRWrite(ctx context.Context, client delegateClient, target Target, p
 		desired = "opened"
 	}
 	inputValue := map[string]any{"state_event": action}
-	operation := glab.OpMRStateUpdate
+	operation := mrOpStateUpdate
 	if isNote {
-		inputValue, operation = map[string]any{"body": body}, glab.OpMRNoteCreate
+		inputValue, operation = map[string]any{"body": body}, mrOpNoteCreate
 	}
 	input, cleanup, err := writePrivateJSON(inputValue)
 	if err != nil {
@@ -197,7 +213,10 @@ func executeMRWrite(ctx context.Context, client delegateClient, target Target, p
 	}
 	cancelPreflight()
 	if ctx.Err() != nil {
-		return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeCanceled, "merge request write canceled before mutation", ctx.Err())
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeCanceled, "merge request write canceled before mutation", ctx.Err())
+		}
+		return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeUpstream, "merge request write timed out before mutation", ctx.Err())
 	}
 	mutation, cancelMutation := context.WithTimeout(ctx, limits.MergeMutationOperation)
 	response, writeErr := client.Do(mutation, glab.Request{Operation: operation, Host: target.Host, Repo: target.Repo, IID: iid, InputFile: input})
@@ -225,7 +244,7 @@ func executeMRWrite(ctx context.Context, client delegateClient, target Target, p
 		receipt.ObservedState = post.State
 	}
 	if isNote && writeErr == nil && readErr == nil && post.State == initial.State {
-		noteResponse, noteErr := client.Do(readCtx, glab.Request{Operation: glab.OpMRNoteView, Host: target.Host, Repo: target.Repo, IID: iid, ID: created.ID})
+		noteResponse, noteErr := client.Do(readCtx, glab.Request{Operation: mrOpNoteView, Host: target.Host, Repo: target.Repo, IID: iid, ID: created.ID})
 		if noteErr == nil {
 			noteErr = budget.add(noteResponse.Body)
 		}

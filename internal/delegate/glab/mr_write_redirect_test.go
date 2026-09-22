@@ -15,9 +15,10 @@ import (
 	"time"
 )
 
-// Synthetic two-origin regression: a provider redirect must not forward its
-// authentication to another HTTPS authority, even on the same hostname.
-func TestPinnedOfficialGlabMRWriteRedirectAuthorityTLS(t *testing.T) {
+// Negative dependency evidence, not a safety test for the product. The new MR
+// commands cannot delegate this unsafe route. Product native tests require zero
+// redirected requests; this pins why the official profile is not a fallback.
+func TestPinnedOfficialGlabMRWriteRedirectEvidenceTLS(t *testing.T) {
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
@@ -64,13 +65,14 @@ func TestPinnedOfficialGlabMRWriteRedirectAuthorityTLS(t *testing.T) {
 	client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + config, "GITLAB_TOKEN=" + token, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + ca, "PATH=/usr/bin:/bin"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_, err := client.Do(ctx, Request{Operation: OpMRNoteCreate, Host: host, Repo: "group/project", IID: 42, InputFile: input})
+	if _, err := client.Version(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Fixed test-only argv: no corresponding operation is exposed by build.
+	_, err := client.runCapture(ctx, []string{"api", "--method", "POST", "--hostname", host, "projects/group%2Fproject/merge_requests/42/notes", "--input", input, "--header", "Content-Type: application/json"}, host, 4096, true, false, Operation("mr-note-redirect-evidence"))
 	mu.Lock()
 	defer mu.Unlock()
-	if redirected || forwarded {
-		t.Fatalf("pinned note POST crossed HTTPS authority after HTTP 302: redirected=%t synthetic_credential_forwarded=%t (no real credential used)", redirected, forwarded)
-	}
-	if err == nil {
-		t.Fatal("redirect was not rejected")
+	if !redirected || !forwarded || err != nil {
+		t.Fatalf("pinned negative evidence changed: redirected=%t synthetic_credential_forwarded=%t error=%v; refresh the dependency contract (no real credential used)", redirected, forwarded, err)
 	}
 }

@@ -16,8 +16,36 @@ import (
 	"gl-axi/internal/limits"
 )
 
+// Algorithm fixtures exercise reconciliation without constructing either
+// credential backend. Native CLI/TLS tests separately prove public routing.
+func runMRWriteAlgorithm(t *testing.T, ctx context.Context, client mrOperationClient, args []string) (*bytes.Buffer, int) {
+	t.Helper()
+	parsed, err := Parse(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := *parsed.Command
+	target := Target{Host: p.Values["--hostname"], Repo: p.Values["--repo"]}
+	meta := uxv1.Meta{Backend: "native", Host: target.Host, Repo: target.Repo, Complete: true}
+	var result commandOutput
+	if p.Definition.Path[1] == "ensure" {
+		result, err = executeMREnsure(ctx, client, target, p, meta)
+	} else {
+		result, err = executeMRWrite(ctx, client, target, p, meta)
+	}
+	stdout := &bytes.Buffer{}
+	envelope, code := uxv1.Success(result.data, result.meta), 0
+	if err != nil {
+		envelope, code = uxv1.Failure(err, result.meta), uxv1.ExitCode(err)
+	}
+	if err := json.NewEncoder(stdout).Encode(envelope); err != nil {
+		t.Fatal(err)
+	}
+	return stdout, code
+}
+
 func TestMRWriteInvalidInputNoDependency(t *testing.T) {
-	base := mrWriteArgs("close", "opened")
+	base := append(mrWriteArgs("close", "opened"), "--auth-source", "native")
 	cases := [][]string{
 		removeFlag(base, "--hostname", true), removeFlag(base, "--repo", true),
 		replaceArg(base, "42", "042"), replaceArg(base, mergeTestHead, strings.Repeat("0", 40)),
@@ -40,7 +68,7 @@ func TestMRWriteInvalidInputNoDependency(t *testing.T) {
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 				t.Fatal(err)
 			}
-			args := append(mrWriteArgs("comment", "opened"), "--body-file", path)
+			args := append(mrWriteArgs("comment", "opened"), "--auth-source", "native", "--body-file", path)
 			var stdout bytes.Buffer
 			deps := Dependencies{Runtime: productRuntimeNoDiscovery(t, &stdout), NewDelegate: func() delegateClient { t.Fatal("invalid note constructed delegate"); return nil }}
 			if code := Run(context.Background(), args, deps); code == 0 {
@@ -57,7 +85,7 @@ func TestMRWriteInvalidInputNoDependency(t *testing.T) {
 		if err := os.WriteFile(path, []byte("ordinary note"), mode); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := Parse(append(mrWriteArgs("note", "closed"), "--body-file", path)); err == nil {
+		if _, err := Parse(append(mrWriteArgs("note", "closed"), "--auth-source", "native", "--body-file", path)); err == nil {
 			t.Fatal("accepted public body file")
 		}
 	}
@@ -67,7 +95,7 @@ func TestMRWriteInvalidInputNoDependency(t *testing.T) {
 	}
 	link := path + "-link"
 	if err := os.Symlink(path, link); err == nil {
-		if _, err := Parse(append(mrWriteArgs("note", "closed"), "--body-file", link)); err == nil {
+		if _, err := Parse(append(mrWriteArgs("note", "closed"), "--auth-source", "native", "--body-file", link)); err == nil {
 			t.Fatal("accepted symlink body")
 		}
 	}
@@ -101,7 +129,7 @@ func TestMRWriteBoundsCancellationAndPrivatePayload(t *testing.T) {
 				if mode == "page" && request.Operation == glab.OpMRView {
 					return glab.Response{Body: bytes.Repeat([]byte{' '}, limits.MaxJSONPageBytes+1)}, nil, true
 				}
-				if request.Operation == glab.OpMRStateUpdate {
+				if request.Operation == mrOpStateUpdate {
 					deadline, ok := callCtx.Deadline()
 					if !ok || time.Until(deadline) > limits.MergeMutationOperation {
 						t.Fatal("unbounded mutation")
@@ -119,9 +147,8 @@ func TestMRWriteBoundsCancellationAndPrivatePayload(t *testing.T) {
 				}
 				return glab.Response{}, nil, false
 			}
-			stdout, _, deps := productTestDeps(t, delegate)
-			code := Run(ctx, mrWriteArgs("close", "opened"), deps)
-			writes := countOperation(delegate.requests, glab.OpMRStateUpdate)
+			stdout, code := runMRWriteAlgorithm(t, ctx, delegate, append(mrWriteArgs("close", "opened"), "--auth-source", "native"))
+			writes := countOperation(delegate.requests, mrOpStateUpdate)
 			switch mode {
 			case "page", "canceled preflight":
 				if code == 0 || writes != 0 {
@@ -185,8 +212,8 @@ func TestMREnsureCreationMetadataNeverReplacesExisting(t *testing.T) {
 				}
 			}
 			args := append(ensureArgs(t, "title", "body"), "--draft", "--assignee-id", "8", "--assignee-id", "7", "--reviewer-id", "9", "--milestone-id", "10")
-			stdout, _, deps := productTestDeps(t, delegate)
-			code := Run(context.Background(), args, deps)
+			args = append(args, "--auth-source", "native")
+			stdout, code := runMRWriteAlgorithm(t, context.Background(), delegate, args)
 			if countOperation(delegate.requests, glab.OpEnsureUpdate) != 0 {
 				t.Fatal("metadata selection replaced an existing MR")
 			}
@@ -214,11 +241,11 @@ func TestMREnsureCreationMetadataNeverReplacesExisting(t *testing.T) {
 
 func TestMRCreationMetadataStrictInput(t *testing.T) {
 	for _, flags := range [][]string{{"--assignee-id", "0"}, {"--reviewer-id", "01"}, {"--milestone-id", "-1"}, {"--assignee-id", "7", "--assignee-id", "7"}, {"--draft=true"}, {"--label", "bug"}, {"--assignee", "name"}, {"--reviewer-id", "999999999999999999999"}} {
-		if _, err := Parse(append(ensureArgs(t, "title", "body"), flags...)); err == nil {
+		if _, err := Parse(append(append(ensureArgs(t, "title", "body"), "--auth-source", "native"), flags...)); err == nil {
 			t.Fatalf("accepted %v", flags)
 		}
 	}
-	args := ensureArgs(t, "title", "body")
+	args := append(ensureArgs(t, "title", "body"), "--auth-source", "native")
 	for i := 1; i <= 21; i++ {
 		args = append(args, "--assignee-id", strings.Repeat("1", i))
 	}

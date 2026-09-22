@@ -225,62 +225,66 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-diff.schema.json`.
 ## `mr comment`
 
 ```text
-gl-axi mr comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
+gl-axi mr comment <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
 ```
 
 Create one ordinary MR note (not an approval or review).
 
-Requires same-project identity, exact branches/head/state, and a stable preflight recheck.
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
 One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
 GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/mr-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 
 ## `mr note`
 
 ```text
-gl-axi mr note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
+gl-axi mr note <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
 ```
 
 Create one ordinary MR note (not an approval or review).
 
-Requires same-project identity, exact branches/head/state, and a stable preflight recheck.
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
 One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
 GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/mr-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 
 ## `mr close`
 
 ```text
-gl-axi mr close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
+gl-axi mr close <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
 ```
 
 Observe or request one exact reversible MR close transition.
 
-Requires same-project identity, exact branches/head/state, and a stable preflight recheck.
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
 One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
 GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/mr-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 
 ## `mr reopen`
 
 ```text
-gl-axi mr reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
+gl-axi mr reopen <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
 ```
 
 Observe or request one exact reversible MR reopen transition.
 
-Requires same-project identity, exact branches/head/state, and a stable preflight recheck.
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
 One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
 GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/mr-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 
 ## `mr merge`
 
@@ -295,12 +299,12 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-merge.schema.json`.
 ## `mr ensure`
 
 ```text
-gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]
+gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [--auth-source native] [global flags]
 ```
 
 Create or update exactly one matching open merge request.
 
-Optional --assignee-id and --reviewer-id (repeatable, at most 20), --milestone-id, and --draft select creation metadata.
+Optional --assignee-id and --reviewer-id (repeatable, at most 20), --milestone-id, and --draft select creation metadata and require --auth-source native. The complete native operation uses one selected environment/keyring identity, which may differ from the official profile.
 With these selectors an existing match must already have all selected metadata and exact title/body; no replacement PUT is attempted.
 Numeric IDs are explicit provider identities, not username or milestone-name lookups.
 
@@ -309,12 +313,12 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.
 ## `mr create-or-update`
 
 ```text
-gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]
+gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --description-file FILE [--auth-source native] [global flags]
 ```
 
 Alias for bounded MR ensure semantics.
 
-Supports the same creation-only --assignee-id, --reviewer-id, --milestone-id, and --draft selectors as mr ensure.
+Supports the same creation-only --assignee-id, --reviewer-id, --milestone-id, and --draft selectors as mr ensure, requiring --auth-source native. Default title/body ensure retains official-profile behavior.
 Existing selected metadata and content must already match; collections are never replaced.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.

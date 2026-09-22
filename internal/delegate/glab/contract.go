@@ -55,9 +55,6 @@ const (
 	OpMergeJobList               Operation = "mr-merge-job-list"
 	OpMergeBridgeList            Operation = "mr-merge-bridge-list"
 	OpMRMerge                    Operation = "mr-merge"
-	OpMRStateUpdate              Operation = "mr-state-update"
-	OpMRNoteCreate               Operation = "mr-note-create"
-	OpMRNoteView                 Operation = "mr-note-view"
 )
 
 type Request struct {
@@ -184,12 +181,6 @@ func build(request Request) (invocation, error) {
 		}.Encode()
 		endpoint := "projects/" + escapedRepo + "/labels?" + query
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpMRNoteView:
-		if request.IID < 1 || request.ID < 1 {
-			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID and note ID must be positive integers")
-		}
-		endpoint := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%d", escapedRepo, request.IID, request.ID)
-		return jsonObject(append(apiPrefix(), endpoint)), nil
 	case OpMRDiff:
 		if request.IID < 1 {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
@@ -320,24 +311,19 @@ func build(request Request) (invocation, error) {
 		query := url.Values{"state": {"opened"}, "source_branch": {request.Source}, "target_branch": {request.Target}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}.Encode()
 		endpoint := "projects/" + escapedRepo + "/merge_requests?" + query
 		return jsonPage(append(apiPrefix(), endpoint)), nil
-	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge, OpMRStateUpdate, OpMRNoteCreate:
+	case OpEnsureCreate, OpEnsureUpdate, OpMRMerge:
 		if err := validatePrivateInputPath(request.InputFile); err != nil {
 			return invocation{}, err
 		}
 		method := "POST"
 		endpoint := "projects/" + escapedRepo + "/merge_requests"
 		switch request.Operation {
-		case OpEnsureUpdate, OpMRStateUpdate:
+		case OpEnsureUpdate:
 			if request.IID < 1 {
 				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
 			}
 			method = "PUT"
 			endpoint += "/" + strconv.FormatInt(request.IID, 10)
-		case OpMRNoteCreate:
-			if request.IID < 1 {
-				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")
-			}
-			endpoint += "/" + strconv.FormatInt(request.IID, 10) + "/notes"
 		case OpMRMerge:
 			if request.IID < 1 {
 				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "merge request IID must be a positive integer")

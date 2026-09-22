@@ -6,12 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
-	"gl-axi/internal/privatefile"
 )
 
 type ensureProject struct {
@@ -26,36 +24,13 @@ type ensureResult struct {
 	Creation *mrCreationMetadata `json:"creation,omitempty"`
 }
 
-func executeMREnsure(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
-	for _, flag := range []string{"--source", "--target", "--title-file", "--description-file"} {
-		if parsed.Values[flag] == "" {
-			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeValidation, "missing required flag: "+flag)
-		}
-	}
+func executeMREnsure(ctx context.Context, client mrOperationClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
 	source, targetBranch := parsed.Values["--source"], parsed.Values["--target"]
-	if err := validBranch(source); err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	if err := validBranch(targetBranch); err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	title, err := privatefile.Read(parsed.Values["--title-file"], limits.MaxTitleBytes, true)
+	title, description, err := readMREnsureContent(parsed)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	if strings.TrimSpace(title) == "" {
-		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeValidation, "merge request title must not be empty")
-	}
-	description, err := privatefile.Read(parsed.Values["--description-file"], limits.MaxDescriptionBytes, false)
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-
 	selection, err := parseMRCreationMetadata(parsed)
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	title, err = selection.title(title)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
@@ -119,7 +94,7 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 	return reconcileEnsure(ctx, client, target, project.ID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousCreate, "reconciled_create", writeErr, selection)
 }
 
-func ensureExisting(ctx context.Context, client delegateClient, target Target, projectID int64, record upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, selection *mrCreationMetadata) (commandOutput, error) {
+func ensureExisting(ctx context.Context, client mrOperationClient, target Target, projectID int64, record upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, selection *mrCreationMetadata) (commandOutput, error) {
 	if !selection.matches(record) {
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "existing merge request metadata differs; creation selection never replaces existing metadata")
 	}
@@ -158,7 +133,7 @@ func ensureExisting(ctx context.Context, client delegateClient, target Target, p
 	return reconcileEnsureUpdate(ctx, client, target, projectID, record, source, targetBranch, title, description, meta, writeErr)
 }
 
-func reconcileEnsureUpdate(ctx context.Context, client delegateClient, target Target, projectID int64, expected upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, cause error) (commandOutput, error) {
+func reconcileEnsureUpdate(ctx context.Context, client mrOperationClient, target Target, projectID int64, expected upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, cause error) (commandOutput, error) {
 	reconcileCtx, cancel := context.WithTimeout(ctx, limits.EnsureReconcileOperation)
 	defer cancel()
 	response, readErr := client.Do(reconcileCtx, glab.Request{Operation: glab.OpMRView, Host: target.Host, Repo: target.Repo, IID: expected.IID})
@@ -190,7 +165,7 @@ func validateEnsureUpdateIdentity(actual, expected upstreamMR) error {
 	return nil
 }
 
-func reconcileEnsure(ctx context.Context, client delegateClient, target Target, projectID int64, source, targetBranch, title, description string, meta uxv1.Meta, code uxv1.Code, action string, cause error, selection *mrCreationMetadata) (commandOutput, error) {
+func reconcileEnsure(ctx context.Context, client mrOperationClient, target Target, projectID int64, source, targetBranch, title, description string, meta uxv1.Meta, code uxv1.Code, action string, cause error, selection *mrCreationMetadata) (commandOutput, error) {
 	matches, version, err := loadEnsureMatches(ctx, client, target, projectID, source, targetBranch)
 	if version != "" {
 		meta.UpstreamVersion = version
@@ -217,7 +192,7 @@ func reconcileEnsure(ctx context.Context, client delegateClient, target Target, 
 	return commandOutput{meta: meta}, uxv1.Wrap(code, message, cause)
 }
 
-func loadEnsureProject(ctx context.Context, client delegateClient, target Target) (ensureProject, string, error) {
+func loadEnsureProject(ctx context.Context, client mrOperationClient, target Target) (ensureProject, string, error) {
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpEnsureProject, Host: target.Host, Repo: target.Repo})
 	if err != nil {
 		return ensureProject{}, response.UpstreamVersion, err
@@ -226,7 +201,7 @@ func loadEnsureProject(ctx context.Context, client delegateClient, target Target
 	if err := decodeStrict(response.Body, &project); err != nil {
 		return ensureProject{}, response.UpstreamVersion, err
 	}
-	if project.ID < 1 || project.PathWithNamespace != target.Repo {
+	if project.ID < 1 || project.PathWithNamespace != target.Repo || target.webBase != "" && project.WebURL != mrTargetProjectURL(target) {
 		return ensureProject{}, response.UpstreamVersion, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different repository identity")
 	}
 	if _, err := authorityRepoURL(project.WebURL, target.Host, target.Repo, true); err != nil {
@@ -235,7 +210,7 @@ func loadEnsureProject(ctx context.Context, client delegateClient, target Target
 	return project, response.UpstreamVersion, nil
 }
 
-func loadEnsureMatches(ctx context.Context, client delegateClient, target Target, projectID int64, source, targetBranch string) ([]upstreamMR, string, error) {
+func loadEnsureMatches(ctx context.Context, client mrOperationClient, target Target, projectID int64, source, targetBranch string) ([]upstreamMR, string, error) {
 	matches := make([]upstreamMR, 0, 1)
 	version := ""
 	for page := 1; page <= limits.MaxPages; page++ {
@@ -276,7 +251,7 @@ func validateEnsureRecord(record upstreamMR, target Target, projectID int64, sou
 	if record.ID < 1 || record.IID < 1 || record.SourceProjectID != projectID || record.TargetProjectID != projectID || record.SourceBranch != source || record.TargetBranch != targetBranch || record.State != "opened" {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned an out-of-scope merge request")
 	}
-	if record.WebURL != canonicalMRURL(target.Host, target.Repo, record.IID) {
+	if target.webBase != "" && record.WebURL != mrTargetURL(target, record.IID) {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request URL")
 	}
 	if _, _, err := normalizeMR(record, target.Host, target.Repo, true); err != nil {

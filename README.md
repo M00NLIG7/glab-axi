@@ -11,6 +11,7 @@ Two deliberately separate backends share one executable:
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
   to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, typed issue writes,
+  ordinary MR note/state/creation-metadata commands,
   [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
@@ -45,6 +46,8 @@ gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
+gl-axi mr comment|note IID ... --auth-source native --body-file FILE
+gl-axi mr close|reopen IID ... --auth-source native
 gl-axi pipeline list|view|watch
 gl-axi job list|view|trace
 gl-axi job artifacts|download ID ... --auth-source native  # exact job/pipeline/ref/commit
@@ -215,13 +218,18 @@ self-managed mapping remains unproven. See
 [temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
 Ordinary `mr comment` (`mr note`), `mr close`, and `mr reopen` require explicit
-host/project and exact URL, source/target, head and observed-state evidence.
-They attempt one mutation and validate bounded readback. State receipts report
+`--auth-source native`, host/project and exact configured-web URL, source/target,
+head and observed-state evidence. The complete operation uses one existing native
+environment/keyring identity, which may differ from the official profile. There
+is no fallback, automatic redirect or retry. They attempt one mutation and validate bounded readback. State receipts report
 an **observed** postcondition, not exclusive authorship or an atomic revision
 guard. Notes require a private `--body-file` without quick actions or emoji-only
 content; a lost trustworthy note ID stays ambiguous and is never guessed from
 latest-note order. `mr ensure` adds creation-only numeric `--assignee-id`,
-`--reviewer-id`, `--milestone-id`, and `--draft`. Existing metadata and content
+`--reviewer-id`, `--milestone-id`, and `--draft`, also requiring explicit native
+selection. Default delegated ensure remains unchanged. Windows persisted-native
+configuration and self-managed mapping are not yet proven for this surface.
+Existing metadata and content
 must already match when these selectors are used. See
 [`contracts/mr-writes`](contracts/mr-writes/) for tested semantics and residual
 ready/rich-edit/label-selection concurrency gaps.

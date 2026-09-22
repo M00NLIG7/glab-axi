@@ -101,8 +101,7 @@ func validateParsedCommand(parsed Parsed) error {
 		return validateIssueWriteParsed(parsed)
 	}
 	if path == "mr ensure" || path == "mr create-or-update" {
-		_, err := parseMRCreationMetadata(parsed)
-		return err
+		return validateMREnsureParsed(parsed)
 	}
 	if path == "mr comment" || path == "mr note" || path == "mr close" || path == "mr reopen" {
 		return validateMRWriteParsed(parsed)

@@ -129,7 +129,10 @@ matching the latest note body is never evidence. State receipts report observed
 postconditions after one attempt, explicitly without provider revision
 enforcement. These endpoints cannot atomically enforce a head/revision; stable
 preflight and exact post-read identity detect drift, not prevent the final race.
-Rich existing-MR edits and ready-title rewriting remain unavailable.
+Rich existing-MR edits and ready-title rewriting remain unavailable. Native
+note/state and creation-metadata requests cannot fall back to delegated glab.
+The existing Windows persisted-config/self-managed mapping limitation is retained;
+these commands do not claim new general Windows authentication support.
 
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
@@ -247,10 +250,12 @@ The pinned routes, status semantics, bounds and temporary label gap live in
 [`contracts/resource-delete/v1.md`](../contracts/resource-delete/v1.md). The
 Windows persisted-native-config/self-managed mapping limitation is retained.
 
-## Explicit product-native downloads
+## Explicit product-native downloads and MR writes
 
-Only registered native-capable leaves accept `--auth-source native`; the new
-download leaves require it, explicit host/project and exact resource selectors.
+Only registered native-capable leaves accept `--auth-source native`; new
+download and ordinary MR note/state leaves require it, explicit host/project and
+exact resource selectors. Ensure creation metadata requires the same opt-in;
+omitting it preserves the existing delegated title/body-only default.
 The existing native resolver/configuration is reused, without a new store,
 profile parser, credential export or fallback. One identity/authority covers
 all metadata, selection, transfer and recheck requests. Native and official

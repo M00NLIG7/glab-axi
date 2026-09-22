@@ -278,8 +278,11 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 	case "mr merge":
 		return executeMRMerge(ctx, client, target, parsed, meta)
 	case "mr comment", "mr note", "mr close", "mr reopen":
-		return executeMRWrite(ctx, client, target, parsed, meta)
+		return executeNativeMR(ctx, parsed, deps, meta)
 	case "mr ensure", "mr create-or-update":
+		if parsed.Values["--auth-source"] == "native" {
+			return executeNativeMR(ctx, parsed, deps, meta)
+		}
 		return executeMREnsure(ctx, client, target, parsed, meta)
 	case "pipeline list":
 		items, listMeta, err := fetchSelectedPipelines(ctx, client, target, parsed)
