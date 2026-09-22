@@ -29,6 +29,9 @@ func main() {
 	for name, content := range product.VariableSchemas() {
 		files[filepath.Join("schema", "ux-v1", name+".schema.json")] = content
 	}
+	for name, content := range product.MRWriteSchemas() {
+		files[filepath.Join("schema", "ux-v1", name+".schema.json")] = content
+	}
 	for relative, content := range files {
 		path := filepath.Join(*root, relative)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

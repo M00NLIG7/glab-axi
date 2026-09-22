@@ -34,10 +34,10 @@ var deniedNested = map[string]map[string]string{
 		"token": "credential display", "show-token": "credential display",
 	},
 	"mr": {
-		"approve": "approval", "comment": "commenting", "note": "commenting", "reply": "commenting",
+		"approve": "approval", "reply": "commenting",
 		"resolve": "discussion resolution", "unresolve": "discussion resolution",
 		"label": "label mutation", "edit": "merge request editing", "update": "merge request editing",
-		"close": "closing", "reopen": "reopening", "delete": "deletion",
+		"delete": "deletion",
 	},
 	"issue": {
 		"update": "unguarded issue editing",

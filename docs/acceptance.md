@@ -80,6 +80,18 @@ guarded squash merge without manually discovering API bases on the default
 host, without an agent handling interactive credentials, and without plaintext
 fallback.
 
+## Ordinary MR write regression fixtures
+
+Run `go test ./internal/product -run 'TestMRWrite|TestMREnsureCreationMetadata|TestMRCreationMetadata'`.
+Both executable names exercise synthetic TLS note and close/reopen flows,
+identity/preflight/post-write drift, malformed or lost responses, no-ops and
+one-write counts. Invalid input and quick actions produce zero dependency work.
+Private body and creation selection tests cover bounds, cancellation, stable
+numeric identities and refusal to replace unseen existing metadata. Optional
+`TestPinnedOfficialGlabMRWritesTLS` tests the actual pinned package offline against
+a synthetic TLS server; it is included in the official-package CI job. No live
+mutation or production profile is part of these tests.
+
 ## Safe read-only Rune MR/CI
 
 This requires separate captain authorization for private metadata access and a

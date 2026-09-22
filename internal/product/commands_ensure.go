@@ -21,8 +21,9 @@ type ensureProject struct {
 }
 
 type ensureResult struct {
-	MR     MergeRequest `json:"mr"`
-	Action string       `json:"action"`
+	MR       MergeRequest        `json:"mr"`
+	Action   string              `json:"action"`
+	Creation *mrCreationMetadata `json:"creation,omitempty"`
 }
 
 func executeMREnsure(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
@@ -50,6 +51,14 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 		return commandOutput{meta: meta}, err
 	}
 
+	selection, err := parseMRCreationMetadata(parsed)
+	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	title, err = selection.title(title)
+	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
 	project, version, err := loadEnsureProject(ctx, client, target)
 	meta.UpstreamVersion = version
 	if err != nil {
@@ -66,7 +75,7 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "multiple open merge requests match the exact source and target branches")
 	}
 	if len(matches) == 1 {
-		return ensureExisting(ctx, client, target, project.ID, matches[0], source, targetBranch, title, description, meta)
+		return ensureExisting(ctx, client, target, project.ID, matches[0], source, targetBranch, title, description, meta, selection)
 	}
 
 	// Recheck immediately before POST. A competing creator becomes an update or
@@ -82,10 +91,12 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "multiple open merge requests match the exact source and target branches")
 	}
 	if len(matches) == 1 {
-		return ensureExisting(ctx, client, target, project.ID, matches[0], source, targetBranch, title, description, meta)
+		return ensureExisting(ctx, client, target, project.ID, matches[0], source, targetBranch, title, description, meta, selection)
 	}
 
-	input, cleanup, err := writePrivateJSON(map[string]any{"source_branch": source, "target_branch": targetBranch, "title": title, "description": description})
+	payload := map[string]any{"source_branch": source, "target_branch": targetBranch, "title": title, "description": description}
+	selection.addInput(payload)
+	input, cleanup, err := writePrivateJSON(payload)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
@@ -95,9 +106,9 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 		meta.UpstreamVersion = response.UpstreamVersion
 	}
 	if writeErr == nil {
-		created, _, validateErr := decodeAndValidateEnsureMR(response.Body, target, project.ID, source, targetBranch)
-		if validateErr == nil && created.Title == title && created.Description == description {
-			return commandOutput{data: ensureResult{MR: created, Action: "created"}, meta: meta}, nil
+		created, record, validateErr := decodeAndValidateEnsureMR(response.Body, target, project.ID, source, targetBranch)
+		if validateErr == nil && created.Title == title && created.Description == description && selection.matches(record) {
+			return commandOutput{data: ensureResult{MR: created, Action: "created", Creation: selection}, meta: meta}, nil
 		}
 		if validateErr != nil {
 			writeErr = validateErr
@@ -105,16 +116,24 @@ func executeMREnsure(ctx context.Context, client delegateClient, target Target, 
 			writeErr = errors.New("created merge request did not preserve requested content")
 		}
 	}
-	return reconcileEnsure(ctx, client, target, project.ID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousCreate, "reconciled_create", writeErr)
+	return reconcileEnsure(ctx, client, target, project.ID, source, targetBranch, title, description, meta, uxv1.CodeAmbiguousCreate, "reconciled_create", writeErr, selection)
 }
 
-func ensureExisting(ctx context.Context, client delegateClient, target Target, projectID int64, record upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta) (commandOutput, error) {
+func ensureExisting(ctx context.Context, client delegateClient, target Target, projectID int64, record upstreamMR, source, targetBranch, title, description string, meta uxv1.Meta, selection *mrCreationMetadata) (commandOutput, error) {
+	if !selection.matches(record) {
+		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "existing merge request metadata differs; creation selection never replaces existing metadata")
+	}
 	normalized, _, err := normalizeMR(record, target.Host, target.Repo, true)
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
 	if record.Title == title && record.Description == description {
-		return commandOutput{data: ensureResult{MR: normalized, Action: "unchanged"}, meta: meta}, nil
+		return commandOutput{data: ensureResult{MR: normalized, Action: "unchanged", Creation: selection}, meta: meta}, nil
+	}
+	if selection != nil {
+		// Selection is creation-only, including when another creator wins the
+		// branch-pair race. Do not combine it with an unguarded metadata update.
+		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "existing merge request content differs; creation metadata selection requires a complete no-op match")
 	}
 	input, cleanup, err := writePrivateJSON(map[string]any{"title": title, "description": description})
 	if err != nil {
@@ -171,15 +190,15 @@ func validateEnsureUpdateIdentity(actual, expected upstreamMR) error {
 	return nil
 }
 
-func reconcileEnsure(ctx context.Context, client delegateClient, target Target, projectID int64, source, targetBranch, title, description string, meta uxv1.Meta, code uxv1.Code, action string, cause error) (commandOutput, error) {
+func reconcileEnsure(ctx context.Context, client delegateClient, target Target, projectID int64, source, targetBranch, title, description string, meta uxv1.Meta, code uxv1.Code, action string, cause error, selection *mrCreationMetadata) (commandOutput, error) {
 	matches, version, err := loadEnsureMatches(ctx, client, target, projectID, source, targetBranch)
 	if version != "" {
 		meta.UpstreamVersion = version
 	}
-	if err == nil && len(matches) == 1 && matches[0].Title == title && matches[0].Description == description {
+	if err == nil && len(matches) == 1 && matches[0].Title == title && matches[0].Description == description && selection.matches(matches[0]) {
 		normalized, _, normalizeErr := normalizeMR(matches[0], target.Host, target.Repo, true)
 		if normalizeErr == nil {
-			return commandOutput{data: ensureResult{MR: normalized, Action: action}, meta: meta}, nil
+			return commandOutput{data: ensureResult{MR: normalized, Action: action, Creation: selection}, meta: meta}, nil
 		}
 		err = normalizeErr
 	}
@@ -227,6 +246,9 @@ func loadEnsureMatches(ctx context.Context, client delegateClient, target Target
 		if err != nil {
 			return nil, version, err
 		}
+		if err := validateUniqueJSON(response.Body, '[', "matching merge request list"); err != nil {
+			return nil, version, err
+		}
 		var batch []upstreamMR
 		if err := decodeStrict(response.Body, &batch); err != nil {
 			return nil, version, err
@@ -254,6 +276,9 @@ func validateEnsureRecord(record upstreamMR, target Target, projectID int64, sou
 	if record.ID < 1 || record.IID < 1 || record.SourceProjectID != projectID || record.TargetProjectID != projectID || record.SourceBranch != source || record.TargetBranch != targetBranch || record.State != "opened" {
 		return uxv1.NewError(uxv1.CodeSafety, "official glab returned an out-of-scope merge request")
 	}
+	if record.WebURL != canonicalMRURL(target.Host, target.Repo, record.IID) {
+		return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different merge request URL")
+	}
 	if _, _, err := normalizeMR(record, target.Host, target.Repo, true); err != nil {
 		return err
 	}
@@ -261,6 +286,9 @@ func validateEnsureRecord(record upstreamMR, target Target, projectID int64, sou
 }
 
 func decodeAndValidateEnsureMR(body []byte, target Target, projectID int64, source, targetBranch string) (MergeRequest, upstreamMR, error) {
+	if err := validateUniqueJSON(body, '{', "merge request"); err != nil {
+		return MergeRequest{}, upstreamMR{}, err
+	}
 	var record upstreamMR
 	if err := decodeStrict(body, &record); err != nil {
 		return MergeRequest{}, upstreamMR{}, err

@@ -37,7 +37,11 @@ paginated discussion GET routes and exposes no note mutation. The source-project
 route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
-schema. Exact issue-edit validation pins only project, issue, and label-catalog
+schema. Ordinary MR notes and close/reopen add separately named fixed POST/PUT
+operations plus exact note-ID readback; their typed fields, provider evidence,
+non-atomic observation limits and creation-only metadata are documented in
+`contracts/mr-writes/`. Discussion reads themselves remain read-only.
+Exact issue-edit validation pins only project, issue, and label-catalog
 GET routes. No issue content/label PUT is exposed because GitLab accepts no
 expected issue revision and only label names. `issue-writes.json` and test-only
 probes retain characterization evidence, not a supported delegated
@@ -63,8 +67,8 @@ Filtered job reads are not used by guarded merge's complete jobs/bridges proof.
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
 ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
-read-only issue-edit validation, test-only issue-write characterization and
-guarded-merge requests with synthetic credentials; it never contacts a live
+read-only issue-edit validation, test-only issue-write characterization,
+guarded-merge and ordinary MR-write requests with synthetic credentials; it never contacts a live
 GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter

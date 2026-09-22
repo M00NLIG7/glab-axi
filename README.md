@@ -214,10 +214,24 @@ self-managed mapping remains unproven. See
 [`contracts/issue-writes`](contracts/issue-writes/) and the
 [temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
-The denial boundary includes generic API, existing-issue content/label mutation,
-unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,
-merge-request and label-resource mutation, MR delete, repository writes,
-and other release/pipeline/job writes. `issue edit --dry-run` is validation-only and changes no
+Ordinary `mr comment` (`mr note`), `mr close`, and `mr reopen` require explicit
+host/project and exact URL, source/target, head and observed-state evidence.
+They attempt one mutation and validate bounded readback. State receipts report
+an **observed** postcondition, not exclusive authorship or an atomic revision
+guard. Notes require a private `--body-file` without quick actions or emoji-only
+content; a lost trustworthy note ID stays ambiguous and is never guessed from
+latest-note order. `mr ensure` adds creation-only numeric `--assignee-id`,
+`--reviewer-id`, `--milestone-id`, and `--draft`. Existing metadata and content
+must already match when these selectors are used. See
+[`contracts/mr-writes`](contracts/mr-writes/) for tested semantics and residual
+ready/rich-edit/label-selection concurrency gaps.
+
+The currently unavailable surface includes generic API, existing-issue content/label
+mutation, unguarded or alternate merge, approve, MR reply/resolve, existing rich
+MR metadata replacement, ready-title rewriting, label-resource mutation, MR delete,
+repository writes, and other release/pipeline/job writes. This is the current
+executable boundary, not a permanent parity exclusion.
+`issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
 
 ### Guarded native resource deletion

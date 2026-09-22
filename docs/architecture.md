@@ -286,6 +286,27 @@ recognized HTTP rejections retain only their bounded status category.
 Transport, overflow, timeout, incomplete identity, drift, and malformed or
 otherwise unverifiable results remain ambiguous.
 
+## Ordinary MR notes, lifecycle, and creation metadata
+
+`commands_mr_write.go` reuses discussion identity and note normalization for
+explicit same-project MR comment/note and close/reopen commands. It requires
+caller URL, source/target branches, head and state, and checks a stable preflight
+snapshot including base and updated-at before one mutation. The final read must
+retain numeric/project identity, exact URL, branches and base/head. Notes require
+an attributable successful POST response and exact note-ID readback, never
+latest-note/body matching. State success reports only an observed postcondition.
+Receipts explicitly deny provider revision enforcement; these APIs have no CAS.
+Phase budgets are 20/15/10 seconds inside the 45-second write deadline.
+
+`mr_creation_metadata.go` extends ensure with creation-only numeric assignee IDs,
+reviewer IDs, milestone ID and draft title prefix. Existing matches must already
+have the selected metadata and exact content; no stale collection replacement is
+attempted. The ordinary endpoint's lack of expected revision and ready's title
+rewrite leave rich existing edits and ready pending. Labels may implicitly create
+resources by name and are also pending. See `contracts/mr-writes/` for pinned
+provider and reference evidence. `mr_write_schema.go` owns the two write schemas
+emitted by `cmd/gen-product`; native-v1 remains unchanged.
+
 ## Guarded MR merge: immediate squash write
 
 Product `mr merge` exists only for the pinned Firstmate consumer contract under

@@ -179,9 +179,13 @@ func writeOfficialTestCAConfig(t *testing.T, home, host, caPath string) {
 	}
 }
 
-func newTestTLSTunnelProxy(targetAuthority, targetAddress string) *httptest.Server {
+func newTestTLSTunnelProxy(targetAuthority, targetAddress string, alternateAuthorities ...string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect || r.Host != targetAuthority {
+		allowed := r.Host == targetAuthority
+		for _, authority := range alternateAuthorities {
+			allowed = allowed || r.Host == authority
+		}
+		if r.Method != http.MethodConnect || !allowed {
 			http.Error(w, "unexpected tunnel target", http.StatusBadRequest)
 			return
 		}

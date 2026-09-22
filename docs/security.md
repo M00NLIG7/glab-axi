@@ -122,6 +122,15 @@ are supported. The [temporary parity gaps](../contracts/issue-writes/review-bloc
 remain explicit; the increment does not claim full issue parity or authorize
 collateral content/quick-action effects.
 
+The ordinary-write evidence and residual gaps are in `contracts/mr-writes/`.
+Notes reject quick-action-shaped lines and emoji-only content before dependency
+work. An attributable POST note ID plus exact readback is required for success;
+matching the latest note body is never evidence. State receipts report observed
+postconditions after one attempt, explicitly without provider revision
+enforcement. These endpoints cannot atomically enforce a head/revision; stable
+preflight and exact post-read identity detect drift, not prevent the final race.
+Rich existing-MR edits and ready-title rewriting remain unavailable.
+
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
 project ID, full path, and URL plus issue global/project IDs. Title and
@@ -144,8 +153,11 @@ creates no mutation body, performs no post-write reconciliation, and cannot
 expose residual TOCTOU
 as a supported write.
 
-MR ensure permits only title/description on one exact open same-project
-source/target pair. It uses validated project identity, all-page lookup,
+MR ensure updates only title/description on one exact open same-project
+source/target pair. Optional creation-only numeric assignee/reviewer/milestone
+selection and draft prefix require exact metadata/content on an existing match;
+otherwise no PUT is sent. Selected metadata must survive create reconciliation.
+Label selection is unavailable because names may implicitly create labels. It uses validated project identity, all-page lookup,
 duplicate denial, a second GET before POST, private mode-0600 JSON, one POST or
 PUT maximum, response validation, and at most one bounded read-only
 reconciliation after an unvalidated write. Create reconciliation repeats the
@@ -183,8 +195,8 @@ additionally requires:
   `ambiguous_merge` prevents a blind retry.
 
 Generic API, existing-issue content/label mutation, alternate/unguarded merge,
-approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
-mutation, MR delete, repository mutation, and other release/pipeline/job writes
+approval, MR reply/resolve, rich existing-MR metadata replacement, ready-title
+rewriting, label-resource mutation, MR delete, repository mutation, and other release/pipeline/job writes
 remain denied. Issue-edit preview
 changes no issue field or label. The exact native
 deletion exception below grants no broader write authority.
