@@ -5,13 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"gl-axi/internal/contract/uxv1"
-	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
 	"gl-axi/internal/privatefile"
+	"gl-axi/internal/productnative"
 )
 
 const (
@@ -74,7 +77,7 @@ type issueWriteRecord struct {
 	IssueType   string     `json:"issue_type"`
 }
 
-func executeIssueWrite(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
+func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps Dependencies, meta uxv1.Meta) (commandOutput, error) {
 	action := parsed.Definition.Path[1]
 	if action == "note" {
 		action = "comment"
@@ -88,12 +91,30 @@ func executeIssueWrite(ctx context.Context, client delegateClient, target Target
 	if err != nil {
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeInternal, "cannot encode issue request")
 	}
+	// Resolve one native identity only after all private content is validated.
+	// The same client owns every preflight, mutation and readback request.
+	client, err := openNative(ctx, parsed, deps)
+	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	defer client.Close()
+	host := client.Host()
+	meta.Backend, meta.Host, meta.UpstreamVersion = "native", host.Name, ""
+	projectURL := host.Authority.ExpectedProjectURL(target.Repo)
+	expectedURL := projectURL
+	if action != "create" {
+		iid, _ := issueEditIID(parsed)
+		expectedURL += "/-/issues/" + strconv.FormatInt(iid, 10)
+	}
+	if parsed.Values["--expected-url"] != expectedURL {
+		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeSafety, "--expected-url does not match the configured native web authority and selected target")
+	}
 	sum := sha256.Sum256(encoded)
 	projectID, _ := issueWriteID(parsed.Values["--expected-project-id"], "--expected-project-id")
 	issueID, _ := issueWriteID(parsed.Values["--expected-issue-id"], "--expected-issue-id")
 	iid, _ := issueEditIID(parsed)
 	receipt := issueWriteReceipt{Operation: action, Outcome: "ambiguous", Identity: issueWriteIdentity{
-		Host: target.Host, ProjectID: projectID, ProjectFullPath: target.Repo, ProjectWebURL: canonicalProjectURL(target.Host, target.Repo),
+		Host: host.Name, ProjectID: projectID, ProjectFullPath: target.Repo, ProjectWebURL: projectURL,
 	}, MutationResponse: "not_attempted", Postcondition: "not_checked", RequestedSHA256: hex.EncodeToString(sum[:])}
 	if action != "create" {
 		receipt.Identity.IssueID = issueID
@@ -111,11 +132,9 @@ func executeIssueWrite(ctx context.Context, client delegateClient, target Target
 	totalBytes := 0
 	// Fixed reads only. There is no list/search or pagination to turn somebody
 	// else's issue/comment into evidence of this invocation's write.
-	read := func(readCtx context.Context, op glab.Operation) ([]byte, error) {
-		response, err := client.Do(readCtx, glab.Request{Operation: op, Host: target.Host, Repo: target.Repo, ProjectID: projectID, IID: iid})
-		if response.UpstreamVersion != "" {
-			meta.UpstreamVersion = response.UpstreamVersion
-		}
+	issuePath := "projects/" + strconv.FormatInt(projectID, 10) + "/issues/" + strconv.FormatInt(iid, 10)
+	read := func(readCtx context.Context, path string) ([]byte, error) {
+		response, err := client.Do(readCtx, productnative.Request{Method: http.MethodGet, Path: path, MaxBytes: limits.MaxJSONPageBytes})
 		if err != nil {
 			return nil, err
 		}
@@ -125,24 +144,24 @@ func executeIssueWrite(ctx context.Context, client delegateClient, target Target
 		return response.Body, nil
 	}
 	readProject := func(readCtx context.Context) error {
-		body, err := read(readCtx, glab.OpIssueWriteProject)
+		body, err := read(readCtx, "projects/"+url.PathEscape(target.Repo))
 		if err != nil {
 			return err
 		}
 		if err := validateUniqueJSON(body, '{', "issue-write project"); err != nil {
-			return err
+			return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-write project JSON")
 		}
 		var p issueEditProject
 		if err := decodeStrict(body, &p); err != nil {
-			return err
+			return uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-write project JSON")
 		}
 		if p.ID != projectID || p.PathWithNamespace != target.Repo || p.WebURL != receipt.Identity.ProjectWebURL {
-			return uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue-write project identity")
+			return uxv1.NewError(uxv1.CodeSafety, "GitLab returned a different issue-write project identity")
 		}
 		return nil
 	}
 	readIssue := func(readCtx context.Context) (issueWriteRecord, error) {
-		body, err := read(readCtx, glab.OpIssueWriteView)
+		body, err := read(readCtx, issuePath)
 		if err != nil {
 			return issueWriteRecord{}, err
 		}
@@ -184,30 +203,23 @@ func executeIssueWrite(ctx context.Context, client delegateClient, target Target
 		receipt.Postcondition = "preflight"
 		return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
 	}
-	input, cleanup, err := writePrivateJSON(payload)
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	defer cleanup()
 	if err := ctx.Err(); err != nil {
 		return commandOutput{meta: meta}, issueWriteContextError(err)
 	}
-	op := glab.OpIssueCreate
+	method, path := http.MethodPost, "projects/"+strconv.FormatInt(projectID, 10)+"/issues"
 	if action == "comment" {
-		op = glab.OpIssueNoteCreate
+		path = issuePath + "/notes"
 	} else if stateWrite {
-		op = glab.OpIssueState
+		method, path = http.MethodPut, issuePath
 	}
 	writeCtx, cancelWrite := context.WithTimeout(ctx, issueWriteAttempt)
-	response, writeErr := client.Do(writeCtx, glab.Request{Operation: op, Host: target.Host, Repo: target.Repo, ProjectID: projectID, IID: iid, InputFile: input})
+	response, writeErr := client.Do(writeCtx, productnative.Request{
+		Method: method, Path: path, Body: encoded, MaxBytes: limits.MaxJSONPageBytes,
+		Headers: http.Header{"Content-Type": {"application/json"}},
+	})
 	cancelWrite()
-	if response.UpstreamVersion != "" {
-		meta.UpstreamVersion = response.UpstreamVersion
-	}
-	// A dependency/version failure happened before the mutation child started.
-	if writeErr != nil && !response.Write {
-		return commandOutput{meta: meta}, writeErr
-	}
+	// An attempted transfer is not a claim that the provider received it.
+	// Unknown transport/response outcomes stay ambiguous, without replay.
 	receipt.MutationAttempts = 1
 	receipt.MutationResponse = "unconfirmed"
 	if writeErr != nil {
@@ -319,17 +331,17 @@ func addIssueWriteBytes(total *int, body []byte) error {
 
 func decodeIssueWriteRecord(body []byte, identity issueWriteIdentity) (issueWriteRecord, error) {
 	if err := validateUniqueJSON(body, '{', "issue-write"); err != nil {
-		return issueWriteRecord{}, err
+		return issueWriteRecord{}, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-write JSON")
 	}
 	var record issueWriteRecord
 	if err := decodeStrict(body, &record); err != nil {
-		return record, err
+		return record, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-write JSON")
 	}
-	if record.ID < 1 || record.IID < 1 || record.ProjectID != identity.ProjectID || (identity.IssueID > 0 && record.ID != identity.IssueID) || (identity.IID > 0 && record.IID != identity.IID) || record.WebURL != canonicalIssueURL(identity.Host, identity.ProjectFullPath, record.IID) {
-		return record, uxv1.NewError(uxv1.CodeSafety, "official glab returned a different issue-write identity")
+	if record.ID < 1 || record.IID < 1 || record.ProjectID != identity.ProjectID || (identity.IssueID > 0 && record.ID != identity.IssueID) || (identity.IID > 0 && record.IID != identity.IID) || record.WebURL != identity.ProjectWebURL+"/-/issues/"+strconv.FormatInt(record.IID, 10) {
+		return record, uxv1.NewError(uxv1.CodeSafety, "GitLab returned a different issue-write identity")
 	}
 	if record.UpdatedAt == nil || record.UpdatedAt.IsZero() || (record.State != "opened" && record.State != "closed") {
-		return record, uxv1.NewError(uxv1.CodeUpstream, "official glab returned an incomplete issue-write document")
+		return record, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an incomplete issue-write document")
 	}
 	// GitLab represents an empty description as null on some versions. An
 	// explicit null is empty content; an absent field is not proof of content.
@@ -348,7 +360,7 @@ func decodeIssueWriteRecord(body []byte, identity issueWriteIdentity) (issueWrit
 
 func validateCreatedIssueNote(body []byte, identity issueWriteIdentity, wanted string) (int64, error) {
 	if err := validateUniqueJSON(body, '{', "issue-note"); err != nil {
-		return 0, err
+		return 0, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-note JSON")
 	}
 	var note struct {
 		ID           int64  `json:"id"`
@@ -361,7 +373,7 @@ func validateCreatedIssueNote(body []byte, identity issueWriteIdentity, wanted s
 		Internal     *bool  `json:"internal"`
 	}
 	if err := decodeStrict(body, &note); err != nil {
-		return 0, err
+		return 0, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-note JSON")
 	}
 	if note.ID < 1 || note.ProjectID != identity.ProjectID || note.NoteableID != identity.IssueID || note.NoteableIID != identity.IID || note.NoteableType != "Issue" || note.Body != wanted || note.System == nil || *note.System || note.Internal == nil || *note.Internal {
 		return 0, uxv1.NewError(uxv1.CodeUpstream, "issue note response did not prove the exact requested note")

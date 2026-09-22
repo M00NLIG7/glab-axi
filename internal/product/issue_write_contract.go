@@ -1,6 +1,7 @@
 package product
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -16,7 +17,7 @@ func issueWriteDefinitions() []Definition {
 	existing := append(append([]FlagDefinition{}, common...), FlagDefinition{Name: "--expected-issue-id", Value: "ID", Description: "Exact global issue ID (distinct from the project IID).", Required: true})
 	var out []Definition
 	for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
-		d := Definition{Path: []string{"issue", action}, RepoMode: RepoRequired, Schema: "issue-write", Backend: "official-glab", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true}
+		d := Definition{Path: []string{"issue", action}, RepoMode: RepoRequired, Schema: "issue-write", Backend: "native", Write: true, NoLimit: true, RequireExplicitHost: true, RequireExplicitRepo: true, NativeAuth: true, RequireNativeAuth: true}
 		d.Flags = append([]FlagDefinition{}, existing...)
 		d.Positionals, d.MaxPositions = 1, 1
 		d.Usage = "gl-axi issue " + action + " <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL"
@@ -42,7 +43,8 @@ func issueWriteDefinitions() []Definition {
 		if action == "create" || action == "comment" || action == "note" {
 			d.Details += "\nQuick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes."
 		}
-		d.Usage += " [--format toon|json]"
+		d.Usage += " --auth-source native [--format toon|json]"
+		d.Details += "\nNative opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven."
 		out = append(out, d)
 	}
 	return out
@@ -79,7 +81,7 @@ func validateIssueWriteParsed(parsed Parsed) error {
 		return err
 	}
 	action := parsed.Definition.Path[1]
-	expectedURL := canonicalProjectURL(parsed.Values["--hostname"], parsed.Values["--repo"])
+	expectedSuffix := "/" + parsed.Values["--repo"]
 	if action != "create" {
 		iid, err := issueEditIID(parsed)
 		if err != nil {
@@ -88,10 +90,14 @@ func validateIssueWriteParsed(parsed Parsed) error {
 		if _, err := issueWriteID(parsed.Values["--expected-issue-id"], "--expected-issue-id"); err != nil {
 			return err
 		}
-		expectedURL = canonicalIssueURL(parsed.Values["--hostname"], parsed.Values["--repo"], iid)
+		expectedSuffix += "/-/issues/" + strconv.FormatInt(iid, 10)
 	}
-	if parsed.Values["--expected-url"] != expectedURL {
-		return uxv1.NewError(uxv1.CodeSafety, "--expected-url does not exactly match the selected target")
+	// Native configuration may bind a distinct web host and path prefix. Reject
+	// malformed/wrong-resource selectors here, then compare the full canonical
+	// URL with the resolved authority before the first HTTP request.
+	expected, err := url.Parse(parsed.Values["--expected-url"])
+	if err != nil || expected.Scheme != "https" || expected.Host == "" || expected.User != nil || expected.RawQuery != "" || expected.Fragment != "" || !strings.HasSuffix(expected.EscapedPath(), expectedSuffix) || safeurl.ValidateHost(expected.Host) != nil {
+		return uxv1.NewError(uxv1.CodeSafety, "--expected-url must be an exact HTTPS URL for the selected resource")
 	}
 	if action == "close" || action == "reopen" {
 		if s := parsed.Values["--expected-state"]; s != "opened" && s != "closed" {

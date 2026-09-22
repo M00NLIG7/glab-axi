@@ -5,7 +5,7 @@ This file is generated from the executable command registry.
 ## `issue create`
 
 ```text
-gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE [--format toon|json]
+gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE --auth-source native [--format toon|json]
 ```
 
 Create one ordinary issue from private title and description files.
@@ -15,13 +15,14 @@ Numeric identities and canonical URLs are required. All reads/writes are bounded
 GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
 No title search or replay inference: a lost response is ambiguous, and another invocation can create a duplicate.
 Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
 
 ## `issue comment`
 
 ```text
-gl-axi issue comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE [--format toon|json]
+gl-axi issue comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]
 ```
 
 Create one plain issue note (comment and note are aliases).
@@ -32,13 +33,14 @@ GitLab supplies no atomic expected revision: preflight checks are observations, 
 Only the direct create response can identify this note. Never searches the latest comment as proof.
 A lost response is ambiguous; another invocation can create a duplicate.
 Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
 
 ## `issue note`
 
 ```text
-gl-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE [--format toon|json]
+gl-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]
 ```
 
 Create one plain issue note (comment and note are aliases).
@@ -49,13 +51,14 @@ GitLab supplies no atomic expected revision: preflight checks are observations, 
 Only the direct create response can identify this note. Never searches the latest comment as proof.
 A lost response is ambiguous; another invocation can create a duplicate.
 Quick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
 
 ## `issue close`
 
 ```text
-gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed [--format toon|json]
+gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]
 ```
 
 Request one reversible GitLab issue state transition.
@@ -66,13 +69,14 @@ GitLab supplies no atomic expected revision: preflight checks are observations, 
 Returns unchanged only if the bound preflight state already matches.
 Success reports the desired state observed after an accepted response, not exclusive authorship.
 No GitHub close reason and no bundled comment. A lost response stays ambiguous even when the desired state is observed.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
 
 ## `issue reopen`
 
 ```text
-gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed [--format toon|json]
+gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]
 ```
 
 Request one reversible GitLab issue state transition.
@@ -83,8 +87,9 @@ GitLab supplies no atomic expected revision: preflight checks are observations, 
 Returns unchanged only if the bound preflight state already matches.
 Success reports the desired state observed after an accepted response, not exclusive authorship.
 No GitHub close reason and no bundled comment. A lost response stays ambiguous even when the desired state is observed.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/issue-write.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
 
 ## Dashboard
 

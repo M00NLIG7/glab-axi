@@ -2,21 +2,24 @@ package product
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"gl-axi/internal/testgitlab"
 )
 
-// The public executable, real parser, private-file reader, pinned child argv
-// and receipt serializer are exercised together. This fake never uses a token
-// store or network. Actual official-glab HTTP transport is covered separately
-// by TestPinnedOfficialGlabIssueWritesTLS against a synthetic TLS service.
-func TestIssueWritesExecutableAliasesEndToEnd(t *testing.T) {
+// Both public binaries use the landed native HTTP boundary and isolated
+// persisted authority/CA configuration. The official-glab child is a trap,
+// not the provider fixture. Windows persisted-config support is not claimed.
+func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("POSIX process fixture")
+		t.Skip("persisted native config/self-managed mapping on Windows remains unproven")
 	}
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -28,81 +31,87 @@ func TestIssueWritesExecutableAliasesEndToEnd(t *testing.T) {
 			binary := filepath.Join(dir, program)
 			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
 			build.Dir = root
-			if out, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, out)
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v %s", err, output)
 			}
-			fake := filepath.Join(dir, "glab")
-			script := `#!/bin/sh
-set -eu
-printf '%s\n' "$*" >> "$GL_AXI_TEST_RECORD"
-if [ "${1-}" = version ]; then printf '%s\n' 'glab 1.112.0 (816e3a52)'; exit 0; fi
-[ "$1 $2 $4 $5" = 'api --method --hostname gitlab.com' ]
-method=$3
-endpoint=$6
-project='{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}'
-state=opened
-if [ "$GL_AXI_TEST_ACTION" = reopen ]; then state=closed; fi
-if [ "$GL_AXI_TEST_MODE" = noop ]; then
-  if [ "$GL_AXI_TEST_ACTION" = close ]; then state=closed; else state=opened; fi
-fi
-if [ -f "$GL_AXI_TEST_WRITTEN" ]; then
-  if [ "$GL_AXI_TEST_ACTION" = close ]; then state=closed; else state=opened; fi
-fi
-issue="{\"id\":1001,\"iid\":42,\"project_id\":101,\"title\":\"new title\",\"description\":\"new body\",\"issue_type\":\"issue\",\"state\":\"$state\",\"web_url\":\"https://gitlab.com/group/project/-/issues/42\",\"updated_at\":\"2026-08-15T12:00:00Z\"}"
-if [ "$method" = GET ]; then
-  case "$endpoint" in
-    projects/group%2Fproject)
-      if [ "$GL_AXI_TEST_MODE" = wrong-project ]; then printf '%s' '{"id":102}'; else printf '%s' "$project"; fi;;
-    projects/101/issues/42)
-      if [ "$GL_AXI_TEST_MODE" = wrong-iid ]; then printf '%s' '{"id":1001,"iid":43}'; else printf '%s' "$issue"; fi;;
-    *) exit 1;;
-  esac
-  exit 0
-fi
-[ "$7" = --input ]
-[ "$9" = --header ]
-[ "${10}" = 'Content-Type: application/json' ]
-# A second mutation within one invocation is an unconditional fixture failure.
-[ ! -e "$GL_AXI_TEST_WRITTEN" ]
-printf '%s' "$method $endpoint" > "$GL_AXI_TEST_WRITTEN"
-cp "$8" "$GL_AXI_TEST_PAYLOAD"
-case "$GL_AXI_TEST_MODE" in
-  rejected) printf '%s\n' 'glab: HTTP 422 private-provider-detail' >&2; exit 1;;
-  lost) printf '%s\n' 'transport timeout private-provider-detail' >&2; exit 1;;
-  malformed) printf '%s' '{'; exit 0;;
-esac
-case "$method $endpoint" in
-  'POST projects/101/issues') printf '%s' "$issue";;
-  'POST projects/101/issues/42/notes') printf '%s' '{"id":3001,"project_id":101,"noteable_id":1001,"noteable_iid":42,"noteable_type":"Issue","body":"new body","system":false,"internal":false}';;
-  'PUT projects/101/issues/42')
-    if [ "$GL_AXI_TEST_ACTION" = close ]; then printf '%s' "$issue" | tr '\n' ' ' | /usr/bin/sed 's/"state":"opened"/"state":"closed"/'; else printf '%s' "$issue" | /usr/bin/sed 's/"state":"closed"/"state":"opened"/'; fi;;
-  *) exit 1;;
-esac
-`
-			if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+			sentinel := filepath.Join(dir, "child-invoked")
+			if err := os.WriteFile(filepath.Join(dir, "glab"), []byte("#!/bin/sh\nprintf invoked > \"$ISSUE_NATIVE_CHILD_SENTINEL\"\nexit 91\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
-				for _, mode := range []string{"success", "rejected", "lost", "malformed", "wrong-project", "wrong-iid", "invalid-host", "invalid-url", "quick-action", "noop"} {
+				for _, mode := range []string{"success", "rejected", "lost", "malformed", "wrong-project", "wrong-iid", "invalid-host", "invalid-url", "quick-action", "noop", "missing-native", "redirect"} {
 					t.Run(action+"/"+mode, func(t *testing.T) {
 						stateOp := action == "close" || action == "reopen"
 						if mode == "noop" && !stateOp || mode == "quick-action" && stateOp || mode == "wrong-iid" && action == "create" {
 							t.Skip("not applicable")
 						}
-						runDir := t.TempDir()
-						record := filepath.Join(runDir, "record")
-						written := filepath.Join(runDir, "written")
-						args := issueWriteArgs(t, action)
+						token := strings.Join([]string{"synthetic", "native", "executable", action}, "-")
+						var mutationCount atomic.Int32
+						mutate := http.HandlerFunc(nil)
+						switch mode {
+						case "rejected":
+							mutate = func(w http.ResponseWriter, _ *http.Request) {
+								w.WriteHeader(422)
+								_, _ = w.Write([]byte(`{"message":"untrusted provider detail"}`))
+							}
+						case "lost":
+							mutate = func(w http.ResponseWriter, _ *http.Request) {
+								conn, _, err := w.(http.Hijacker).Hijack()
+								if err != nil {
+									t.Error(err)
+									return
+								}
+								_ = conn.Close()
+							}
+						case "malformed":
+							mutate = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("{")) }
+						case "redirect":
+							mutate = func(w http.ResponseWriter, r *http.Request) {
+								w.Header().Set("Location", "https://"+r.Host+issueNativeAPIPath+"/projects/999/issues/900")
+								w.WriteHeader(307)
+							}
+						}
+						normal := issueNativeHandler(t, action, mutate)
+						server := testgitlab.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							if strings.Contains(r.URL.Path, "/projects/999/") {
+								t.Error("native request followed an unapproved redirect")
+								w.WriteHeader(500)
+								return
+							}
+							if r.Method == "POST" || r.Method == "PUT" {
+								mutationCount.Add(1)
+							}
+							if mode == "wrong-project" && strings.HasSuffix(r.URL.Path, "/projects/group/project") {
+								_, _ = w.Write([]byte(`{"id":999}`))
+								return
+							}
+							if mode == "wrong-iid" && r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/issues/42") {
+								_, _ = w.Write([]byte(`{"id":1001,"iid":43}`))
+								return
+							}
+							if mode == "noop" && r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/issues/42") {
+								state := "closed"
+								if action == "reopen" {
+									state = "opened"
+								}
+								_, _ = w.Write([]byte(strings.ReplaceAll(string(issueWriteBody(state)), "https://gitlab.com", issueNativeWeb)))
+								return
+							}
+							normal(w, r)
+						}))
+						defer server.Close()
+						_, _, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
+						args := issueNativeArgs(t, action)
 						wantExit, wantWrites := 0, 1
 						switch mode {
 						case "rejected":
 							wantExit = 2
-						case "lost", "malformed":
+						case "lost", "malformed", "redirect":
 							wantExit = 6
 						case "wrong-project", "wrong-iid":
 							wantExit, wantWrites = 9, 0
 						case "invalid-host":
-							args = replaceIssueWriteArg(args, "--hostname", "https://gitlab.com")
+							args = replaceIssueWriteArg(args, "--hostname", "https://wrong.example")
 							wantExit, wantWrites = 2, 0
 						case "invalid-url":
 							args = replaceIssueWriteArg(args, "--expected-url", "https://wrong.example/group/project/-/issues/42")
@@ -123,38 +132,45 @@ esac
 							}
 							args = replaceIssueWriteArg(args, "--expected-state", state)
 							wantWrites = 0
+						case "missing-native":
+							args = args[:len(args)-2]
+							wantExit, wantWrites = 2, 0
 						}
 						command := exec.Command(binary, args...)
 						command.Dir = root
-						// Only a synthetic credential in an isolated home, never caller config.
-						token := strings.Join([]string{"synthetic", "issue-write", "e2e"}, "-")
-						command.Env = []string{"HOME=" + runDir, "PATH=" + dir + ":/usr/bin:/bin", "GLAB_CONFIG_DIR=" + runDir, "GITLAB_TOKEN=" + token, "GL_AXI_TEST_ACTION=" + action, "GL_AXI_TEST_MODE=" + mode, "GL_AXI_TEST_RECORD=" + record, "GL_AXI_TEST_WRITTEN=" + written, "GL_AXI_TEST_PAYLOAD=" + filepath.Join(runDir, "payload")}
-						var stdout, stderr bytes.Buffer
-						command.Stdout, command.Stderr = &stdout, &stderr
-						err := command.Run()
+						command.Env = []string{"HOME=" + dir, "PATH=" + dir + ":/usr/bin:/bin", "GL_AXI_CONFIG=" + deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + token, "ISSUE_NATIVE_CHILD_SENTINEL=" + sentinel}
+						var out, stderr bytes.Buffer
+						command.Stdout, command.Stderr = &out, &stderr
+						runErr := command.Run()
 						code := 0
-						if err != nil {
-							exit, ok := err.(*exec.ExitError)
+						if runErr != nil {
+							exit, ok := runErr.(*exec.ExitError)
 							if !ok {
-								t.Fatal(err)
+								t.Fatal(runErr)
 							}
 							code = exit.ExitCode()
 						}
+						requests := server.Requests()
+						assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), requests, token)
+						if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
+							t.Fatal("issue write invoked official glab")
+						}
 						if code != wantExit || stderr.Len() != 0 {
-							t.Fatalf("exit=%d want=%d %s %s", code, wantExit, &stdout, &stderr)
+							t.Fatalf("exit=%d want=%d output=%s stderr=%s", code, wantExit, &out, &stderr)
 						}
-						log, _ := os.ReadFile(record)
-						mutations := strings.Count(string(log), "--method POST") + strings.Count(string(log), "--method PUT")
-						if mutations != wantWrites || strings.Contains(string(log), token) || strings.Contains(stdout.String(), token) || strings.Contains(stdout.String(), "private-provider-detail") || strings.Contains(string(log), "--page") || strings.Contains(string(log), "search") {
-							t.Fatalf("log=%s stdout=%s", log, &stdout)
+						if int(mutationCount.Load()) != wantWrites {
+							t.Fatalf("mutations=%d want=%d", mutationCount.Load(), wantWrites)
 						}
-						if mode == "invalid-host" || mode == "invalid-url" || mode == "quick-action" {
-							if len(log) != 0 {
-								t.Fatalf("invalid input spawned child: %s", log)
+						if strings.Contains(out.String(), "untrusted provider detail") {
+							t.Fatal("raw provider error escaped")
+						}
+						if mode == "invalid-host" || mode == "invalid-url" || mode == "quick-action" || mode == "missing-native" {
+							if len(requests) != 0 {
+								t.Fatal("invalid input made a network request")
 							}
 						}
 						if wantWrites == 1 {
-							_, _, r := decodeIssueWriteEnvelope(t, stdout.Bytes())
+							_, _, r := decodeIssueWriteEnvelope(t, out.Bytes())
 							if r.MutationAttempts != 1 || r.RetrySafe || r.AtomicPrecondition {
 								t.Fatalf("receipt=%+v", r)
 							}

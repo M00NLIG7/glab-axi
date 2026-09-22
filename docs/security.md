@@ -83,12 +83,16 @@ is attempted. Default `board list` and `board view` never select issues; all
 query documents and tier differences are pinned in
 `contracts/gitlab-planning/v19.3.0/`.
 
-Issue create/note/state are pinned in `contracts/issue-writes/v1.json` and the
-provider's `issue-writes.json`. Explicit caller-bound numeric project and issue
-identities are checked against canonical HTTPS URLs. Mutations use numeric
+Issue create/note/state require `--auth-source native` and are pinned in
+`contracts/issue-writes/v1.json` and `provider-v1.json`. One native client and
+credential handles every preflight, mutation and readback; no official-profile
+fallback or account equivalence is assumed. The shared boundary refuses all
+redirects before a second request. Explicit caller-bound numeric project and
+issue identities are checked against canonical HTTPS URLs under the configured
+native web authority, which may differ from the API host/path. Mutations use numeric
 project routes, preventing a project-path rename from redirecting a write to a
-replacement project. Private descriptor-validated content is bounded before any
-child work. Slash-leading description/comment lines are denied even inside code
+replacement project. Private descriptor-validated content is bounded before
+credential resolution, and request JSON remains in memory. Slash-leading description/comment lines are denied even inside code
 fences because GitLab quick actions can perform additional mutations.
 
 There is one mutation attempt per invocation, without retry. No latest-note or

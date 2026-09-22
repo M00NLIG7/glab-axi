@@ -1,71 +1,84 @@
 # Typed issue writes
 
-## Known transport blocker
+`v1.json` pins the executable consumer grammar and bounded UX-v1 receipt.
+`provider-v1.json` pins the GitLab REST routes, request/response fields and
+semantic evidence. Issue create, comment/note and close/reopen require explicit
+`--auth-source native`, host, project, numeric identities and canonical URL.
+They reuse `internal/product/native.go` and `internal/productnative` for one
+existing-native environment/keyring identity throughout the complete operation.
+There is no official-profile fallback or account-equivalence assumption.
+Existing read/merge/ensure defaults and frozen native-v1 are unchanged.
 
-These new write routes are not ready for operational use. The actual pinned
-`glab` 1.112.0 follows HTTP 301/302/303 for issue-create POST, issue-note POST and
-issue-state PUT to a different HTTPS authority as GET, forwarding the synthetic
-`Private-Token` in the local regression fixture. Body/receipt validation after
-the child returns cannot undo that confidentiality and exact-target violation.
-307/308 do not redirect these private-input requests in the same fixture.
-`TestPinnedOfficialGlabIssueWritesRejectCrossOriginRedirects` intentionally gates
-this unresolved transport guarantee; no production service or real token is
-involved. A transport fix is required before delivery.
+## Delegated dependency evidence
 
-`v1.json` pins the executable consumer grammar and its bounded UX-v1 receipt.
-Provider routes, request/response fields and semantic evidence are pinned in
-`../official-glab/v1.112.0/issue-writes.json` and `capabilities.json`.
+Pinned official `glab` 1.112.0 follows HTTP 301/302/303 for issue-create POST,
+issue-note POST and issue-state PUT to a different HTTPS authority as GET,
+forwarding the synthetic `Private-Token` in the local characterization fixture.
+307/308 do not redirect these private-input requests in that fixture. The
+upstream behavior is NOT fixed or used as the public issue-write backend.
+`TestPinnedOfficialGlabIssueWritesRedirectCharacterization` preserves that
+negative evidence. The native acceptance tests instead require zero redirected
+requests for every status, including same-origin cross-path redirects.
+No production service or real credential is involved.
+
+## Scope and private input
 
 Coverage is ordinary issue creation, plain issue notes (`comment`/`note`) and
-individual reversible close/reopen requests. It is not full issue parity with
-the reference. Title/body content must come from descriptor-validated private
-files. Explicit host, project, numeric identity and canonical URLs are required.
-GitLab quick-action-shaped lines are rejected before any child, even inside
-Markdown code fences. Labels, assignment, milestone, custom types, attachments,
-delete/move, lock, hierarchy and bundled comment+close are not included.
+individual reversible close/reopen requests, not full reference issue parity.
+Title/body content enters through descriptor-validated private files before
+credential resolution. Request JSON stays in memory. Numeric project routes
+prevent a mutable project path from selecting a replacement project; exact
+web URLs are bound to the configured native web origin and path prefix.
+Quick-action-shaped lines are rejected even inside Markdown code fences.
+Labels, assignment, milestone, custom types, attachments, delete/move, lock,
+hierarchy and bundled comment+close are not included.
 
 ## Receipts and concurrency
 
-- Create/comment accept only direct provider response evidence for the exact
-  resource and content. They never look up the latest note, or an issue by title,
-  to claim authorship or idempotency.
+- Create/comment accept only direct response evidence for the exact resource
+  and content. They never look up the latest note or an issue by title to claim
+  authorship or idempotency.
 - Close/reopen take `--expected-state opened|closed`. This is a preflight
   observation, not a server-enforced precondition. Two reads detect observed
-  drift, but cannot prevent another writer in the remaining window. The request
-  only sets `state_event`; it cannot promise an atomic expected revision.
-- A successful state response plus exact readback returns `state_observed`, not
-  an exclusive authorship claim. A later different state is `conflict`.
-- Already matching preflight state returns `unchanged` without a mutation.
-- A framed definite HTTP rejection reports `rejected`; otherwise a lost,
-  canceled, oversized, invalid or wrong-identity response is ambiguous. State
-  readback may disclose the observed state, but cannot promote an unconfirmed
-  response to success. A new invocation is a new attempt. Never retry blindly.
-- The receipt reports `mutation_attempts` (zero or one delegation),
-  `mutation_response`, `postcondition`, and a SHA-256 of the canonical compact
-  JSON request. It never includes private content or raw provider errors.
-  `atomic_precondition` and `retry_safe` are always false.
-- GitLab `closed`/`opened` states do not model GitHub `completed`/`not_planned`
-  close reasons. Comments and state events are separate invocations.
+  drift but cannot prevent another writer in the remaining window. Only
+  `state_event` is submitted; there is no atomic expected revision.
+- An accepted state response plus exact readback returns `state_observed`, not
+  exclusive authorship. A later different state is `conflict`.
+- Matching preflight state returns `unchanged` without a mutation.
+- A definite HTTP rejection reports `rejected`. Otherwise an unconfirmed,
+  canceled, oversized, malformed or redirected mutation outcome is ambiguous.
+  State readback cannot promote an unconfirmed response to success. A new
+  invocation is a new attempt. Never retry blindly.
+- `mutation_attempts` counts zero or one intended native transfer, not proof of
+  transmission or provider application. `mutation_response`, `postcondition`
+  and the compact typed request's SHA-256 provide bounded evidence without
+  private content or raw provider errors. `atomic_precondition` and `retry_safe`
+  are always false.
+- GitLab `closed`/`opened` does not model GitHub `completed`/`not_planned` close
+  reasons. Comments and state events remain separate invocations.
 
-The existing `issue edit` contract remains validation-only, including its
-label-name races and lack of an expected-revision field. These new commands
-cannot mutate existing issue content or labels.
+Existing `issue edit` remains validation-only in this increment, including its
+label-name races and missing expected revision. These operations cannot change
+existing issue content or labels. Windows persisted-native-config/self-managed
+mapping remains unproven; this increment does not claim or implement general
+Windows authentication support.
 
 ## Executable evidence
 
-- `TestPinnedIssueWritesConsumerContract`: fixture-driven public grammar,
-  excluded fields and independent invocation semantics.
-- `TestIssueWritesExecutableAliasesEndToEnd`: both built executable names,
-  exact/wrong targets, private inputs, success/rejection/lost/malformed response,
-  no-op and no-child denial paths.
-- `TestIssueWrite*` and `TestIssueState*`: payload/identity drift, content and
-  response bounds, cancellation, ambiguity, single-attempt and cleanup tests.
-- `TestIssueWritesPinnedProviderBuilders` and
-  `TestPinnedOfficialGlabIssueWritesTLS`: authoritative provider fixtures,
-  actual official-glab method/path/private JSON, synthetic TLS credentials,
-  status classification, and no retry/redirect for every mutation.
+- `TestPinnedIssueWritesConsumerContract`: public grammar, excluded fields,
+  independent invocations and distinct direct-response identities.
+- `TestIssueWritesNativeContractExecutableAliases`: both built executable names
+  against local TLS with private config/CA and synthetic environment credentials;
+  success, rejection, lost/malformed responses, target mismatch, no-op and
+  no-child/no-network input denials. Official glab is a child-invocation trap.
+- Other `TestIssueWritesNativeContract*`: one environment/keyring identity for
+  the full sequence, native unavailability without fallback, configured API/web
+  mapping, every redirect and ambiguous state readback.
+- `TestIssueWrite*`, `TestIssueState*` and the provider-field fixture: payload,
+  drift, response bounds, cancellation, missing evidence and one-attempt tests.
+- Official-glab fixture tests characterize only the pinned dependency; they do
+  not substitute for native product validation.
 
-No production resource or real credential is used. No list/search or paginated
-read is required by this contract. Phase deadlines are 10/20/10 seconds inside
-the existing 45-second operation cap; JSON page and aggregate byte caps remain
-2 MiB and 8 MiB.
+There are no list/search/paginated requests in this contract. Phase deadlines
+are 10/20/10 seconds inside the native 45-second lifetime. JSON response and
+aggregate bounds remain 2 MiB and 8 MiB.

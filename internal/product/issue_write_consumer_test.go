@@ -20,10 +20,13 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	var contract struct {
-		Schema     string `json:"schema"`
-		Envelope   string `json:"envelope"`
-		DataSchema string `json:"data_schema"`
-		Reference  struct {
+		Schema           string `json:"schema"`
+		Envelope         string `json:"envelope"`
+		DataSchema       string `json:"data_schema"`
+		Backend          string `json:"backend"`
+		AuthSource       string `json:"auth_source"`
+		ProviderContract string `json:"provider_contract"`
+		Reference        struct {
 			Commit string `json:"commit"`
 		} `json:"reference"`
 		Cases []struct {
@@ -40,7 +43,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
-	if contract.Schema != "glab-axi/issue-writes-consumer-contract/v1" || contract.Envelope != uxv1.Schema || contract.DataSchema != "schema/ux-v1/issue-write.schema.json" || contract.Reference.Commit != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || contract.Attempts != 1 || contract.Atomic || contract.RetrySafe || len(contract.Cases) != 5 {
+	if contract.Schema != "glab-axi/issue-writes-consumer-contract/v1" || contract.Envelope != uxv1.Schema || contract.Backend != "native" || contract.AuthSource != "native" || contract.ProviderContract != "contracts/issue-writes/provider-v1.json" || contract.DataSchema != "schema/ux-v1/issue-write.schema.json" || contract.Reference.Commit != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || contract.Attempts != 1 || contract.Atomic || contract.RetrySafe || len(contract.Cases) != 5 {
 		t.Fatalf("contract=%+v", contract)
 	}
 	for _, c := range contract.Cases {
@@ -86,7 +89,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 					d.errors[c.Provider] = []error{uxv1.Wrap(uxv1.CodeUpstream, "response lost", context.DeadlineExceeded)}
 					wantExit, wantOutcome = 6, "ambiguous"
 				}
-				out, _, deps := productTestDeps(t, d)
+				out, _, deps := issueWriteTestDeps(t, d)
 				if code := Run(context.Background(), args, deps); code != wantExit {
 					t.Fatalf("exit=%d %s", code, out)
 				}

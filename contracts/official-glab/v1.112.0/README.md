@@ -39,13 +39,12 @@ adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
 schema. Exact issue-edit validation pins only project, issue, and label-catalog
 GET routes. No issue content/label PUT is exposed because GitLab accepts no
-expected issue revision and only label names. Separate typed issue create,
-plain note and reversible state-event operations are pinned by
-`issue-writes.json`; state changes explicitly do not claim compare-and-swap.
-Their identity, payload fields, quick-action denials and ambiguity semantics are
-exercised through the executable consumer fixture and actual pinned CLI against
-local TLS. Mutations use numeric project IDs after path/URL verification and
-never retry or reconcile by title/latest-comment search. Guarded merge
+expected issue revision and only label names. `issue-writes.json` and its
+fixed argv entries retain characterization evidence, not a supported public
+issue-write backend: pinned glab follows 301/302/303 to another authority while
+forwarding a synthetic Private-Token. New public issue writes instead require
+explicit native selection under `contracts/issue-writes/`, without changing
+existing default operations. No upstream transport fix is claimed. Guarded merge
 pins four fixed reads and one fixed PUT; the PUT consumes only a private
 four-key JSON file, is invoked once, and is never delegated through interactive
 `glab mr merge` behavior.

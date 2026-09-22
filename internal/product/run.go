@@ -254,7 +254,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	case "issue edit":
 		return executeIssueEdit(ctx, client, target, parsed, meta)
 	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
-		return executeIssueWrite(ctx, client, target, parsed, meta)
+		return executeIssueWrite(ctx, target, parsed, deps, meta)
 	case "mr list":
 		items, listMeta, err := fetchMRs(ctx, client, target, parsed.Limit)
 		return listOutput("mrs", items, meta, listMeta), err

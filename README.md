@@ -10,11 +10,11 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads,
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, typed issue writes,
   [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
-  without an official-profile fallback; and
+  with `--auth-source native`, without an official-profile fallback; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -39,6 +39,7 @@ gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
 gl-axi issue list|view
+gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
 gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # dry-run preview; live changes fail closed
 gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
@@ -188,8 +189,11 @@ protected semantics are distinct. No actual secret access or live acceptance
 is implied by the isolated tests.
 
 Typed `issue create`, `issue comment` (`note` alias), `issue close`, and
-`issue reopen` are separate one-attempt writes. They require explicit host,
-project, numeric project identity and canonical URL; existing issues also require
+`issue reopen` are separate one-attempt writes requiring `--auth-source native`.
+One existing-native environment/keyring identity handles the complete operation;
+no official profile is used, and the two accounts need not be equivalent.
+They require explicit host, project, numeric project identity and canonical URL
+bound to the configured native web authority; existing issues also require
 their global ID and IID. Create takes private title/description files, comments
 private body files. Quick-action-shaped lines are refused before child work.
 State commands check the caller's observed state and read it back, but GitLab
@@ -197,6 +201,8 @@ cannot enforce an atomic expected revision. Lost responses remain ambiguous,
 including when a later state read matches. Another invocation is a new attempt,
 not an exactly-once or deduplicated replay. No GitHub close reason, bundled
 comment, attachments, labels, assignees or milestone writes are included.
+All redirects and automatic retries are refused by the shared native boundary.
+Windows persisted-native-config/self-managed mapping remains unproven.
 See [`contracts/issue-writes`](contracts/issue-writes/) and leaf help.
 
 The denial boundary includes generic API, existing-issue content/label mutation,

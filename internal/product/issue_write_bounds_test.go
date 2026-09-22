@@ -16,7 +16,7 @@ import (
 )
 
 func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "official-glab", "v1.112.0", "issue-writes.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "issue-writes", "provider-v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				out, _, deps := productTestDeps(t, d)
+				out, _, deps := issueWriteTestDeps(t, d)
 				if code := Run(context.Background(), issueWriteArgs(t, action), deps); code != 6 {
 					t.Fatalf("exit=%d %s", code, out)
 				}
@@ -94,7 +94,7 @@ func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 			d.responses[glab.OpIssueCreate][0].Body = encoded
-			out, _, deps := productTestDeps(t, d)
+			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), args, deps); code != 0 {
 				t.Fatalf("exit=%d %s", code, out)
 			}
@@ -118,7 +118,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 				d.responses[op][i].Body = pad(d.responses[op][i].Body)
 			}
 		}
-		out, _, deps := productTestDeps(t, d)
+		out, _, deps := issueWriteTestDeps(t, d)
 		if code := Run(context.Background(), issueWriteArgs(t, "close"), deps); code != 6 {
 			t.Fatalf("exit=%d %s", code, out)
 		}
@@ -148,7 +148,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 			defer cancel()
-			out, _, deps := productTestDeps(t, d)
+			out, _, deps := issueWriteTestDeps(t, d)
 			start := time.Now()
 			code := Run(ctx, issueWriteArgs(t, "close"), deps)
 			if time.Since(start) > time.Second {
@@ -156,7 +156,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			}
 			want := 6
 			if phase == "preflight" {
-				want = 130
+				want = 8 // caller deadline, distinct from explicit cancellation
 			}
 			if code != want {
 				t.Fatalf("exit=%d %s", code, out)
@@ -190,7 +190,7 @@ func TestIssueNoteRejectsTransformedOrSystemResponse(t *testing.T) {
 				t.Fatal(err)
 			}
 			d.responses[glab.OpIssueNoteCreate][0].Body = encoded
-			out, _, deps := productTestDeps(t, d)
+			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), issueWriteArgs(t, "comment"), deps); code != 6 {
 				t.Fatalf("exit=%d %s", code, out)
 			}

@@ -1,0 +1,38 @@
+{
+  "schema": "glab-axi/issue-write-provider-contract/v1",
+  "backend": "native",
+  "transport_owner": "internal/productnative",
+  "api": "GitLab REST v4",
+  "evidence_date": "2026-09-21",
+  "sources": [
+    "https://docs.gitlab.com/api/issues/#create-an-issue",
+    "https://docs.gitlab.com/api/issues/#edit-an-issue",
+    "https://docs.gitlab.com/api/notes/#create-an-issue-note",
+    "https://docs.gitlab.com/user/project/quick_actions/"
+  ],
+  "project_id": 101,
+  "issue_id": 1001,
+  "iid": 42,
+  "reads": [
+    {"name": "issue-write-project", "method": "GET", "endpoint": "projects/group%2Fproject", "response_fields": ["id", "path_with_namespace", "web_url"]},
+    {"name": "issue-write-view", "method": "GET", "endpoint": "projects/101/issues/42", "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+  ],
+  "operations": [
+    {"name": "issue-create", "method": "POST", "endpoint": "projects/101/issues", "payload": {"title": "new title", "description": "new body", "issue_type": "issue"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description", "issue_type"]},
+    {"name": "issue-note-create", "method": "POST", "endpoint": "projects/101/issues/42/notes", "payload": {"body": "new body"}, "response_fields": ["id", "project_id", "noteable_id", "noteable_iid", "noteable_type", "body", "system", "internal"]},
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "close"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]},
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "reopen"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+  ],
+  "semantics": {
+    "identity": "Caller-supplied numeric project/issue identity and canonical web URLs must match the selected native authority, including configured API/web origins and prefixes. Mutations use the numeric project route.",
+    "authentication": "One explicitly selected existing-native environment/keyring identity for all reads, mutation and reconciliation. No official profile, account-equivalence assumption, new store or credential export.",
+    "redirects": "No redirects or automatic retries, including same-origin cross-path replay; shared productnative owns enforcement.",
+    "type": "Create sends issue_type=issue. An explicit null response description is empty content; a missing description is unproven. No additional metadata fields.",
+    "note": "Plain non-system non-internal note. Exact direct-response target and content evidence, never latest-note searches.",
+    "state": "close/reopen request closed/opened. Expected state is an observation, not atomic compare-and-swap. No GitHub close reason or bundled comment.",
+    "quick_actions": "Reject slash-leading description/comment lines before credential resolution, including lines in code fences.",
+    "ambiguity": "Unconfirmed mutation outcomes remain ambiguous even if state readback matches. Attempts count intended native transfers, not proof of transmission or provider application.",
+    "limits": "Private title <=1024 bytes; body <=131072 bytes; each JSON response <=2097152 bytes; aggregate <=8388608 bytes. Preflight/write/readback 10/20/10 seconds inside the 45-second operation lifetime. Fixed reads, no pagination.",
+    "platform_limit": "Windows persisted-native-config/self-managed mapping behavior is unproven; this contract does not expand general Windows authentication support."
+  }
+}

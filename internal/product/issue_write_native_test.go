@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -114,7 +113,7 @@ func issueNativeArgs(t *testing.T, action string) []string {
 		expected = issueNativeWeb + "/group/project"
 	}
 	args = replaceIssueWriteArg(args, "--expected-url", expected)
-	return append(args, "--auth-source", "native")
+	return args
 }
 
 func issueNativeDeps(t *testing.T, server *testgitlab.Server, token string, keyring *issueNativeKeyring) (*bytes.Buffer, *bytes.Buffer, Dependencies) {
@@ -414,53 +413,75 @@ func TestIssueWritesNativeContractAmbiguousStateReadbackKeepsOneCredential(t *te
 	}
 }
 
-func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX child sentinel")
-	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
+func TestIssueWritesNativeContractProviderFixture(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "issue-writes", "provider-v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, program := range []string{"gl-axi", "glab-axi"} {
-		t.Run(program, func(t *testing.T) {
-			dir := t.TempDir()
-			binary := filepath.Join(dir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
+	var fixture struct {
+		Schema  string `json:"schema"`
+		Backend string `json:"backend"`
+		Reads   []struct {
+			Method   string `json:"method"`
+			Endpoint string `json:"endpoint"`
+		} `json:"reads"`
+		Operations []struct {
+			Name     string            `json:"name"`
+			Method   string            `json:"method"`
+			Endpoint string            `json:"endpoint"`
+			Payload  map[string]string `json:"payload"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.Schema != "glab-axi/issue-write-provider-contract/v1" || fixture.Backend != "native" || len(fixture.Operations) != 4 || len(fixture.Reads) != 2 {
+		t.Fatal("incomplete native issue provider fixture")
+	}
+	for _, operation := range fixture.Operations {
+		action := "create"
+		if operation.Name == "issue-note-create" {
+			action = "comment"
+		}
+		if operation.Name == "issue-state" {
+			action = operation.Payload["state_event"]
+		}
+		t.Run(action, func(t *testing.T) {
+			server := testgitlab.New(issueNativeHandler(t, action, nil))
+			defer server.Close()
+			token := strings.Join([]string{"synthetic", "native", "provider", "fixture"}, "-")
+			out, stderr, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
+			code := Run(context.Background(), issueNativeArgs(t, action), deps)
+			requests := server.Requests()
+			assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), requests, token)
+			if code != 0 {
+				t.Fatalf("native provider fixture exit=%d output=%s", code, out)
 			}
-			sentinel := filepath.Join(dir, "child-invoked")
-			fake := filepath.Join(dir, "glab")
-			if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf invoked > \"$ISSUE_NATIVE_CHILD_SENTINEL\"\nexit 91\n"), 0700); err != nil {
-				t.Fatal(err)
+			mutations := 0
+			for _, request := range requests {
+				if request.Method == "GET" {
+					declared := false
+					for _, read := range fixture.Reads {
+						if request.Method == read.Method && request.URL == issueNativeAPIPath+"/"+read.Endpoint {
+							declared = true
+						}
+					}
+					if !declared {
+						t.Fatal("native issue read is outside provider fixture")
+					}
+					continue
+				}
+				mutations++
+				var payload map[string]string
+				if err := json.Unmarshal(request.Body, &payload); err != nil {
+					t.Fatal(err)
+				}
+				if request.Method != operation.Method || request.URL != issueNativeAPIPath+"/"+operation.Endpoint || !reflect.DeepEqual(payload, operation.Payload) {
+					t.Fatal("native issue mutation differs from pinned provider fields or route")
+				}
 			}
-			for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
-				t.Run(action, func(t *testing.T) {
-					token := strings.Join([]string{"synthetic", "native", "executable", action}, "-")
-					server := testgitlab.New(issueNativeHandler(t, action, nil))
-					defer server.Close()
-					_, _, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
-					args := issueNativeArgs(t, action)
-					command := exec.Command(binary, args...)
-					command.Dir = root
-					command.Env = []string{"HOME=" + dir, "PATH=" + dir + ":/usr/bin:/bin", "GL_AXI_CONFIG=" + deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + token, "ISSUE_NATIVE_CHILD_SENTINEL=" + sentinel}
-					var out, stderr bytes.Buffer
-					command.Stdout, command.Stderr = &out, &stderr
-					runErr := command.Run()
-					assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), server.Requests(), token)
-					if _, err := os.Stat(sentinel); !os.IsNotExist(err) {
-						t.Fatal("explicit native operation invoked official glab")
-					}
-					if runErr != nil {
-						t.Fatalf("native executable failed: %v output=%s", runErr, &out)
-					}
-					ok, _, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-					if !ok || receipt.MutationAttempts != 1 {
-						t.Fatalf("receipt=%+v", receipt)
-					}
-				})
+			if mutations != 1 {
+				t.Fatalf("mutations=%d", mutations)
 			}
 		})
 	}

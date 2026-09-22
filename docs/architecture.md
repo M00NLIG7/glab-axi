@@ -14,7 +14,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> local help/setup/signed update
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> feature-owned download / CI-variable / deletion handlers
+          |    -> feature-owned download / issue-write / CI-variable / deletion handlers
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
@@ -226,9 +226,12 @@ credentials, and pipelines remain outside it.
 ## Typed issue create, note and state writes
 
 `contracts/issue-writes/v1.json` is a separate contract, not an expansion of
-issue-edit concurrency guarantees. `commands_issue_write.go` sends one fixed
-private payload via the pinned adapter, after caller-bound numeric identity and
-canonical URL validation. The schema separates attempts, accepted response
+issue-edit concurrency guarantees. `commands_issue_write.go` requires explicit
+native opt-in, validates private content before opening one shared native client,
+and sends one fixed in-memory payload after caller-bound numeric identity and
+configured canonical web-URL validation. That same client and credential serves
+all reads and reconciliation. No official-profile fallback or account-equivalence
+assumption is used. The schema separates attempts, accepted response
 evidence, observed postconditions, ambiguity and no-write no-ops. Create and note
 never search for reconciliation. State readback never converts an unconfirmed
 mutation into success. No atomic expected revision or exclusive attribution is

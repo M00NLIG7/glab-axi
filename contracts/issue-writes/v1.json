@@ -2,17 +2,20 @@
   "schema": "glab-axi/issue-writes-consumer-contract/v1",
   "reference": {"repository": "https://github.com/kunchenguid/gh-axi", "commit": "2bffd9a5b60ded64d6c9851683b27a480173a7ee", "source": "src/commands/issue.ts"},
   "envelope": "glab-axi/ux-v1",
+  "backend": "native",
+  "auth_source": "native",
+  "provider_contract": "contracts/issue-writes/provider-v1.json",
   "data_schema": "schema/ux-v1/issue-write.schema.json",
   "cases": [
-    {"action": "create", "argv": ["issue", "create", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-url", "https://gitlab.com/group/project", "--title-file", "{title}", "--description-file", "{body}", "--format", "json"], "provider_operation": "issue-create", "outcome": "created"},
-    {"action": "comment", "argv": ["issue", "comment", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--body-file", "{body}", "--format", "json"], "provider_operation": "issue-note-create", "outcome": "commented"},
-    {"action": "note", "argv": ["issue", "note", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--body-file", "{body}", "--format", "json"], "provider_operation": "issue-note-create", "outcome": "commented"},
-    {"action": "close", "argv": ["issue", "close", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--expected-state", "opened", "--format", "json"], "provider_operation": "issue-state", "outcome": "state_observed"},
-    {"action": "reopen", "argv": ["issue", "reopen", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--expected-state", "closed", "--format", "json"], "provider_operation": "issue-state", "outcome": "state_observed"}
+    {"action": "create", "argv": ["issue", "create", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-url", "https://gitlab.com/group/project", "--title-file", "{title}", "--description-file", "{body}", "--auth-source", "native", "--format", "json"], "provider_operation": "issue-create", "outcome": "created"},
+    {"action": "comment", "argv": ["issue", "comment", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--body-file", "{body}", "--auth-source", "native", "--format", "json"], "provider_operation": "issue-note-create", "outcome": "commented"},
+    {"action": "note", "argv": ["issue", "note", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--body-file", "{body}", "--auth-source", "native", "--format", "json"], "provider_operation": "issue-note-create", "outcome": "commented"},
+    {"action": "close", "argv": ["issue", "close", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--expected-state", "opened", "--auth-source", "native", "--format", "json"], "provider_operation": "issue-state", "outcome": "state_observed"},
+    {"action": "reopen", "argv": ["issue", "reopen", "42", "--repo", "group/project", "--hostname", "gitlab.com", "--expected-project-id", "101", "--expected-issue-id", "1001", "--expected-url", "https://gitlab.com/group/project/-/issues/42", "--expected-state", "closed", "--auth-source", "native", "--format", "json"], "provider_operation": "issue-state", "outcome": "state_observed"}
   ],
   "excluded_flags": ["--title", "--body", "--reason", "--comment", "--attach", "--label", "--assignee", "--milestone", "--type", "--state-event", "--expected-updated-at", "--dry-run", "--limit"],
   "max_mutation_attempts": 1,
   "atomic_precondition": false,
   "retry_safe": false,
-  "differences": ["Private content files, not inline bodies", "No GitHub close reason or bundled comment", "No latest-comment inference", "No replay or exactly-once claim", "Existing issue edit stays validation-only", "No attachments, assignment, labels, milestone, project, or custom type fields"]
+  "differences": ["Explicit existing-native environment/keyring identity for the full operation, without profile fallback or account-equivalence claims", "Private content files, not inline bodies", "No GitHub close reason or bundled comment", "No latest-comment inference", "No replay or exactly-once claim", "Existing issue edit stays validation-only", "No attachments, assignment, labels, milestone, project, or custom type fields", "Windows persisted-native-config and self-managed mapping remain unproven"]
 }

@@ -19,7 +19,9 @@ import (
 // authorities (different hostnames) prove that a redirected GET is still an
 // unauthorized request, even if the CLI does not replay the original body.
 // A missing/censored mutation response cannot undo credential forwarding.
-func TestPinnedOfficialGlabIssueWritesRejectCrossOriginRedirects(t *testing.T) {
+// This characterizes the unsafe pinned dependency, NOT a supported issue-write
+// backend. Public issue writes require the separate explicit native path.
+func TestPinnedOfficialGlabIssueWritesRedirectCharacterization(t *testing.T) {
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
@@ -129,9 +131,19 @@ func TestPinnedOfficialGlabIssueWritesRejectCrossOriginRedirects(t *testing.T) {
 					t.Errorf("original mutation repeated: %+v", got)
 				default:
 				}
+				if status == 301 || status == 302 || status == 303 {
+					select {
+					case got := <-redirected:
+						if got.Method != http.MethodGet || got.Path != "/api/v4/projects/999/issues/900/notes" || !got.HasSyntheticToken || got.BodyBytes != 0 || requestErr != nil {
+							t.Fatalf("pinned unsafe redirect characterization changed: status=%d evidence=%+v error=%v", status, got, requestErr)
+						}
+					default:
+						t.Fatal("pinned dependency no longer reproduced the documented unsafe redirect; refresh its evidence before changing the product boundary")
+					}
+				}
 				select {
 				case got := <-redirected:
-					t.Fatalf("authority violation: original=%s %s redirect=%d destination=%+v wrapper_error=%v", method, endpoint, status, got, requestErr)
+					t.Fatalf("unexpected additional redirect request: status=%d evidence=%+v", status, got)
 				default:
 				}
 			})

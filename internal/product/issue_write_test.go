@@ -45,7 +45,7 @@ func issueWriteArgs(t *testing.T, action string) []string {
 	case "reopen":
 		args = append(args, "--expected-state", "closed")
 	}
-	return args
+	return append(args, "--auth-source", "native")
 }
 
 func issueWriteBody(state string) []byte {
@@ -99,7 +99,7 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 	for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
 		t.Run(action, func(t *testing.T) {
 			d := issueWriteDelegate(action)
-			out, stderr, deps := productTestDeps(t, d)
+			out, stderr, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), issueWriteArgs(t, action), deps); code != 0 || stderr.Len() != 0 {
 				t.Fatalf("exit=%d %s %s", code, out, stderr)
 			}
@@ -117,8 +117,8 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 					t.Fatalf("receipt=%+v", r)
 				}
 			}
-			if len(d.inputBodies) != 1 || d.inputModes[0].Perm() != 0600 {
-				t.Fatalf("payloads=%q modes=%v", d.inputBodies, d.inputModes)
+			if len(d.inputBodies) != 1 {
+				t.Fatalf("native payload count=%d", len(d.inputBodies))
 			}
 			var got map[string]any
 			if err := json.Unmarshal(d.inputBodies[0], &got); err != nil {
@@ -132,9 +132,7 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 					t.Fatalf("request=%+v", req)
 				}
 				if req.InputFile != "" {
-					if _, err := os.Stat(req.InputFile); !os.IsNotExist(err) {
-						t.Fatalf("private input retained: %v", err)
-					}
+					t.Fatal("native request unexpectedly persisted its JSON payload")
 				}
 			}
 		})
@@ -176,7 +174,7 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 				case "non-UTF-8":
 					d.responses[op][0].Body = []byte{255}
 				}
-				out, _, deps := productTestDeps(t, d)
+				out, _, deps := issueWriteTestDeps(t, d)
 				if code := Run(context.Background(), issueWriteArgs(t, action), deps); code != 6 {
 					t.Fatalf("exit=%d %s", code, out)
 				}
@@ -215,7 +213,7 @@ func TestIssueWriteDefiniteRejection(t *testing.T) {
 				}
 				rejection, _ := uxv1.NewHTTPRejection(status)
 				d.errors[op] = []error{rejection}
-				out, _, deps := productTestDeps(t, d)
+				out, _, deps := issueWriteTestDeps(t, d)
 				if code := Run(context.Background(), issueWriteArgs(t, action), deps); code == 0 {
 					t.Fatal("accepted rejection")
 				}
@@ -255,7 +253,7 @@ func TestIssueStateNoopAndDrift(t *testing.T) {
 				d.responses[glab.OpIssueWriteView][2].Body = []byte(strings.ReplaceAll(string(issueWriteBody("closed")), `"id":1001`, `"id":1002`))
 				wantWrites = 1
 			}
-			out, _, deps := productTestDeps(t, d)
+			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), args, deps); code != wantExit {
 				t.Fatalf("exit=%d want=%d %s", code, wantExit, out)
 			}
@@ -364,7 +362,7 @@ func TestIssueWriteRejectsInputBeforeChild(t *testing.T) {
 					}
 				}
 				d := issueWriteDelegate(action)
-				out, _, deps := productTestDeps(t, d)
+				out, _, deps := issueWriteTestDeps(t, d)
 				if code := Run(context.Background(), args, deps); code == 0 || len(d.requests) != 0 {
 					t.Fatalf("exit=%d requests=%+v output=%s", code, d.requests, out)
 				}
@@ -406,7 +404,7 @@ func TestIssueWriteTargetMismatchAndCancellation(t *testing.T) {
 					return glab.Response{}, nil, false
 				}
 			}
-			out, _, deps := productTestDeps(t, d)
+			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(ctx, issueWriteArgs(t, "comment"), deps); code == 0 {
 				t.Fatal(out.String())
 			}
