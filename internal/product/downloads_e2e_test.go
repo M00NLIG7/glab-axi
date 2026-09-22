@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"gl-axi/internal/config"
+	"gl-axi/internal/safedownload"
 )
 
 func downloadTestArchive(t *testing.T, bad bool) []byte {
@@ -60,6 +61,8 @@ type downloadCLIFixture struct {
 	server                               *httptest.Server
 	home, configPath, destination, token string
 	archive, asset                       []byte
+	archiveSize                          int64
+	rawJob                               bool
 	mode                                 string
 	mu                                   sync.Mutex
 	requests                             []string
@@ -75,6 +78,8 @@ func newDownloadCLIFixture(t *testing.T, mode string) *downloadCLIFixture {
 		t.Fatal(err)
 	}
 	f := &downloadCLIFixture{home: home, destination: filepath.Join(home, "download"), token: strings.Join([]string{"synthetic", "download", "cli", "credential"}, "-"), archive: downloadTestArchive(t, mode == "malicious"), asset: []byte("release contents"), mode: mode, started: make(chan struct{})}
+	f.archiveSize = int64(len(f.archive))
+	f.rawJob = mode == "raw-job"
 	f.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { f.handle(t, w, r) }))
 	f.server.EnableHTTP2 = mode == "http2"
 	f.server.StartTLS()
@@ -152,8 +157,8 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		if f.mode == "drift" && f.transferred {
 			filename = "changed.zip"
 		}
-		write(map[string]any{"id": id, "ref": "main", "web_url": web + "/-/jobs/42", "pipeline": pipeline, "commit": map[string]any{"id": sha}, "artifacts_file": map[string]any{"filename": filename, "size": len(f.archive)}})
-	case "/api/v4/projects/101/pipelines/71":
+		write(map[string]any{"id": id, "ref": "main", "web_url": web + "/-/jobs/42", "pipeline": pipeline, "commit": map[string]any{"id": sha}, "artifacts_file": map[string]any{"filename": filename, "size": f.archiveSize}})
+	case "/api/v4/projects/101/pipelines/71", "/api/v4/projects/101/pipelines/72":
 		write(pipeline)
 	case "/api/v4/projects/101/releases/v1.0":
 		tag := "v1.0"
@@ -163,7 +168,7 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		write(map[string]any{"tag_name": tag, "commit": map[string]any{"id": sha}, "_links": map[string]any{"self": web + "/-/releases/v1.0"}})
 	case "/api/v4/projects/101/releases/v1.0/assets/links":
 		assetURL := f.server.URL + "/api/v4/projects/101/packages/generic/app/v1.0/app.bin"
-		if f.mode == "raw-job" {
+		if f.rawJob {
 			assetURL = web + "/-/jobs/42/artifacts/raw/bin/app.bin"
 		}
 		if f.mode == "external" {
@@ -223,7 +228,11 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		if f.mode == "oversize" {
-			w.Header().Set("Content-Length", fmt.Sprint(len(body)+100))
+			size := len(body) + 100
+			if f.rawJob {
+				size = safedownload.MaxArchiveBytes + 1
+			}
+			w.Header().Set("Content-Length", fmt.Sprint(size))
 			_, _ = w.Write(body)
 			return
 		}

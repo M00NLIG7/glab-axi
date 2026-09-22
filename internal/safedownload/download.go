@@ -120,7 +120,10 @@ func (t *Transaction) writeFile(ctx context.Context, dir *os.File, name string, 
 	n, copyErr := io.Copy(file, io.LimitReader(contextReader{ctx, src}, size+1))
 	syncErr := file.Sync()
 	closeErr := file.Close()
-	if copyErr != nil || syncErr != nil || closeErr != nil || n != size {
+	if copyErr != nil {
+		return fmt.Errorf("staged transfer failed: %w", copyErr)
+	}
+	if syncErr != nil || closeErr != nil || n != size {
 		return errors.New("staged transfer failed or changed size")
 	}
 	return ctx.Err()
@@ -210,7 +213,10 @@ func inspectArchive(ctx context.Context, data []byte) ([]archiveEntry, Receipt, 
 		}
 		n, readErr := io.Copy(io.Discard, io.LimitReader(contextReader{ctx, r}, int64(entry.file.UncompressedSize64)+1))
 		closeErr := r.Close()
-		if readErr != nil || closeErr != nil || n != int64(entry.file.UncompressedSize64) {
+		if readErr != nil {
+			return nil, receipt, fmt.Errorf("archive entry read failed: %w", readErr)
+		}
+		if closeErr != nil || n != int64(entry.file.UncompressedSize64) {
 			return nil, receipt, errors.New("archive entry size or checksum mismatch")
 		}
 	}
@@ -342,6 +348,9 @@ func (t *Transaction) Commit(ctx context.Context) error {
 	current.Close()
 	if aerr != nil || berr != nil || !os.SameFile(a, b) {
 		return errors.New("destination parent changed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := publishDirectory(t.parent, t.stage, t.stageName, t.name); err != nil {
 		return errors.New("destination appeared or atomic no-clobber publication failed")

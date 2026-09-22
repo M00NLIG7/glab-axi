@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -256,5 +258,54 @@ func TestCleanupPreservesForeignEntries(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(parent, tx.stageName, "ours")); !os.IsNotExist(err) {
 		t.Fatal("owned file not cleaned")
+	}
+}
+
+type cancelingDownloadReader struct {
+	io.Reader
+	cancel context.CancelFunc
+}
+
+func (r cancelingDownloadReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p[:min(len(p), 1)])
+	r.cancel()
+	return n, err
+}
+
+func TestCancellationPreservesCauseAndCleansOwnedFiles(t *testing.T) {
+	for _, phase := range []string{"write", "publication"} {
+		t.Run(phase, func(t *testing.T) {
+			parent := parentDir(t)
+			destination := filepath.Join(parent, "result")
+			tx, err := Prepare(destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Close()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if phase == "write" {
+				err = tx.Write(ctx, "asset", cancelingDownloadReader{strings.NewReader("payload"), cancel}, 7)
+			} else {
+				if err := tx.Write(ctx, "asset", strings.NewReader("payload"), 7); err != nil {
+					t.Fatal(err)
+				}
+				cancel()
+				err = tx.Commit(ctx)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation cause lost: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(parent, tx.stageName, "asset")); err != nil {
+				t.Fatalf("cancellation did not reach file staging: %v", err)
+			}
+			if _, err := os.Stat(destination); !os.IsNotExist(err) {
+				t.Fatal("cancellation published destination")
+			}
+			if err := tx.Close(); err != nil {
+				t.Fatal(err)
+			}
+			noStaging(t, parent)
+		})
 	}
 }

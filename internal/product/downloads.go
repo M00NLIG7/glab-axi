@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"net/url"
@@ -181,13 +182,20 @@ func readDownloadJob(ctx context.Context, c *productnative.Client, project downl
 	if _, err := downloadJSON(ctx, c, fmt.Sprintf("%s/pipelines/%d", base, pipelineID), nil, &pipeline); err != nil {
 		return artifactMetadata{}, err
 	}
-	if job.ID != id || job.URL != fmt.Sprintf("%s/-/jobs/%d", project.URL, id) || job.Pipeline.ID != pipelineID || job.Pipeline.ProjectID != project.ID || job.Pipeline.SHA != sha || job.Pipeline.Ref != ref || job.Ref != ref || job.Commit.ID != sha || pipeline.ID != pipelineID || pipeline.ProjectID != project.ID || pipeline.SHA != sha || pipeline.Ref != ref || pipeline.URL != fmt.Sprintf("%s/-/pipelines/%d", project.URL, pipelineID) || !safedownload.ValidFileName(job.Archive.Filename) || job.Archive.Size <= 0 || job.Archive.Size > safedownload.MaxArchiveBytes {
+	if job.ID != id || job.URL != fmt.Sprintf("%s/-/jobs/%d", project.URL, id) || job.Pipeline.ID != pipelineID || job.Pipeline.ProjectID != project.ID || job.Pipeline.SHA != sha || job.Pipeline.Ref != ref || job.Ref != ref || job.Commit.ID != sha || pipeline.ID != pipelineID || pipeline.ProjectID != project.ID || pipeline.SHA != sha || pipeline.Ref != ref || pipeline.URL != fmt.Sprintf("%s/-/pipelines/%d", project.URL, pipelineID) || !safedownload.ValidFileName(job.Archive.Filename) || job.Archive.Size <= 0 {
 		return artifactMetadata{}, downloadSafety()
 	}
 	return artifactMetadata{project.ID, pipelineID, id, ref, sha, job.Archive.Filename, job.Archive.Size}, nil
 }
 
 func executeNativeDownload(ctx context.Context, p Parsed, deps Dependencies, meta uxv1.Meta) (out commandOutput, err error) {
+	defer func() {
+		if errors.Is(err, context.Canceled) {
+			err = uxv1.Wrap(uxv1.CodeCanceled, "native GitLab operation canceled", err)
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			err = uxv1.Wrap(uxv1.CodeUpstream, "native GitLab operation deadline exceeded", err)
+		}
+	}()
 	meta.Backend = "native"
 	meta.UpstreamVersion = ""
 	meta.Limit = 0
@@ -226,6 +234,9 @@ func executeNativeDownload(ctx context.Context, p Parsed, deps Dependencies, met
 			out.data = map[string]any{"artifacts": before}
 			return out, nil
 		}
+		if before.Size > safedownload.MaxArchiveBytes {
+			return out, downloadSafety()
+		}
 		var body bytes.Buffer
 		response, err := client.Stream(ctx, productnative.Request{Method: "GET", Path: fmt.Sprintf("projects/%d/jobs/%d/artifacts", project.ID, id), MaxBytes: before.Size}, &body)
 		if err != nil {
@@ -247,12 +258,12 @@ func executeNativeDownload(ctx context.Context, p Parsed, deps Dependencies, met
 		}
 		extracted, err := tx.Extract(ctx, body.Bytes())
 		if err != nil {
-			return out, uxv1.NewError(uxv1.CodeSafety, "artifact archive is unsafe, corrupt, canceled, or exceeds extraction bounds")
+			return out, uxv1.Wrap(uxv1.CodeSafety, "artifact archive is unsafe, corrupt, or exceeds extraction bounds", err)
 		}
 		digest := sha256.Sum256(body.Bytes())
 		receipt := downloadReceipt{Kind: "job_artifacts", ProjectID: project.ID, Project: project.Path, PipelineID: pipeline, JobID: id, Ref: before.Ref, SHA: sha, Destination: p.Values["--destination"], Bytes: response.Bytes, SHA256: hex.EncodeToString(digest[:]), Checksum: "zip_crc32_and_size;sha256_receipt_only", Files: extracted.Files, ExpandedBytes: extracted.Bytes}
 		if err := tx.Commit(ctx); err != nil {
-			return out, uxv1.NewError(uxv1.CodeSafety, "download publication refused; destination changed or operation canceled")
+			return out, uxv1.Wrap(uxv1.CodeSafety, "download publication refused; destination changed", err)
 		}
 		out.data = map[string]any{"download": receipt}
 		return out, nil
@@ -495,7 +506,7 @@ func executeReleaseDownload(ctx context.Context, c *productnative.Client, projec
 		return out, downloadSafety()
 	}
 	if err := tx.Write(ctx, before.Link.Name, bytes.NewReader(body.Bytes()), response.Bytes); err != nil {
-		return out, uxv1.NewError(uxv1.CodeSafety, "release asset staging failed")
+		return out, uxv1.Wrap(uxv1.CodeSafety, "release asset staging failed", err)
 	}
 	checksum := "provider_sha256_and_size"
 	if before.Size < 0 {
@@ -503,7 +514,7 @@ func executeReleaseDownload(ctx context.Context, c *productnative.Client, projec
 	}
 	receipt := downloadReceipt{Kind: "release_asset", ProjectID: project.ID, Project: project.Path, PipelineID: before.Job.PipelineID, JobID: before.Job.JobID, SHA: p.Values["--expected-sha"], Tag: p.Positionals[0], AssetID: before.Link.ID, AssetName: before.Link.Name, PackageID: before.PackageID, PackageFileID: before.FileID, Destination: p.Values["--destination"], Bytes: response.Bytes, SHA256: hash, Checksum: checksum, Files: 1, ExpandedBytes: response.Bytes}
 	if err := tx.Commit(ctx); err != nil {
-		return out, uxv1.NewError(uxv1.CodeSafety, "release publication refused; destination changed or operation canceled")
+		return out, uxv1.Wrap(uxv1.CodeSafety, "release publication refused; destination changed", err)
 	}
 	out.data = map[string]any{"download": receipt}
 	return out, nil
