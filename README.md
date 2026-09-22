@@ -8,8 +8,9 @@ Agent Skill use the `gl-axi` identity. The repository remains
 Two deliberately separate backends share one executable:
 
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
-  reads, exact-identity issue-edit validation, two MR write contracts, and human
-  login to **official `glab` 1.112.0 (`816e3a52`)**; and
+  reads, exact-identity issue-edit validation, two MR write contracts,
+  [opted-in board issue enumeration](#gitlab-native-planning), and human login
+  to **official `glab` 1.112.0 (`816e3a52`)**; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -50,11 +51,15 @@ gl-axi setup hooks
 gl-axi update [--check]
 ```
 
-Use current Git context or command-first `-R/--repo namespace/project` and
-`--hostname host`; space and equals forms are accepted. A `gitlab.com` remote
-may supply both defaults. Any self-managed remote must be paired with explicit
-`--hostname` or `GITLAB_HOST` authority so an untrusted remote cannot select
-where an environment credential is sent. `--limit` never raises hard limits.
+For board and work-item commands, see
+[GitLab-native planning](#gitlab-native-planning).
+
+Commands that permit inferred targets use current Git context or command-first
+`-R/--repo namespace/project` and `--hostname host`; space and equals forms are
+accepted. A `gitlab.com` remote may supply both defaults. Any self-managed
+remote must be paired with explicit `--hostname` or `GITLAB_HOST` authority so
+an untrusted remote cannot select where an environment credential is sent.
+`--limit` never raises hard limits.
 TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
@@ -150,8 +155,7 @@ label names, so it cannot atomically bind the validated issue and label
 identities. Consequently,
 every non-no-op live request returns `safety_violation` with a deterministic
 `refused`/`not_applied` receipt under `error.receipt` before any PUT. The
-official-glab adapter exposes no issue-write operation. The approved surface
-and exclusions are pinned under
+approved issue-edit surface and exclusions are pinned under
 [`contracts/issue-edit`](contracts/issue-edit/).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,

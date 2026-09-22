@@ -52,6 +52,12 @@ cursors and identity changes fail closed. No recursive cycle-detection claim is
 made beyond the returned parent/direct-child neighborhood. Pagination is not a
 transactional snapshot under concurrent provider changes.
 
+For planning results, `meta.complete` describes enumeration of the authorized
+collection or field inventory. Text truncation independently sets
+`meta.truncated`, so a complete collection can still contain shortened text.
+The reason is `field_limit` unless a display or page limit also applies. Those
+collection limits set `meta.complete` to false; consumers must inspect both flags.
+
 ## Explicit ordering opt-in
 
 The GraphQL `BoardList.issues` field is **not mutation-free** at this baseline.

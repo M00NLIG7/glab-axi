@@ -51,8 +51,10 @@ native HTTP transport.
   normalized threads repeat that binding, preserve provider ordering, expose
   explicit resolution state, omit note/author URLs, and remain within thread,
   nested-note, field, aggregate-body, page, and operation limits;
-- a display, page, nested-record, or field truncation always sets
-  `complete:false`; malformed, unsupported, unavailable, or drifting identity
+- completeness and truncation follow each command's contract; the
+  [planning contract](../contracts/gitlab-planning/v19.3.0/README.md#comparison-and-material-differences)
+  distinguishes collection completeness from field truncation;
+  malformed, unsupported, unavailable, or drifting identity
   returns a controlled incomplete error instead of partial trusted evidence.
 
 Approved environment credentials pass directly to official glab for headless
