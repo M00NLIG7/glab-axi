@@ -15,8 +15,9 @@ allowlists, accepted selectors, and residuals. No live account data is evidence.
   identity must agree with the selector. Group identity is checked before listing.
 - `--visibility public|internal|private` and `--archived` select
   provider visibility and archived projects. Unfiltered listing retains
-  the existing official-profile command; filtered host listing uses accessible
-  projects from the fixed projects route.
+  the existing official-profile command; filtered listing retains its owned-project
+  default with `owned=true` before pagination. Explicit user and group selectors
+  retain their selected namespace scope.
 - `--language LANGUAGE` on host/user repository discovery maps only to
   `with_programming_language`: **uses this language**, not GitHub primary language.
   The group-project route has no pinned language filter and rejects it.
@@ -42,8 +43,10 @@ allowlists, accepted selectors, and residuals. No live account data is evidence.
   both project finders, including the group route; the fixture pins this behavior.
   The project-list route applies a three-character minimum for partial matching
   that basic search does not. This mapping rejects query terms shorter than three
-  characters (ignoring quotes), including short words in quoted phrases, rather
-  than changing their matching behavior. Unsorted search remains available.
+  characters rather than changing their matching behavior. Standalone double-quoted
+  phrases count as single terms under GitLab's pinned term rules: `"go cli"` is
+  accepted, while `go cli` and `"go" cli` contain a short term and are rejected.
+  Unsorted search remains available. The original query is sent unchanged.
 - Returned URL authorities compare case-insensitively; project, group, and
   resource paths remain exact, including resource type and IID.
 
@@ -69,7 +72,8 @@ not availability on a live GitLab deployment.
 - `internal/product/discovery_e2e_test.go` builds **both** executable names and
   exercises accepted selectors, unsupported/duplicate/malformed inputs before
   child execution, exact argv, nested namespaces, wrong owner/group/host/project,
-  authority/path checks, created ordering, retained filters across pages, page/display/field
+  authority/path checks, default ownership before bounded results, quoted search
+  terms, created ordering, retained filters across pages, page/display/field
   limits, 2 MiB page and 8 MiB total bounds, and controlled upstream errors.
 - `internal/product/discovery_test.go` exercises public `Run` cancellation,
   inherited read deadlines, and the reproduced wrong-project repo-view regression.

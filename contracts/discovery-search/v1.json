@@ -3,6 +3,7 @@
   "reference": {"repository": "kunchenguid/gh-axi", "revision": "2bffd9a5b60ded64d6c9851683b27a480173a7ee", "files": ["src/commands/repo.ts", "src/commands/search.ts"]},
   "provider": {"cli": "1.112.0", "cli_revision": "816e3a52411aba73d90237859fdc6ecbc86bd169", "client": "gitlab.com/gitlab-org/api/client-go/v2@v2.53.0"},
   "sources": [
+    {"url": "https://gitlab.com/gitlab-org/cli/-/raw/v1.112.0/internal/commands/project/list/list.go", "sha256": "4ada31f3c4a76b706346257dfb7b99cca0b79f155d57a2d9a6da815b638c7ee9", "symbols": ["listAllProjects", "Owned"]},
     {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/projects.go", "sha256": "a828ce24d7268fd01a113e596c9d3cfc2bf4af2ecc192e30870614733dc8ceaf", "symbols": ["ListProjectsOptions", "ListProjects", "ListUserProjects", "Project", "ProjectNamespace"]},
     {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/groups.go", "sha256": "339b48565c427fda20843c7f42be20c3fc3d62a2aabad33925f9a95f826299d5", "symbols": ["ListGroupProjectsOptions", "ListGroupProjects", "GetGroup"]},
     {"url": "https://gitlab.com/gitlab-org/api/client-go/-/raw/v2.53.0/search.go", "sha256": "1c906d4697ecd063359257d56b5df01cd6d37bd5c38dae3a3e9efabec66222e1", "symbols": ["SearchOptions", "Issues", "IssuesByGroup", "IssuesByProject", "Projects", "ProjectsByGroup"]},
@@ -20,10 +21,10 @@
     {"url": "https://raw.githubusercontent.com/github-linguist/linguist/v9.0.0/lib/linguist/languages.yml", "sha256": "9be11707a14db348cc379ce68e726c1527e7a051fbbc4bad2e2b300b03a6ae92", "symbols": ["Ren'Py", "F*"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/app/models/project.rb", "sha256": "169274c8bfe748462ead54ebbca4e534636b8a6d8c230b9c43623d5fbf32c0b2", "symbols": ["search"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/app/models/concerns/optionally_search.rb", "sha256": "151e7b120fda3b69cc4722d691769944c9b1aa8750e73a607b847002881c9fc1", "symbols": ["optionally_search"]},
-    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/gitlab/sql/pattern.rb", "sha256": "68e4293c4b303092c0c72be52c4009ae2955140ec3639cc4bd34efbc60d24acf", "symbols": ["MIN_CHARS_FOR_PARTIAL_MATCHING", "fuzzy_arel_match", "select_fuzzy_terms"]}
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/gitlab/sql/pattern.rb", "sha256": "68e4293c4b303092c0c72be52c4009ae2955140ec3639cc4bd34efbc60d24acf", "symbols": ["MIN_CHARS_FOR_PARTIAL_MATCHING", "REGEX_QUOTED_TERM", "fuzzy_arel_match", "select_fuzzy_terms", "split_query_to_search_terms"]}
   ],
   "routes": [
-    {"operation": "repo-discovery", "method": "GET", "path": "projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "projects", "query": ["page", "per_page", "owned", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
     {"operation": "repo-discovery", "method": "GET", "path": "users/{username}/projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
     {"operation": "repo-discovery", "method": "GET", "path": "groups/{escaped_full_path}/projects", "query": ["page", "per_page", "visibility", "archived", "search", "order_by", "sort", "with_shared=false", "include_subgroups"]},
     {"operation": "discovery-group", "method": "GET", "path": "groups/{escaped_full_path}", "query": ["with_projects=false"]},
@@ -34,8 +35,9 @@
     {"operation": "search", "method": "GET", "path": "groups/{escaped_full_path}/search", "query": ["scope=projects|issues|merge_requests", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]},
     {"operation": "search", "method": "GET", "path": "projects/{escaped_repo}/search", "query": ["scope=issues|merge_requests|commits|blobs", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]}
   ],
+  "repository_listing_default": "Without an explicit user/group selector, listing retains the official owned-project default before pagination, including visibility, archived, and language filters; filtered listing uses owned=true",
   "repository_search_ordering": {
-    "created": "Without owner/language selectors, select project-list routes before pagination with archived=false and search_namespaces=true; group routes also include_subgroups=true and with_shared=false; reject query terms shorter than three characters, ignoring quotes, because project-list partial matching differs",
+    "created": "Without owner/language selectors, select project-list routes before pagination with archived=false and search_namespaces=true; group routes also include_subgroups=true and with_shared=false; reject provider query terms shorter than three characters because project-list partial matching differs; standalone double-quoted phrases count as single terms",
     "default": "Unsorted host/group repository search retains the search API; owner/language selectors retain project discovery search"
   },
   "fields": {

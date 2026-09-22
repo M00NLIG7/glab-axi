@@ -25,6 +25,7 @@ type SearchSelectors struct {
 }
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`)
+var quotedProjectTermPattern = regexp.MustCompile(`(?:^| )"([^"]+)"(?: |$)`)
 
 func ValidateGroup(group string) error {
 	if safeurl.ValidateProject(group+"/project") != nil || len(group) > 512 {
@@ -109,6 +110,9 @@ func discoveryEndpoint(r Request) (string, error) {
 		q.Set("with_shared", "false")
 		q.Set("include_subgroups", strconv.FormatBool(s.IncludeSubgroups))
 	}
+	if s.Owner == "" && s.Group == "" && r.Query == "" {
+		q.Set("owned", "true")
+	}
 	for key, value := range map[string]string{"visibility": s.Visibility, "archived": s.Archived, "with_programming_language": s.Language, "search": r.Query} {
 		if value != "" {
 			q.Set(key, value)
@@ -136,7 +140,18 @@ func discoveryEndpoint(r Request) (string, error) {
 }
 
 func ValidateCreatedProjectQuery(query string) error {
-	terms := strings.FieldsFunc(query, func(r rune) bool { return unicode.IsSpace(r) || r == '"' })
+	query = strings.Join(strings.Fields(query), " ")
+	var terms []string
+	for {
+		match := quotedProjectTermPattern.FindStringSubmatchIndex(query)
+		if match == nil {
+			break
+		}
+		terms = append(terms, strings.Fields(query[:match[0]])...)
+		terms = append(terms, query[match[2]:match[3]])
+		query = query[match[3]+1:]
+	}
+	terms = append(terms, strings.Fields(query)...)
 	if len(terms) == 0 {
 		return uxv1.NewError(uxv1.CodeUnsupported, "created repository sorting requires query terms of at least three characters")
 	}

@@ -20,6 +20,9 @@ type discoveryStep struct {
 	body any
 	fail bool
 }
+type discoveryOwnershipPage struct {
+	owned, accessible []any
+}
 type discoveryCase struct {
 	name    string
 	args    []string
@@ -57,7 +60,7 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 		{name: "group", args: []string{"repo", "list", "--group", "team/sub"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?include_subgroups=false&page=1&per_page=31&with_shared=false", repos(project), false}}, count: 1},
 		{name: "subgroups", args: []string{"repo", "list", "--group", "team/sub", "--include-subgroups"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?include_subgroups=true&page=1&per_page=31&with_shared=false", repos(discoveryRepo("team/sub/child/project", "group")), false}}, count: 1},
 		{name: "positional-owner", args: []string{"repo", "list", "alice"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
-		{name: "language", args: []string{"repo", "list", "--language", "C++"}, steps: []discoveryStep{{api + "projects?page=1&per_page=31&with_programming_language=C%2B%2B", repos(project), false}}, count: 1},
+		{name: "language", args: []string{"repo", "list", "--language", "C++"}, steps: []discoveryStep{{api + "projects?owned=true&page=1&per_page=31&with_programming_language=C%2B%2B", repos(project), false}}, count: 1},
 		{name: "owner-language", args: []string{"repo", "list", "alice", "--language", "Go"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&with_programming_language=Go", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
 		{name: "search-repos-short-unsorted", args: []string{"search", "repos", "go"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=go", repos(project), false}}, count: 1},
 		{name: "search-repos", args: []string{"search", "repos", "cli"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=cli", repos(project), false}}, count: 1},
@@ -77,12 +80,26 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 			query := "page=1&per_page=31"
 			if command[0] == "search" {
 				query += "&search=cli"
+			} else {
+				query = "owned=true&" + query
 			}
 			query += "&with_programming_language=" + url.QueryEscape(language)
 			tests = append(tests, discoveryCase{name: command[0] + "-language-" + language, args: append(command, "--language", language), steps: []discoveryStep{{api + "projects?" + query, repos(project), false}}, count: 1})
 		}
 	}
 	for _, area := range []string{"host", "group"} {
+		for _, query := range []string{`"go cli"`, `tools "go cli"`, `"go cli" "a b"`} {
+			args := []string{"search", "repos", query, "--sort", "created"}
+			endpoint := "projects?archived=false&order_by=created_at&page=1&per_page=31&search=" + url.QueryEscape(query) + "&search_namespaces=true&sort=desc"
+			var steps []discoveryStep
+			if area == "group" {
+				args = append(args, "--group", "team/sub")
+				endpoint = "groups/team%2Fsub/projects?archived=false&include_subgroups=true&order_by=created_at&page=1&per_page=31&search=" + url.QueryEscape(query) + "&search_namespaces=true&sort=desc&with_shared=false"
+				steps = append(steps, groupflight)
+			}
+			steps = append(steps, discoveryStep{api + endpoint, repos(project), false})
+			tests = append(tests, discoveryCase{name: "search-quoted-" + area + "-" + query, args: args, steps: steps, count: 1})
+		}
 		args := []string{"search", "repos", "team/sub", "--sort", "created"}
 		prefix := "projects?archived=false&"
 		suffix := "&search=team%2Fsub&search_namespaces=true&sort=desc"
@@ -107,11 +124,36 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	for _, visibility := range []string{"public", "internal", "private"} {
 		p := discoveryRepo("team/sub/project", "group")
 		p["visibility"] = visibility
-		tests = append(tests, discoveryCase{name: "visibility-" + visibility, args: []string{"repo", "list", "--visibility", visibility}, steps: []discoveryStep{{api + "projects?page=1&per_page=31&visibility=" + visibility, repos(p), false}}, count: 1})
+		tests = append(tests, discoveryCase{name: "visibility-" + visibility, args: []string{"repo", "list", "--visibility", visibility}, steps: []discoveryStep{{api + "projects?owned=true&page=1&per_page=31&visibility=" + visibility, repos(p), false}}, count: 1})
 	}
 	archived := discoveryRepo("team/sub/project", "group")
 	archived["archived"] = true
-	tests = append(tests, discoveryCase{name: "archived", args: []string{"repo", "list", "--archived"}, steps: []discoveryStep{{api + "projects?archived=true&page=1&per_page=31", repos(archived), false}}, count: 1})
+	tests = append(tests, discoveryCase{name: "archived", args: []string{"repo", "list", "--archived"}, steps: []discoveryStep{{api + "projects?archived=true&owned=true&page=1&per_page=31", repos(archived), false}}, count: 1})
+	for _, filter := range []struct {
+		name  string
+		args  []string
+		query url.Values
+	}{
+		{"visibility", []string{"--visibility", "public"}, url.Values{"visibility": {"public"}}},
+		{"archived", []string{"--archived"}, url.Values{"archived": {"true"}}},
+		{"language", []string{"--language", "Go"}, url.Values{"with_programming_language": {"Go"}}},
+	} {
+		var owned, accessible []any
+		for i, owner := range []string{"bob", "bob", "alice", "alice"} {
+			p := discoveryRepo(fmt.Sprintf("%s/project%d", owner, i), "user")
+			p["id"] = i + 1
+			p["visibility"] = "public"
+			p["archived"] = true
+			accessible = append(accessible, p)
+			if owner == "alice" {
+				owned = append(owned, p)
+			}
+		}
+		filter.query.Set("owned", "true")
+		filter.query.Set("page", "1")
+		filter.query.Set("per_page", "2")
+		tests = append(tests, discoveryCase{name: "default-owner-limit-" + filter.name, args: append([]string{"repo", "list", "--limit", "1"}, filter.args...), steps: []discoveryStep{{api + "projects?" + filter.query.Encode(), discoveryOwnershipPage{owned: owned[:2], accessible: accessible[:2]}, false}}, count: 1, firstID: 3, reason: "display_limit"})
+	}
 	for _, kind := range []string{"issues", "mrs"} {
 		provider := kind
 		if kind == "mrs" {
@@ -282,7 +324,7 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	for _, language := range []string{" F*", "F* ", "F\t*", "Ren'Py\n", strings.Repeat("x", 65)} {
 		invalid = append(invalid, []string{"repo", "list", "--language", language}, []string{"search", "repos", "cli", "--language", language})
 	}
-	for _, query := range []string{"go", "go cli", "\"go\" cli", "\"go cli\"", "\"\"", "界"} {
+	for _, query := range []string{"go", "go cli", "\"go\" cli", "\"go cli\" go", "\"go cli\" \"ab\"", "\"\"", "界"} {
 		invalid = append(invalid, []string{"search", "repos", query, "--sort", "created"}, []string{"search", "repos", query, "--group", "team/sub", "--sort", "created"})
 	}
 	for i, args := range invalid {
@@ -310,6 +352,16 @@ func runDiscoveryCase(t *testing.T, binary string, test discoveryCase) {
 	for i, step := range test.steps {
 		n := strconv.Itoa(i + 1)
 		body, _ := json.Marshal(step.body)
+		if page, ok := step.body.(discoveryOwnershipPage); ok {
+			body, _ = json.Marshal(page.owned)
+			unowned, _ := json.Marshal(page.accessible)
+			if err := os.WriteFile(filepath.Join(dir, "unowned.body."+n), unowned, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "unowned.argv."+n), []byte(strings.Replace(step.argv, "owned=true&", "", 1)), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if step.fail {
 			body = []byte(step.body.(string))
 			if err := os.WriteFile(filepath.Join(dir, "fail."+n), nil, 0600); err != nil {
@@ -331,6 +383,10 @@ n=0
 if [ -f "$FIXTURE/count" ]; then n=$(cat "$FIXTURE/count"); fi
 n=$((n + 1))
 printf '%s' "$n" > "$FIXTURE/count"
+if [ -f "$FIXTURE/unowned.argv.$n" ] && [ "$*" = "$(cat "$FIXTURE/unowned.argv.$n")" ]; then
+  cat "$FIXTURE/unowned.body.$n"
+  exit 0
+fi
 [ "$*" = "$(cat "$FIXTURE/argv.$n")" ] || { printf 'unexpected argv\n' >&2; exit 91; }
 if [ -f "$FIXTURE/fail.$n" ]; then cat "$FIXTURE/body.$n" >&2; exit 1; fi
 cat "$FIXTURE/body.$n"
@@ -393,7 +449,11 @@ cat "$FIXTURE/body.$n"
 		var results []struct {
 			ID int64 `json:"id"`
 		}
-		if err := json.Unmarshal(env.Data["results"], &results); err != nil || len(results) == 0 || results[0].ID != test.firstID {
+		body := env.Data["results"]
+		if repositories, ok := env.Data["repositories"]; ok {
+			body = repositories
+		}
+		if err := json.Unmarshal(body, &results); err != nil || len(results) == 0 || results[0].ID != test.firstID {
 			t.Fatalf("result order: %s", output)
 		}
 	}
