@@ -187,9 +187,26 @@ is implied by the isolated tests.
 The current denial boundary includes generic API, direct issue editing,
 issue creation, unguarded or alternate merge, approve,
 comment/note/reply/resolve, merge-request and label-resource mutation,
-issue/MR close/reopen/delete, repository/release writes, and
-pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
-labels or issue fields.
+close/reopen, repository writes, and other release/pipeline/job writes.
+`issue edit --dry-run` is validation-only and changes no labels or issue fields.
+
+### Guarded native resource deletion
+
+`issue delete`, `pipeline delete`, `release delete`, `snippet delete` (personal),
+and `snippet delete-project` require explicit `--auth-source native`, exact
+reviewed identities and operation-specific URL confirmation. No broad `--yes`,
+default project, redirect, retry, official-profile fallback or local cleanup is
+provided. Release deletion retains its tag; pipeline deletion removes related
+builds/logs/artifacts/triggers but not child pipelines. The native account may
+differ from the official profile.
+
+Preflight/recheck is best-effort, not atomic. Initial absence is not proof of
+prior deletion; an ambiguous response plus absence is not success. Inspect an
+`ambiguous_delete` receipt before any fresh decision, never blindly retry.
+Label deletion remains a temporary gap because GitLab ID-or-title fallback can
+select the wrong label in a race. See the [deletion contract](contracts/resource-delete/v1.md)
+and leaf help for all required expectations, consequences and response bounds.
+Persisted native configuration/self-managed mapping on Windows remains unproven.
 
 ## GitLab-native planning
 

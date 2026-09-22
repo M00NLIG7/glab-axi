@@ -144,9 +144,33 @@ additionally requires:
 
 Generic API, direct issue editing or creation, alternate/unguarded merge,
 approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-issue/MR close/reopen/delete, repository/release mutation, and
-pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview
-changes no issue field or label.
+close/reopen, repository mutation, and other release/pipeline/job writes remain
+denied. Issue-edit preview changes no issue field or label. The exact native
+deletion exception below grants no broader write authority.
+
+## Guarded native resource deletion
+
+Only the issue, pipeline, release and separately scoped personal/project snippet
+delete leaves are enabled. They require explicit native auth, host/project
+selectors, caller-reviewed identities/revisions and operation-specific URL
+confirmation. A single native client covers all preflight, recheck, DELETE and
+readback requests. Project path selection is bound to a numeric project ID before
+mutation. No redirect, write retry, local cleanup, broad `--yes`, tag deletion,
+job erasure or child-pipeline deletion is exposed.
+
+A successful receipt requires the exact DELETE acknowledgment and scoped 404
+readback with an accessible matching parent/account. The release tag must still
+match. Initial 404 and 404 after an unacknowledged write never mean successful
+deletion. 401/403/network/malformed errors never substitute for not-found. Errors
+after the first exact preflight carry bounded non-retryable receipts; intended
+effects are not represented as observed effects. Preflight is not atomic with
+concurrent updates, permission changes or release/tag recreation, and no undelete
+is promised. Label deletion stays disabled because the provider's numeric-ID to
+name fallback can target a different label after the selected label disappears.
+
+The pinned routes, status semantics, bounds and temporary label gap live in
+[`contracts/resource-delete/v1.md`](../contracts/resource-delete/v1.md). The
+Windows persisted-native-config/self-managed mapping limitation is retained.
 
 ## Explicit product-native downloads
 

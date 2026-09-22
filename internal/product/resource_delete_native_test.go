@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -81,20 +82,31 @@ func (k *deletionSpyKeyring) Delete(context.Context, string, string) error {
 	return fmt.Errorf("unexpected keyring delete")
 }
 
+type deletionTestReceipt struct {
+	Action           string         `json:"action"`
+	Resource         string         `json:"resource"`
+	Scope            string         `json:"scope"`
+	URL              string         `json:"url"`
+	DeleteStatus     int            `json:"delete_status"`
+	DeleteAttempted  bool           `json:"delete_attempted"`
+	Acknowledged     bool           `json:"acknowledged"`
+	Postcondition    string         `json:"postcondition"`
+	TagPostcondition string         `json:"tag_postcondition"`
+	Concurrency      string         `json:"concurrency"`
+	Expected         map[string]any `json:"expected"`
+}
+
 type deletionEnvelope struct {
 	OK   bool `json:"ok"`
 	Data struct {
-		Deletion struct {
-			Action        string `json:"action"`
-			Resource      string `json:"resource"`
-			Scope         string `json:"scope"`
-			URL           string `json:"url"`
-			DeleteStatus  int    `json:"delete_status"`
-			Postcondition string `json:"postcondition"`
-		} `json:"deletion"`
+		Deletion deletionTestReceipt `json:"deletion"`
 	} `json:"data"`
 	Error struct {
-		Code string `json:"code"`
+		Code      string `json:"code"`
+		Retryable bool   `json:"retryable"`
+		Receipt   struct {
+			Deletion deletionTestReceipt `json:"deletion"`
+		} `json:"receipt"`
 	} `json:"error"`
 	Meta struct {
 		Backend  string `json:"backend"`
@@ -119,11 +131,17 @@ type deletionFixture struct {
 	wrongCredential          bool
 	unrelated                string
 	redirect                 string
+	cancelHit                chan struct{}
+	cancelOnce               sync.Once
+	selections               atomic.Int32
 }
 
 func newDeletionFixture(t *testing.T, item deletionCase, mode string) *deletionFixture {
 	t.Helper()
-	f := &deletionFixture{t: t, item: item, mode: mode, token: strings.Join([]string{"synthetic", "delete", t.Name()}, "-")}
+	if runtime.GOOS == "windows" {
+		t.Skip("persisted native config/self-managed mapping on Windows remains unproven; this feature does not change that boundary")
+	}
+	f := &deletionFixture{t: t, item: item, mode: mode, token: strings.Join([]string{"synthetic", "delete", t.Name()}, "-"), cancelHit: make(chan struct{})}
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	home := t.TempDir()
@@ -175,7 +193,11 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "GET" && path == "projects/101/repository/tags/v1.0" && f.item.group == "release" {
 		f.tagReads++
-		fmt.Fprint(w, `{"name":"v1.0","commit":{"id":"`+deletionTestSHA+`"}}`)
+		sha := deletionTestSHA
+		if f.mode == "tag-drift" && f.deletes > 0 {
+			sha = strings.Repeat("b", 40)
+		}
+		fmt.Fprint(w, `{"name":"v1.0","commit":{"id":"`+sha+`"}}`)
 		return
 	}
 	if path != f.item.route || r.URL.RawQuery != "" {
@@ -215,6 +237,7 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		case "delete-cancel":
+			f.cancelOnce.Do(func() { close(f.cancelHit) })
 			<-r.Context().Done()
 			return
 		case "redirect-307", "redirect-308", "redirect-302", "cross-origin":
@@ -234,6 +257,14 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		case "unexpected-202":
 			w.WriteHeader(202)
+			return
+		case "unexpected-200":
+			w.WriteHeader(200)
+			fmt.Fprint(w, `{}`)
+			return
+		case "oversize-delete":
+			w.WriteHeader(200)
+			fmt.Fprint(w, strings.Repeat("x", (2<<20)+1))
 			return
 		}
 		if f.item.group == "release" {
@@ -291,6 +322,7 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, strings.Repeat("x", (2<<20)+1))
 		return
 	case "pre-cancel":
+		f.cancelOnce.Do(func() { close(f.cancelHit) })
 		<-r.Context().Done()
 		return
 	}
@@ -340,6 +372,9 @@ func (f *deletionFixture) run(ctx context.Context, args []string, hasCredential 
 		LookupEnv: func(name string) (string, bool) {
 			f.lookup.Add(1)
 			if hasCredential && name == "GL_AXI_TOKEN" {
+				if f.selections.Add(1) > 1 {
+					return f.token + "-rotated", true
+				}
 				return f.token, true
 			}
 			return "", false
@@ -379,13 +414,23 @@ func TestNativeResourceDeletionSuccess(t *testing.T) {
 			if code != 0 || !out.OK {
 				t.Fatalf("exit=%d error=%s", code, out.Error.Code)
 			}
-			if f.deletes != 1 || f.reads < 3 {
-				t.Fatalf("DELETE count=%d resource reads=%d", f.deletes, f.reads)
+			if f.deletes != 1 || f.reads != 3 || f.selections.Load() != 1 || f.keyring.calls.Load() != 0 {
+				t.Fatalf("DELETE count=%d resource reads=%d native selections=%d keyring=%d", f.deletes, f.reads, f.selections.Load(), f.keyring.calls.Load())
 			}
 			if out.Meta.Backend != "native" || out.Meta.Upstream != "" {
 				t.Fatalf("wrong backend attribution: %+v", out.Meta)
 			}
 			result := out.Data.Deletion
+			if !result.Acknowledged || !result.DeleteAttempted || result.Concurrency != "best_effort_non_atomic" {
+				t.Fatalf("incomplete receipt: %+v", result)
+			}
+			if item.group == "release" {
+				if result.Expected["created_at"] != deletionTestTime || result.Expected["sha"] != deletionTestSHA || result.TagPostcondition != "unchanged" {
+					t.Fatalf("lost release expectation: %+v", result)
+				}
+			} else if result.Expected["updated_at"] != deletionTestTime {
+				t.Fatalf("lost reviewed revision: %+v", result)
+			}
 			scope := "project"
 			if item.personal {
 				scope = "personal"
@@ -440,18 +485,29 @@ func TestNativeResourceDeletionPreflightRefusals(t *testing.T) {
 }
 
 func TestNativeResourceDeletionNeverReplaysOrInfersSuccessFromAbsence(t *testing.T) {
-	modes := []string{"delete-401", "delete-403", "delete-404", "delete-412", "delete-429", "delete-500", "lost-absence", "disconnect", "unexpected-202", "post-forbidden", "post-malformed", "post-present", "redirect-302", "redirect-307", "redirect-308"}
+	modes := []string{"delete-401", "delete-403", "delete-404", "delete-412", "delete-429", "delete-500", "lost-absence", "disconnect", "unexpected-200", "unexpected-202", "post-forbidden", "post-malformed", "post-present", "account-drift", "redirect-302", "redirect-307", "redirect-308"}
 	for _, item := range deletionCases() {
 		current := append([]string(nil), modes...)
 		if item.group == "release" {
-			current = append(current, "malformed-delete", "wrong-delete-identity")
+			current = append(current, "malformed-delete", "wrong-delete-identity", "oversize-delete", "tag-drift")
 		}
 		for _, mode := range current {
 			t.Run(item.name+"/"+mode, func(t *testing.T) {
 				f := newDeletionFixture(t, item, mode)
 				code, out := f.run(context.Background(), item.args(), true)
-				if code == 0 || out.OK || f.deletes != 1 {
-					t.Fatalf("exit=%d ok=%v writes=%d error=%s", code, out.OK, f.deletes, out.Error.Code)
+				if code == 0 || out.OK || f.deletes != 1 || out.Error.Retryable {
+					t.Fatalf("exit=%d ok=%v writes=%d error=%s retryable=%v", code, out.OK, f.deletes, out.Error.Code, out.Error.Retryable)
+				}
+				r := out.Error.Receipt.Deletion
+				if !r.DeleteAttempted || r.Action == "deleted" || r.Concurrency != "best_effort_non_atomic" {
+					t.Fatalf("misleading failure receipt: %+v", r)
+				}
+				if strings.HasPrefix(mode, "delete-") && mode != "delete-500" {
+					if r.Action != "rejected" || r.Acknowledged {
+						t.Fatalf("rejection receipt: %+v", r)
+					}
+				} else if out.Error.Code != "ambiguous_delete" || r.Action != "ambiguous" {
+					t.Fatalf("unknown outcome lost: %+v", out.Error)
 				}
 			})
 		}
@@ -535,15 +591,22 @@ func TestNativeResourceDeletionCancellationBounds(t *testing.T) {
 		for _, mode := range []string{"pre-cancel", "delete-cancel"} {
 			t.Run(item.name+"/"+mode, func(t *testing.T) {
 				f := newDeletionFixture(t, item, mode)
-				ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
+				go func() {
+					select {
+					case <-f.cancelHit:
+						cancel()
+					case <-ctx.Done():
+					}
+				}()
 				start := time.Now()
 				code, out := f.run(ctx, item.args(), true)
 				want := 0
 				if mode == "delete-cancel" {
 					want = 1
 				}
-				if code == 0 || out.OK || f.deletes != want || time.Since(start) > 3*time.Second {
+				if code == 0 || out.OK || f.deletes != want || time.Since(start) > 5*time.Second {
 					t.Fatalf("exit=%d ok=%v writes=%d duration=%v", code, out.OK, f.deletes, time.Since(start))
 				}
 			})

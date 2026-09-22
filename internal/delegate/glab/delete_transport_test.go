@@ -14,10 +14,11 @@ import (
 	"time"
 )
 
-// TestPinnedOfficialGlabDeleteTransportTLS is a development safety gate for
-// deletion. Only local synthetic resources and a runtime sentinel are used.
-// A redirect must not cause a second DELETE, even on the selected authority.
-func TestPinnedOfficialGlabDeleteTransportTLS(t *testing.T) {
+// TestPinnedOfficialGlabDeleteRedirectDiagnosticTLS characterizes the UNSAFE
+// pinned dependency, not the product-native deletion path. Diagnostic PASS
+// records that delegated DELETE still replays to a sibling on 307/308. Native
+// feature tests require the opposite. No real resources or credentials exist.
+func TestPinnedOfficialGlabDeleteRedirectDiagnosticTLS(t *testing.T) {
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
@@ -74,14 +75,12 @@ func TestPinnedOfficialGlabDeleteTransportTLS(t *testing.T) {
 			mu.Lock()
 			got := append([]string(nil), requests...)
 			mu.Unlock()
-			if len(got) != 1 || got[0] != "DELETE /api/v4/projects/101/issues/42" {
-				t.Fatalf("single-target deletion violated: requests=%q error=%v", got, requestErr)
+			want := 1
+			if status != http.StatusNoContent {
+				want = 2
 			}
-			if status == http.StatusNoContent && requestErr != nil {
-				t.Fatal(requestErr)
-			}
-			if status != http.StatusNoContent && requestErr == nil {
-				t.Fatal("redirect reported success")
+			if len(got) != want || got[0] != "DELETE /api/v4/projects/101/issues/42" || want == 2 && got[1] != "DELETE /api/v4/projects/999/issues/43" || requestErr != nil {
+				t.Fatalf("pinned delegated diagnostic changed: requests=%q error=%v", got, requestErr)
 			}
 		})
 	}

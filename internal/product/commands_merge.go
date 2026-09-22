@@ -94,6 +94,9 @@ func validateParsedCommand(parsed Parsed) error {
 	if isVariableDefinition(parsed.Definition) {
 		return validateVariableParsed(parsed)
 	}
+	if isResourceDeletion(parsed.Definition.Path) {
+		return validateDeletionParsed(parsed)
+	}
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}

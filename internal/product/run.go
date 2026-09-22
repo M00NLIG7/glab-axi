@@ -230,6 +230,9 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	if isVariableDefinition(parsed.Definition) {
 		return executeVariables(ctx, target, parsed, meta, deps)
 	}
+	if isResourceDeletion(parsed.Definition.Path) {
+		return executeResourceDeletion(ctx, parsed, deps, meta)
+	}
 	switch path {
 	case "auth status":
 		version, err := client.AuthStatus(ctx, target.Host)

@@ -41,11 +41,11 @@ var deniedNested = map[string]map[string]string{
 	},
 	"issue": {
 		"create": "issue creation", "update": "unguarded issue editing", "comment": "commenting",
-		"note": "commenting", "close": "closing", "reopen": "reopening", "delete": "deletion",
+		"note": "commenting", "close": "closing", "reopen": "reopening",
 	},
 	"pipeline": {
 		"run": "pipeline triggering", "trigger": "pipeline triggering", "retry": "pipeline retry",
-		"cancel": "pipeline cancellation", "delete": "pipeline deletion",
+		"cancel": "pipeline cancellation",
 	},
 	"repo": {
 		"create": "repository creation", "edit": "repository editing", "update": "repository editing",
@@ -53,7 +53,7 @@ var deniedNested = map[string]map[string]string{
 	},
 	"release": {
 		"create": "release creation", "edit": "release editing", "update": "release editing",
-		"delete": "release deletion", "upload": "release asset mutation",
+		"upload": "release asset mutation",
 	},
 	"label": {
 		"create": "label creation", "edit": "label editing", "update": "label editing", "delete": "label deletion",
