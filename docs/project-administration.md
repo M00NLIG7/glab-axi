@@ -8,14 +8,28 @@ change. `--allow-project-admin` records that opt-in; it does not obtain approval
 
 The closed consumer contract is [`contracts/repo-admin/v1.json`](../contracts/repo-admin/v1.json).
 It pins the reference revision, GitLab REST v4 routes and field evidence from
-GitLab v19.0.0, and official glab 1.112.0. This is a field contract, not a claim
-that every server version or permission level supplies the required evidence.
+GitLab v19.0.0, and the explicit product-native boundary. This is a field
+contract, not a claim that every server version or permission level supplies
+the required evidence.
 Missing or unknown required settings fail closed. Native `glab-axi/v1` is
 unchanged; both product executable names accept the new operations.
 
+`--auth-source native` is required for these writes and for the administration
+snapshot read. It reuses existing native environment/keyring resolution and
+configured host/API/web mapping. Native and official-glab accounts may differ;
+there is no credential export, profile parsing, fallback or new store. One
+client pins one credential and authority for all preflights, mutation and
+reconciliation. All redirects are refused before a second request, including
+same-origin cross-path mutation replay. Ordinary `repo view` remains delegated
+by default; native selection there is restricted to `--admin-snapshot`.
+
+Windows shipped-binary persisted-native-config and self-managed authority
+mapping remain unproven. These commands do not establish complete Windows
+support or change its permission/authentication model.
+
 ## Explicit destinations and identities
 
-All writes require `--hostname`, `-R`, `--expected-user-id`,
+All writes require `--auth-source native`, `--hostname`, `-R`, `--expected-user-id`,
 `--expected-username`, `--namespace-id`, `--namespace-kind user|group`, and
 `--allow-project-admin`. There is no account, host, owner or namespace fallback.
 A namespace ID is **not** a user ID. A personal namespace must exactly match the
@@ -25,18 +39,19 @@ For create/edit, `-R namespace/project` is the destination. For fork, `-R` is
 the source; both `--expected-source-id` and `--destination namespace/project`
 are required. Source and destination must differ and are on the same explicit
 host. Returned project ID, full path, root-path HTTPS URL and namespace must
-match. No fuzzy namespace search or paginated destination inference occurs.
+match the configured native web authority, including any configured web prefix.
+No fuzzy namespace search or paginated destination inference occurs.
 
 The effective account (`GET /user`) and exact namespace (`GET /namespaces/:id`)
 are checked twice. Project edits and fork sources have adjacent identity and
-settings rechecks. Creation/fork destinations must return a framed HTTP 404 in
-two exact-path reads before the POST. A permission error, unframed “not found”,
+settings rechecks. Creation/fork destinations must return HTTP 404 in two
+exact-path reads before the POST. A permission error, an untrusted error body,
 existing project, or ambiguity never selects a different destination.
 
 ## Create
 
 ```text
-gl-axi repo create -R team/sub/project --hostname gitlab.example.invalid \
+gl-axi repo create --auth-source native -R team/sub/project --hostname gitlab.example.invalid \
   --namespace-id 21 --namespace-kind group \
   --expected-user-id 7 --expected-username tester \
   --visibility private --allow-project-admin
@@ -63,7 +78,7 @@ No branch, CI, permission, or account settings are configured.
 Obtain read-only prestate with:
 
 ```text
-gl-axi repo view -R team/sub/project --hostname gitlab.example.invalid \
+gl-axi repo view --auth-source native -R team/sub/project --hostname gitlab.example.invalid \
   --admin-snapshot --format json
 ```
 
@@ -77,7 +92,7 @@ prevents an edit. Provider null descriptions/default branches normalize to
 empty strings, and null `allow_merge_on_skipped_pipeline` normalizes to false.
 
 ```text
-gl-axi repo edit -R team/sub/project --hostname gitlab.example.invalid \
+gl-axi repo edit --auth-source native -R team/sub/project --hostname gitlab.example.invalid \
   --namespace-id 21 --namespace-kind group \
   --expected-user-id 7 --expected-username tester \
   --expected-state-file /absolute/private/prestate.json \
@@ -100,16 +115,17 @@ match in the canonical postcondition read. No repair PUT follows a mismatch.
 
 GitLab does **not** enforce an expected project revision. Neither repeated
 reads nor `--accept-non-atomic` eliminate the race after the last preflight.
-A concurrent edit can be overwritten, and account/profile/namespace identity
-can change between child processes. These residuals are disclosed in every
-receipt. Postcondition success proves observed desired state, not exclusive
+A concurrent edit can be overwritten, and provider-side project/namespace
+state or account permissions can change after a check. The selected native
+credential stays fixed throughout the operation. These residuals are disclosed
+in every receipt. Postcondition success proves observed desired state, not exclusive
 attribution or a lock. A failed postcondition can occur after a consequential
 change was already applied. Do not blindly retry.
 
 ## Asynchronous fork
 
 ```text
-gl-axi repo fork -R upstream/project --hostname gitlab.example.invalid \
+gl-axi repo fork --auth-source native -R upstream/project --hostname gitlab.example.invalid \
   --expected-source-id 101 --destination team/sub/fork \
   --namespace-id 21 --namespace-kind group \
   --expected-user-id 7 --expected-username tester \
@@ -139,7 +155,8 @@ cancellation after acceptance returns a cancellation receipt, not a claim that
 the provider stopped. A polling deadline returns the last observed pending
 state. Failed imports are exit 8; ambiguity is exit 6.
 
-Later read-only `repo view --admin-snapshot` reports `import_status` and, when
+Later read-only `repo view --admin-snapshot --auth-source native` reports
+`import_status` and, when
 present, validated `forked_from_project`. Match the recorded destination ID
 and exact source ID/path/URL before treating `finished` as this fork's
 completion. Do not issue a second fork as a status check.
@@ -163,8 +180,12 @@ merge protection changes, deletion, transfer, secrets, user/group permissions,
 and CI mutation are not accepted. Local source/push/clone parity remains a
 separate workflow, not an atomic side effect hidden in these receipts.
 
-Tests use synthetic TLS servers and isolated CLI processes only. Run
-`go test ./...`, `go test -race ./...`, and `go vet ./...`. The official-package
-CI job additionally executes `TestPinnedOfficialGlabRepoAdminTLS` against the
-checksum-pinned glab binary. No production acceptance or installation is
-implied by these tests.
+Tests use synthetic TLS servers and isolated CLI processes only. The feature
+suite covers configured API/web mappings, single-credential full-operation
+binding, required opt-in, no fallback, and native POST/PUT redirect refusal.
+The official-package CI job retains `TestPinnedOfficialGlabRepoAdminRedirectEvidence`
+as negative evidence of the unchanged dependency, not a claimed upstream fix.
+`TestRepoAdminOperationsAreNotDelegated` protects the removed unsafe routes.
+Run `go test ./...`, `go test -race ./...`, and `go vet ./...` when validation is
+authorized. No production acceptance, installation or complete Windows support
+is implied by these tests.

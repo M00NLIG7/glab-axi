@@ -7,7 +7,6 @@ import (
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
-	"gl-axi/internal/safeurl"
 )
 
 func fetchList[T any](ctx context.Context, client delegateClient, request glab.Request, limit int, normalize func([]byte) ([]T, bool, error)) ([]T, listState, error) {
@@ -256,12 +255,8 @@ func executeReleaseView(ctx context.Context, client delegateClient, target Targe
 	return commandOutput{data: map[string]any{"release": release}, meta: meta}, err
 }
 
-func executeRepoView(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
-	op := glab.OpRepoView
-	if parsed.Booleans["--admin-snapshot"] {
-		op = glab.OpAdminProject
-	}
-	response, err := client.Do(ctx, glab.Request{Operation: op, Host: target.Host, Repo: target.Repo})
+func executeRepoView(ctx context.Context, client delegateClient, target Target, _ Parsed, meta uxv1.Meta) (commandOutput, error) {
+	response, err := client.Do(ctx, glab.Request{Operation: glab.OpRepoView, Host: target.Host, Repo: target.Repo})
 	meta.UpstreamVersion = response.UpstreamVersion
 	if err != nil {
 		return commandOutput{meta: meta}, err
@@ -271,31 +266,7 @@ func executeRepoView(ctx context.Context, client delegateClient, target Target, 
 	if truncated {
 		meta.Reason = "field_limit"
 	}
-	data := map[string]any{"repository": repository}
-	if err == nil && parsed.Booleans["--admin-snapshot"] {
-		var project adminProviderProject
-		project, err = decodeAdminProject(response.Body, false)
-		if err == nil {
-			s := adminSession{target: target}
-			err = s.bind(project, target.Repo, 0, nil)
-		}
-		if err == nil {
-			data["admin_snapshot"] = project.adminProject
-			switch project.ImportStatus {
-			case "none", "scheduled", "started", "finished", "failed":
-				data["import_status"] = project.ImportStatus
-			default:
-				data["import_status"] = "unknown"
-			}
-			if from := project.ForkedFrom; from != nil {
-				if from.ID < 1 || safeurl.ValidateProject(from.Path) != nil || from.URL != canonicalProjectURL(target.Host, from.Path) {
-					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeSafety, "project snapshot contains invalid fork source identity")
-				}
-				data["forked_from_project"] = from
-			}
-		}
-	}
-	return commandOutput{data: data, meta: meta}, err
+	return commandOutput{data: map[string]any{"repository": repository}, meta: meta}, err
 }
 
 func executeDashboard(ctx context.Context, client delegateClient, target Target, _ Parsed, meta uxv1.Meta) (commandOutput, error) {

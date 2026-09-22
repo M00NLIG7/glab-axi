@@ -124,15 +124,17 @@ remain explicit; the increment does not claim full issue parity or authorize
 collateral content/quick-action effects.
 
 Project administration requires explicit account, namespace, host and project
-identities, consequential opt-in, and explicit visibility for creation/fork.
+identities, `--auth-source native`, consequential opt-in, and explicit visibility
+for creation/fork. One native credential and configured API/web authority bind
+the entire sequence. There is no official child/profile fallback or redirect.
 Edits require private expected prestate plus non-atomic acknowledgement.
 Identity/settings/absence are rechecked immediately before a single mutation;
 a bounded canonical read verifies postconditions. Merge-policy fields are never
 sent. Creation/fork cannot silently choose a personal namespace or public
 visibility. Asynchronous acceptance is not completion. Pending/timeout receipts
 are incomplete, and uncertainty never retries or cleans up a destination.
-GitLab has no atomic project revision or cross-process account binding, so
-residual races remain explicitly disclosed. See
+GitLab has no atomic project revision, so provider-side residual races remain
+explicitly disclosed even with one credential pinned for the full operation. See
 [project administration](project-administration.md) and the pinned consumer
 fixture under `contracts/repo-admin/`.
 

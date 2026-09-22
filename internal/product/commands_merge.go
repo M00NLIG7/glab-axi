@@ -106,9 +106,13 @@ func validateParsedCommand(parsed Parsed) error {
 	if path == "job artifacts" || path == "job download" || path == "release download" {
 		return validateDownloadParsed(parsed)
 	}
-	if path == "repo view" && parsed.Booleans["--admin-snapshot"] {
-		if parsed.Values["--repo"] == "" || parsed.Values["--hostname"] == "" || len(parsed.Positionals) != 0 {
-			return uxv1.NewError(uxv1.CodeValidation, "admin snapshot requires explicit --repo and --hostname, without a positional selector")
+	if path == "repo view" {
+		if parsed.Booleans["--admin-snapshot"] {
+			if parsed.Values["--auth-source"] != "native" || parsed.Values["--repo"] == "" || parsed.Values["--hostname"] == "" || len(parsed.Positionals) != 0 {
+				return uxv1.NewError(uxv1.CodeValidation, "admin snapshot requires --auth-source native, explicit --repo and --hostname, without a positional selector")
+			}
+		} else if parsed.Values["--auth-source"] != "" {
+			return uxv1.NewError(uxv1.CodeValidation, "native repository reads require --admin-snapshot")
 		}
 	}
 	if path == "repo create" || path == "repo edit" || path == "repo fork" {

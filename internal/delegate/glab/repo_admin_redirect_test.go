@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,9 +17,10 @@ import (
 	"time"
 )
 
-// This is a fail-closed regression, not permission to follow redirects. Both
-// origins, certificate roots and credentials are synthetic and task-local.
-func TestPinnedOfficialGlabRepoAdminRedirectBoundary(t *testing.T) {
+// This pins negative evidence of the unchanged delegated dependency, NOT a
+// production route or an upstream fix. Native feature tests require zero
+// redirected requests. Both origins and credentials here are synthetic.
+func TestPinnedOfficialGlabRepoAdminRedirectEvidence(t *testing.T) {
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")
@@ -29,15 +31,15 @@ func TestPinnedOfficialGlabRepoAdminRedirectBoundary(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name         string
-		op           Operation
+		op           string
 		method, path string
 		status       int
 		foreign      bool
 	}{
-		{"create-post-302-cross-origin", OpAdminCreate, "POST", "/api/v4/projects", 302, true},
-		{"edit-put-301-other-project", OpAdminEdit, "PUT", "/api/v4/projects/101", 301, false},
-		{"fork-post-307-cross-origin", OpAdminFork, "POST", "/api/v4/projects/101/fork", 307, true},
-		{"create-post-308-other-project", OpAdminCreate, "POST", "/api/v4/projects", 308, false},
+		{"create-post-302-cross-origin", "create", "POST", "/api/v4/projects", 302, true},
+		{"edit-put-301-other-project", "edit", "PUT", "/api/v4/projects/101", 301, false},
+		{"fork-post-307-cross-origin", "fork", "POST", "/api/v4/projects/101/fork", 307, true},
+		{"create-post-308-other-project", "create", "POST", "/api/v4/projects", 308, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sourceHost, otherHost := "gitlab.selected.example", "gitlab.unapproved.example"
@@ -98,22 +100,35 @@ func TestPinnedOfficialGlabRepoAdminRedirectBoundary(t *testing.T) {
 			}
 			payload := filepath.Join(home, "input.json")
 			input := `{"namespace_id":21,"path":"project","name":"project","visibility":"private"}`
-			if test.op == OpAdminEdit {
+			if test.op == "edit" {
 				input = `{"description":"new"}`
-			} else if test.op == OpAdminCreate {
+			} else if test.op == "create" {
 				input = `{"namespace_id":21,"path":"project","name":"project","visibility":"private","initialize_with_readme":false}`
 			}
 			if err := os.WriteFile(payload, []byte(input), 0600); err != nil {
 				t.Fatal(err)
 			}
-			client := NewClient(ClientConfig{Path: binary, Dir: home, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + config, "GITLAB_TOKEN=" + secret, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caPath, "PATH=/usr/bin:/bin"}})
+			fixtureEnv := []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + config, "GITLAB_TOKEN=" + secret, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caPath, "PATH=/usr/bin:/bin"}
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			_, requestErr := client.Do(ctx, Request{Operation: test.op, Host: sourceHost, Repo: "team/sub/project", ID: 101, InputFile: payload})
+			client := NewClient(ClientConfig{Path: binary, Dir: home, Env: fixtureEnv})
+			if _, err := client.Version(ctx); err != nil {
+				t.Fatal(err)
+			}
+			// Test-only direct execution retains exact historical evidence without
+			// reopening these methods in the production delegated allowlist.
+			cmd := exec.CommandContext(ctx, binary, "api", "--method", test.method, "--hostname", sourceHost, strings.TrimPrefix(test.path, "/api/v4/"), "--input", payload, "--header", "Content-Type: application/json")
+			cmd.Dir, cmd.Env = home, sanitizedEnv(fixtureEnv, sourceHost, false)
+			requestErr := cmd.Run()
 			mu.Lock()
 			defer mu.Unlock()
-			if sourceRequests != 1 || unapprovedRequests != 0 {
-				t.Fatalf("redirect boundary violated: initial=%d unapproved=%d redirected_method=%s synthetic_token_forwarded=%t cross_origin=%t adapter_error=%v", sourceRequests, unapprovedRequests, unapprovedMethod, tokenForwarded, test.foreign, requestErr)
+			wantForward := test.status == 301 || test.status == 302
+			wantRequests := 0
+			if wantForward {
+				wantRequests = 1
+			}
+			if sourceRequests != 1 || unapprovedRequests != wantRequests || tokenForwarded != wantForward || wantForward && (unapprovedMethod != "GET" || requestErr != nil) {
+				t.Fatalf("pinned redirect evidence changed: initial=%d unapproved=%d redirected_method=%s synthetic_token_forwarded=%t cross_origin=%t command_error=%v", sourceRequests, unapprovedRequests, unapprovedMethod, tokenForwarded, test.foreign, requestErr)
 			}
 		})
 	}

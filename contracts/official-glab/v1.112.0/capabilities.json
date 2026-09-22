@@ -66,39 +66,6 @@
       "input_policy": "HIERARCHY widget only; parent plus paginated authorized direct children; no recursive or issue-link equivalence"
     },
     {
-      "name": "repo-admin-user",
-      "kind": "fixed-api-read-json-object",
-      "argv": ["api", "--method", "GET", "--hostname", "{host}", "user"]
-    },
-    {
-      "name": "repo-admin-namespace",
-      "kind": "fixed-api-read-json-object",
-      "argv": ["api", "--method", "GET", "--hostname", "{host}", "namespaces/{id}"]
-    },
-    {
-      "name": "repo-admin-project",
-      "kind": "fixed-api-read-json-object",
-      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}"]
-    },
-    {
-      "name": "repo-admin-create",
-      "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects", "--input", "{input_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "Private product-built JSON: namespace_id, path, name, visibility, initialize_with_readme=false and optional description; no merge policy, import or template fields. One attempt only."
-    },
-    {
-      "name": "repo-admin-edit",
-      "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "PUT", "--hostname", "{host}", "projects/{id}", "--input", "{input_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "Private product-built JSON: description, visibility, default_branch, issues_access_level, wiki_access_level only. Explicit account, namespace, prestate and non-atomic opt-in. One attempt only."
-    },
-    {
-      "name": "repo-admin-fork",
-      "kind": "fixed-api-write-json-object",
-      "argv": ["api", "--method", "POST", "--hostname", "{host}", "projects/{id}/fork", "--input", "{input_file}", "--header", "Content-Type: application/json"],
-      "input_policy": "Private product-built JSON: namespace_id, path, name, visibility and optional description only. Asynchronous readiness comes from bounded canonical reads, never from acceptance. One attempt only."
-    },
-    {
       "name": "issue-list",
       "kind": "read-json-page",
       "argv": ["issue", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}", "-R", "{repo}"]
@@ -282,7 +249,7 @@
     "merge request label or edit mutation",
     "label-resource mutation",
     "close, reopen, or delete",
-    "repository mutation outside guarded project create/edit/fork",
+    "repository mutation",
     "release mutation",
     "pipeline trigger, retry, cancel, or delete",
     "secret or variable operations (require the separate explicit product-native contract)"

@@ -8,11 +8,10 @@ Agent Skill use the `gl-axi` identity. The repository remains
 Two deliberately separate backends share one executable:
 
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
-  reads, exact-identity issue-edit validation, two MR write contracts, guarded
-  project create/edit/fork,
+  reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
   to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, typed issue writes,
-  [guarded project CI variables](docs/ci-variables.md), and
+  guarded project create/edit/fork, [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
   with `--auth-source native`, without an official-profile fallback; and
@@ -217,7 +216,9 @@ self-managed mapping remains unproven. See
 [temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
 Guarded `repo create`, `repo edit`, and `repo fork` require explicit account,
-namespace and host/project identities plus `--allow-project-admin`. Visibility
+namespace and host/project identities plus `--auth-source native` and
+`--allow-project-admin`. The entire operation uses one native credential and
+configured API/web authority, never the opaque official profile. Visibility
 must be explicit for creation/fork; edits require private expected prestate and
 `--accept-non-atomic`. Fork acceptance is not readiness. Each operation attempts
 at most one mutation and reports bounded postcondition evidence and residual

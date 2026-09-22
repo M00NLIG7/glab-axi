@@ -5,18 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"gl-axi/internal/contract/uxv1"
-	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
 	"gl-axi/internal/privatefile"
+	"gl-axi/internal/productnative"
 	"gl-axi/internal/safeurl"
 )
 
-const repoAdminRace = "GitLab provides no atomic expected project revision or account binding; checks detect observed drift but cannot eliminate races. Never blindly retry a mutation."
+const repoAdminRace = "GitLab provides no atomic expected project revision; one native credential is pinned for this operation, but identity/settings checks cannot eliminate provider-side races. Never blindly retry a mutation."
 
 // These are deliberately not GitHub owner aliases. A GitLab personal namespace
 // ID is not a user ID, and a subgroup is not its parent group.
@@ -79,10 +81,10 @@ type adminOutput struct {
 }
 
 type adminSession struct {
-	client delegateClient
-	target Target
-	meta   uxv1.Meta
-	bytes  int
+	client    *productnative.Client
+	target    Target
+	authority safeurl.Authority
+	meta      uxv1.Meta
 }
 
 func repoAdminFlags(action string) []FlagDefinition {
@@ -273,22 +275,11 @@ func decodeAdminProject(body []byte, closed bool) (adminProviderProject, error) 
 	return project, nil
 }
 
-func (s *adminSession) do(ctx context.Context, op glab.Operation, repo string, id int64, input string) (glab.Response, error) {
-	if err := ctx.Err(); err != nil {
-		return glab.Response{}, issueEditValidationContextError(err)
-	}
-	r, err := s.client.Do(ctx, glab.Request{Operation: op, Host: s.target.Host, Repo: repo, ID: id, InputFile: input})
-	if r.UpstreamVersion != "" {
-		s.meta.UpstreamVersion = r.UpstreamVersion
-	}
-	s.bytes += len(r.Body)
-	if len(r.Body) > limits.MaxJSONPageBytes || s.bytes > limits.MaxOperationBytes {
-		return r, uxv1.NewError(uxv1.CodeUpstream, "project administration response exceeded the byte budget")
-	}
-	return r, err
+func (s *adminSession) get(ctx context.Context, path string) (productnative.Response, error) {
+	return s.client.Do(ctx, productnative.Request{Method: http.MethodGet, Path: path, MaxBytes: limits.MaxJSONPageBytes})
 }
 func (s *adminSession) identities(ctx context.Context, account adminAccount, ns adminNamespace) error {
-	r, err := s.do(ctx, glab.OpAdminUser, "", 0, "")
+	r, err := s.get(ctx, "user")
 	if err != nil {
 		return err
 	}
@@ -299,7 +290,7 @@ func (s *adminSession) identities(ctx context.Context, account adminAccount, ns 
 	if user != account {
 		return uxv1.NewError(uxv1.CodeSafety, "authenticated account does not match the explicit account")
 	}
-	r, err = s.do(ctx, glab.OpAdminNamespace, "", ns.ID, "")
+	r, err = s.get(ctx, "namespaces/"+strconv.FormatInt(ns.ID, 10))
 	if err != nil {
 		return err
 	}
@@ -313,7 +304,7 @@ func (s *adminSession) identities(ctx context.Context, account adminAccount, ns 
 	return nil
 }
 func (s *adminSession) project(ctx context.Context, path string, id int64, ns *adminNamespace) (adminProviderProject, error) {
-	r, err := s.do(ctx, glab.OpAdminProject, path, 0, "")
+	r, err := s.get(ctx, "projects/"+url.PathEscape(path))
 	if err != nil {
 		return adminProviderProject{}, err
 	}
@@ -324,13 +315,13 @@ func (s *adminSession) project(ctx context.Context, path string, id int64, ns *a
 	return p, s.bind(p, path, id, ns)
 }
 func (s *adminSession) bind(p adminProviderProject, path string, id int64, ns *adminNamespace) error {
-	if p.Path != path || p.URL != canonicalProjectURL(s.target.Host, path) || id > 0 && p.ID != id || ns != nil && p.Namespace != *ns || p.Namespace.FullPath != path[:strings.LastIndex(path, "/")] {
+	if p.Path != path || p.URL != s.authority.ExpectedProjectURL(path) || id > 0 && p.ID != id || ns != nil && p.Namespace != *ns || p.Namespace.FullPath != path[:strings.LastIndex(path, "/")] {
 		return uxv1.NewError(uxv1.CodeSafety, "project identity does not match the explicit target")
 	}
 	return nil
 }
 func (s *adminSession) absent(ctx context.Context, path string) error {
-	_, err := s.do(ctx, glab.OpAdminProject, path, 0, "")
+	_, err := s.get(ctx, "projects/"+url.PathEscape(path))
 	if err != nil && uxv1.AsError(err).StatusCode == 404 {
 		return nil
 	}
@@ -349,8 +340,9 @@ func (s *adminSession) failure(r adminReceipt, code uxv1.Code, message string) (
 	return s.output(r), err
 }
 
-func executeRepoAdmin(ctx context.Context, client delegateClient, target Target, p Parsed, meta uxv1.Meta) (commandOutput, error) {
-	s := adminSession{client: client, target: target, meta: meta}
+func executeRepoAdmin(ctx context.Context, p Parsed, deps Dependencies, meta uxv1.Meta) (commandOutput, error) {
+	target := Target{Host: p.Values["--hostname"], Repo: p.Values["--repo"]}
+	s := adminSession{target: target, meta: meta}
 	action := p.Definition.Path[1]
 	dest := adminDestination(p)
 	nsID, _ := adminID(p.Values["--namespace-id"])
@@ -376,6 +368,22 @@ func executeRepoAdmin(ctx context.Context, client delegateClient, target Target,
 		if err != nil {
 			return s.output(r), err
 		}
+		if expected.Path != dest || expected.Namespace != r.Namespace {
+			return s.output(r), uxv1.NewError(uxv1.CodeSafety, "expected project identity does not match the explicit target")
+		}
+	}
+	// Select one existing native credential only after syntax and private input
+	// validation. Every read, mutation and reconciliation uses this same client.
+	client, openErr := openNative(ctx, p, deps)
+	if openErr != nil {
+		return s.output(r), openErr
+	}
+	defer client.Close()
+	host := client.Host()
+	s.client, s.authority = client, host.Authority
+	s.target.Host, target.Host, r.Host, s.meta.Host = host.Name, host.Name, host.Name, host.Name
+	s.meta.Backend, s.meta.UpstreamVersion = "native", ""
+	if action == "edit" {
 		if err := s.bind(expected, dest, expected.ID, &r.Namespace); err != nil {
 			return s.output(r), err
 		}
@@ -413,9 +421,9 @@ func executeRepoAdmin(ctx context.Context, client delegateClient, target Target,
 		payload["visibility"] = v
 		desired.Visibility = v
 	}
-	op := glab.OpAdminCreate
+	method, route := http.MethodPost, "projects"
 	if action == "edit" {
-		op = glab.OpAdminEdit
+		method, route = http.MethodPut, "projects/"+strconv.FormatInt(before.ID, 10)
 		for _, setting := range []struct {
 			flag, key string
 			value     *string
@@ -433,16 +441,15 @@ func executeRepoAdmin(ctx context.Context, client delegateClient, target Target,
 		name := dest[strings.LastIndex(dest, "/")+1:]
 		payload["namespace_id"], payload["path"], payload["name"] = nsID, name, name
 		if action == "fork" {
-			op = glab.OpAdminFork
+			route = "projects/" + strconv.FormatInt(before.ID, 10) + "/fork"
 		} else {
 			payload["initialize_with_readme"] = false
 		}
 	}
-	input, cleanup, err := writePrivateJSON(payload)
+	input, err := json.Marshal(payload)
 	if err != nil {
-		return s.output(r), err
+		return s.output(r), uxv1.NewError(uxv1.CodeInternal, "cannot encode project settings")
 	}
-	defer cleanup()
 	// No namespace search, fuzzy match, environment owner default or pagination.
 	if err := s.identities(preflight, r.Account, r.Namespace); err != nil {
 		return s.output(r), err
@@ -474,7 +481,7 @@ func executeRepoAdmin(ctx context.Context, client delegateClient, target Target,
 	r.MutationAttempted = true
 	r.Outcome = "ambiguous"
 	writeCtx, writeCancel := context.WithTimeout(ctx, 10*time.Second)
-	response, writeErr := s.do(writeCtx, op, target.Repo, before.ID, input)
+	response, writeErr := client.Do(writeCtx, productnative.Request{Method: method, Path: route, Body: input, Headers: http.Header{"Content-Type": {"application/json"}}, MaxBytes: limits.MaxJSONPageBytes})
 	writeCancel()
 	// A mutation response alone is never a postcondition. An invalid successful
 	// identity is never laundered into success by a later path lookup.
@@ -492,7 +499,7 @@ func executeRepoAdmin(ctx context.Context, client delegateClient, target Target,
 		identityInvalid = err != nil
 		if action == "fork" && returned.ForkedFrom != nil {
 			from := returned.ForkedFrom
-			identityInvalid = identityInvalid || from.ID != r.SourceID || from.Path != target.Repo || from.URL != canonicalProjectURL(target.Host, target.Repo)
+			identityInvalid = identityInvalid || from.ID != r.SourceID || from.Path != target.Repo || from.URL != s.authority.ExpectedProjectURL(target.Repo)
 		}
 	}
 	postCtx, postCancel := context.WithTimeout(ctx, 20*time.Second)
@@ -541,7 +548,7 @@ func (s *adminSession) observeFork(ctx context.Context, p Parsed, r adminReceipt
 		r.Project = &project.adminProject
 		r.ImportStatus = project.ImportStatus
 		from := project.ForkedFrom
-		if from != nil && (from.ID != r.SourceID || from.Path != s.target.Repo || from.URL != canonicalProjectURL(s.target.Host, s.target.Repo)) {
+		if from != nil && (from.ID != r.SourceID || from.Path != s.target.Repo || from.URL != s.authority.ExpectedProjectURL(s.target.Repo)) {
 			r.Outcome = "ambiguous"
 			return s.failure(r, uxv1.CodeAmbiguousCreate, "fork source identity did not match")
 		}

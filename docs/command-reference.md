@@ -377,38 +377,38 @@ Backend: `official-glab`. Schema: `schema/ux-v1/release-view.schema.json`.
 ## `repo create`
 
 ```text
-gl-axi repo create -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--format toon|json]
+gl-axi repo create --auth-source native -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--format toon|json]
 ```
 
 Create one empty project in an explicit namespace.
 
 Provider metadata only: no source, template, clone, push, or merge-policy changes. Explicit account, namespace and visibility are required. See docs/project-administration.md for guards and residual races.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/repo-admin.schema.json`.
 
 ## `repo edit`
 
 ```text
-gl-axi repo edit -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --expected-state-file FILE --allow-project-admin --accept-non-atomic [setting flags] [--format toon|json]
+gl-axi repo edit --auth-source native -R NAMESPACE/PROJECT --hostname HOST --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --expected-state-file FILE --allow-project-admin --accept-non-atomic [setting flags] [--format toon|json]
 ```
 
 Edit exact project settings with caller prestate and drift checks.
 
 Requires a private closed expected-state snapshot and explicit non-atomic acknowledgement. Supports description, visibility, default branch and GitLab issues/wiki access levels only. Never changes merge protections. See docs/project-administration.md.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/repo-admin.schema.json`.
 
 ## `repo fork`
 
 ```text
-gl-axi repo fork -R SOURCE/PROJECT --hostname HOST --expected-source-id ID --destination NAMESPACE/PROJECT --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--wait-seconds 0..20] [--format toon|json]
+gl-axi repo fork --auth-source native -R SOURCE/PROJECT --hostname HOST --expected-source-id ID --destination NAMESPACE/PROJECT --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--wait-seconds 0..20] [--format toon|json]
 ```
 
 Request one asynchronous project fork into an explicit namespace.
 
 Provider-only fork. Accepted/in-progress is not ready. Optional polling is bounded; no clone, remote or push effects. Never retry an ambiguous mutation blindly. See docs/project-administration.md.
 
-Backend: `official-glab`. Schema: `schema/ux-v1/repo-admin.schema.json`.
+Backend: `native`. Schema: `schema/ux-v1/repo-admin.schema.json`.
 
 ## `repo list`
 
@@ -423,7 +423,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/repo-list.schema.json`.
 ## `repo view`
 
 ```text
-gl-axi repo view [namespace/project] [--admin-snapshot] [global flags]
+gl-axi repo view [namespace/project] [--admin-snapshot --auth-source native] [global flags]
 ```
 
 View a project/repository.

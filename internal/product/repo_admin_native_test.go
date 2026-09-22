@@ -197,7 +197,7 @@ func (f *adminNativeFixture) args(t *testing.T) []string {
 	if f.action == "edit" {
 		args = adminEditArgs(t, f.before, "--description-file", adminTestFile(t, []byte("new")))
 	}
-	return append(args, "--auth-source", "native")
+	return args
 }
 func (f *adminNativeFixture) deps(t *testing.T) (*bytes.Buffer, *bytes.Buffer, Dependencies) {
 	t.Helper()
@@ -499,9 +499,17 @@ func TestRepoAdminNativeExecutableAliasesTLS(t *testing.T) {
 			if output, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v %s", err, output)
 			}
-			for _, action := range []string{"create", "edit", "fork"} {
-				t.Run(action, func(t *testing.T) {
+			for _, scenario := range []struct {
+				action   string
+				redirect int
+			}{{"create", 0}, {"edit", 0}, {"fork", 0}, {"create", 302}, {"edit", 301}, {"fork", 307}} {
+				action, name := scenario.action, scenario.action
+				if scenario.redirect != 0 {
+					name += "/redirect"
+				}
+				t.Run(name, func(t *testing.T) {
 					f := newAdminNativeFixture(t, action)
+					f.redirectCode, f.crossOrigin = scenario.redirect, action != "edit"
 					_, _, deps := f.deps(t)
 					cfg, err := config.Load(deps.Runtime.ConfigPath)
 					if err != nil {
@@ -523,12 +531,20 @@ func TestRepoAdminNativeExecutableAliasesTLS(t *testing.T) {
 					cmd.Env = []string{"PATH=" + home + ":/usr/bin:/bin", "HOME=" + home, "GL_AXI_CONFIG=" + deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + f.token, "GL_AXI_NATIVE_CHILD_MARKER=" + marker}
 					var stdout, stderr bytes.Buffer
 					cmd.Stdout, cmd.Stderr = &stdout, &stderr
-					if err := cmd.Run(); err != nil {
-						t.Fatalf("run: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-					}
+					runErr := cmd.Run()
 					f.verify(t, 1, stdout.String(), stderr.String())
 					if _, err := os.Stat(marker); !os.IsNotExist(err) {
 						t.Fatal("native CLI attempted an official-glab child")
+					}
+					if scenario.redirect != 0 {
+						exit, ok := runErr.(*exec.ExitError)
+						if !ok || (exit.ExitCode() != 6 && exit.ExitCode() != 9) {
+							t.Fatalf("redirect run=%v stdout=%s", runErr, stdout.String())
+						}
+						return
+					}
+					if runErr != nil {
+						t.Fatalf("run: %v stdout=%s stderr=%s", runErr, stdout.String(), stderr.String())
 					}
 					var result struct {
 						Data adminOutput `json:"data"`

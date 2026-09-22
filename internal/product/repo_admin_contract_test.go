@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
+	"gl-axi/internal/safeurl"
 )
 
 func TestPinnedRepoAdminConsumerContractExecutes(t *testing.T) {
@@ -94,9 +96,9 @@ func TestRepoAdminSnapshotIsRoundTrippableAndBound(t *testing.T) {
 				delete(fields, "wiki_access_level")
 				body = adminTestBody(fields)
 			}
-			d := &fakeDelegate{responses: map[glab.Operation][]glab.Response{glab.OpAdminProject: {{Body: body}}}}
-			stdout, _, deps := productTestDeps(t, d)
-			code := Run(context.Background(), []string{"repo", "view", "-R", "team/sub/fork", "--hostname", "gitlab.example.invalid", "--admin-snapshot", "--format", "json"}, deps)
+			d := &fakeDelegate{responses: map[glab.Operation][]glab.Response{adminTestOpProject: {{Body: body}}}}
+			stdout, _, deps, closeFixture := adminTestNativeDeps(t, d)
+			code := adminTestRun(context.Background(), []string{"repo", "view", "-R", "team/sub/fork", "--hostname", "gitlab.example.invalid", "--admin-snapshot", "--auth-source", "native", "--format", "json"}, deps, closeFixture)
 			if scenario != "valid" {
 				if code == 0 {
 					t.Fatal("unsafe snapshot accepted")
@@ -159,7 +161,7 @@ func TestRepoAdminPersonalNamespaceIsNotUserID(t *testing.T) {
 	delegate := state.delegate()
 	original := delegate.doFunc
 	delegate.doFunc = func(ctx context.Context, r glab.Request) (glab.Response, error, bool) {
-		if r.Operation == glab.OpAdminNamespace {
+		if r.Operation == adminTestOpNamespace {
 			if r.ID != 21 {
 				t.Fatal("user ID substituted for namespace ID")
 			}
@@ -176,8 +178,8 @@ func TestRepoAdminPersonalNamespaceIsNotUserID(t *testing.T) {
 			args[i+1] = "user"
 		}
 	}
-	stdout, _, deps := productTestDeps(t, delegate)
-	if code := Run(context.Background(), args, deps); code != 0 || state.writes != 1 {
+	stdout, _, deps, closeFixture := adminTestNativeDeps(t, delegate)
+	if code := adminTestRun(context.Background(), args, deps, closeFixture); code != 0 || state.writes != 1 {
 		t.Fatalf("exit=%d %s", code, stdout.String())
 	}
 }
@@ -188,50 +190,58 @@ func TestRepoAdminAggregateBudgetStopsBeforeMutation(t *testing.T) {
 	original := delegate.doFunc
 	delegate.doFunc = func(ctx context.Context, r glab.Request) (glab.Response, error, bool) {
 		response, err, handled := original(ctx, r)
-		// Even rejected requests count against the operation's read budget.
-		response.Body = append(response.Body, []byte(strings.Repeat(" ", limits.MaxJSONPageBytes-1000))...)
+		// Four full identity responses exhaust the shared native aggregate cap.
+		response.Body = append(response.Body, []byte(strings.Repeat(" ", limits.MaxJSONPageBytes-len(response.Body)))...)
 		return response, err, handled
 	}
-	_, _, deps := productTestDeps(t, delegate)
-	if code := Run(context.Background(), adminTestArgs("create"), deps); code != 8 || state.writes != 0 {
+	_, _, deps, closeFixture := adminTestNativeDeps(t, delegate)
+	if code := adminTestRun(context.Background(), adminTestArgs("create"), deps, closeFixture); code != 9 || state.writes != 0 {
 		t.Fatalf("exit=%d writes=%d", code, state.writes)
 	}
 }
 
 func TestRepoAdminForkCancellationAndPollingCap(t *testing.T) {
-	for _, scenario := range []string{"cancel", "deadline", "read-cap"} {
+	for _, scenario := range []string{"cancel", "deadline"} {
 		t.Run(scenario, func(t *testing.T) {
 			state := adminTestForkState()
 			state.after.ImportStatus = "started"
-			delegate := state.delegate()
-			ctx := context.Background()
-			cancel := func() {}
-			if scenario == "cancel" {
-				var stop context.CancelFunc
-				ctx, stop = context.WithCancel(ctx)
-				timer := time.AfterFunc(100*time.Millisecond, stop)
-				cancel = func() { timer.Stop(); stop() }
+			parsed, err := Parse(append(adminTestArgs("fork"), "--wait-seconds", "20"))
+			if err != nil {
+				t.Fatal(err)
 			}
+			authority, err := safeurl.NewAuthority("gitlab.example.invalid", "https://gitlab.example.invalid/api/v4", "https://gitlab.example.invalid")
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := adminSession{target: Target{Host: "gitlab.example.invalid", Repo: state.before.Path}, authority: authority, meta: uxv1.Meta{Backend: "native", Complete: true}}
+			r := adminReceipt{Operation: "fork", SourceID: 101, ProjectPath: state.after.Path, Namespace: state.after.Namespace, MutationAttempted: true}
+			// Enter observation with a previously established canonical snapshot.
+			// No wall-clock race with TLS setup or preflight is needed to exercise
+			// the receipt when the caller cancels or its phase budget expires.
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
 			if scenario == "deadline" {
-				ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+				ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+				defer cancel()
 			}
-			defer cancel()
-			stdout, _, deps := productTestDeps(t, delegate)
-			start := time.Now()
-			code := Run(ctx, append(adminTestArgs("fork"), "--wait-seconds", "20"), deps)
-			want := 0
-			if scenario == "cancel" {
-				want = 130
+			out, err := s.observeFork(ctx, *parsed.Command, r, state.after)
+			if scenario == "cancel" && (err == nil || uxv1.AsError(err).Code != uxv1.CodeCanceled) {
+				t.Fatalf("cancel error=%v", err)
 			}
-			if code != want || state.writes != 1 || time.Since(start) > 12*time.Second {
-				t.Fatalf("exit=%d %s", code, stdout.String())
+			if scenario == "deadline" && err != nil {
+				t.Fatalf("deadline error=%v", err)
 			}
-			if scenario == "read-cap" && state.reads != 14 {
-				t.Fatalf("reads=%d want 4 preflight + 10 postcondition", state.reads)
-			}
-			if !strings.Contains(stdout.String(), `"outcome":"in_progress"`) || !strings.Contains(stdout.String(), `"complete":false`) {
-				t.Fatalf("lost pending receipt: %s", stdout.String())
+			if out.meta.Complete || out.data.(adminOutput).Administration.Outcome != "in_progress" {
+				t.Fatalf("lost pending receipt: %+v", out)
 			}
 		})
 	}
+	t.Run("read-cap", func(t *testing.T) {
+		state := adminTestForkState()
+		state.after.ImportStatus = "started"
+		code, receipt, _, output := runAdminTest(t, state, append(adminTestArgs("fork"), "--wait-seconds", "20"))
+		if code != 0 || state.writes != 1 || state.reads != 14 || receipt.Outcome != "in_progress" {
+			t.Fatalf("exit=%d writes=%d reads=%d output=%s", code, state.writes, state.reads, output)
+		}
+	})
 }

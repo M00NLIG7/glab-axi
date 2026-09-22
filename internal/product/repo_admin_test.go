@@ -41,7 +41,7 @@ func adminTestArgs(action string) []string {
 	if action == "fork" {
 		args = append(args, "--destination", "team/sub/fork", "--expected-source-id", "101")
 	}
-	return args
+	return append(args, "--auth-source", "native")
 }
 func adminTestFile(t *testing.T, body []byte) string {
 	t.Helper()
@@ -75,21 +75,21 @@ func (s *adminTestState) delegate() *fakeDelegate {
 		}
 		response := glab.Response{UpstreamVersion: glab.SupportedVersion}
 		switch r.Operation {
-		case glab.OpAdminUser:
+		case adminTestOpUser:
 			s.users++
 			user := adminAccount{ID: 7, Username: "tester"}
 			if s.wrongUser {
 				user.ID++
 			}
 			response.Body = adminTestBody(user)
-		case glab.OpAdminNamespace:
+		case adminTestOpNamespace:
 			s.namespaces++
 			ns := adminNamespace{ID: 21, FullPath: "team/sub", Kind: "group"}
 			if s.wrongNS {
 				ns.FullPath = "team"
 			}
 			response.Body = adminTestBody(ns)
-		case glab.OpAdminProject:
+		case adminTestOpProject:
 			s.reads++
 			if s.writes > 0 {
 				if s.readErr != nil {
@@ -111,7 +111,7 @@ func (s *adminTestState) delegate() *fakeDelegate {
 				err, _ := uxv1.NewHTTPRejection(404)
 				return response, err, true
 			}
-		case glab.OpAdminCreate, glab.OpAdminEdit, glab.OpAdminFork:
+		case adminTestOpCreate, adminTestOpEdit, adminTestOpFork:
 			s.writes++
 			response.Write = true
 			response.Body = s.writeBody
@@ -128,8 +128,8 @@ func (s *adminTestState) delegate() *fakeDelegate {
 func runAdminTest(t *testing.T, state *adminTestState, args []string) (int, adminReceipt, *fakeDelegate, string) {
 	t.Helper()
 	delegate := state.delegate()
-	stdout, _, deps := productTestDeps(t, delegate)
-	code := Run(context.Background(), args, deps)
+	stdout, _, deps, closeFixture := adminTestNativeDeps(t, delegate)
+	code := adminTestRun(context.Background(), args, deps, closeFixture)
 	var envelope struct {
 		Data  adminOutput `json:"data"`
 		Error struct {
@@ -195,9 +195,7 @@ func TestRepoAdminEditPrestateNoopDriftAndPostconditions(t *testing.T) {
 				}
 				for _, request := range delegate.requests {
 					if request.InputFile != "" {
-						if _, err := os.Stat(request.InputFile); !os.IsNotExist(err) {
-							t.Fatalf("input not cleaned up: %v", err)
-						}
+						t.Fatal("native administration exported a request file to a delegate")
 					}
 				}
 			}
@@ -409,8 +407,8 @@ func TestRepoAdminBudgetsCancellationAndNoPagination(t *testing.T) {
 		d := &fakeDelegate{doFunc: func(context.Context, glab.Request) (glab.Response, error, bool) {
 			return glab.Response{Body: []byte(strings.Repeat(" ", limits.MaxJSONPageBytes+1))}, nil, true
 		}}
-		_, _, deps := productTestDeps(t, d)
-		if Run(context.Background(), adminTestArgs("create"), deps) != 8 || len(d.requests) != 1 {
+		_, _, deps, closeFixture := adminTestNativeDeps(t, d)
+		if adminTestRun(context.Background(), adminTestArgs("create"), deps, closeFixture) != 8 || len(d.requests) != 1 {
 			t.Fatalf("requests=%v", d.requests)
 		}
 	})
@@ -419,8 +417,8 @@ func TestRepoAdminBudgetsCancellationAndNoPagination(t *testing.T) {
 		d := s.delegate()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, _, deps := productTestDeps(t, d)
-		if Run(ctx, adminTestArgs("create"), deps) != 130 || len(d.requests) != 0 {
+		_, _, deps, closeFixture := adminTestNativeDeps(t, d)
+		if adminTestRun(ctx, adminTestArgs("create"), deps, closeFixture) != 130 || len(d.requests) != 0 {
 			t.Fatalf("requests=%v", d.requests)
 		}
 	})
@@ -431,9 +429,9 @@ func TestRepoAdminBudgetsCancellationAndNoPagination(t *testing.T) {
 			<-ctx.Done()
 			return glab.Response{}, ctx.Err(), true
 		}}
-		_, _, deps := productTestDeps(t, d)
+		_, _, deps, closeFixture := adminTestNativeDeps(t, d)
 		start := time.Now()
-		if Run(ctx, adminTestArgs("create"), deps) == 0 || time.Since(start) > time.Second {
+		if adminTestRun(ctx, adminTestArgs("create"), deps, closeFixture) == 0 || time.Since(start) > time.Second {
 			t.Fatal("unbounded preflight")
 		}
 	})

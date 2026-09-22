@@ -107,7 +107,7 @@ func TestCapabilityFixturePinsEveryExecutableOperation(t *testing.T) {
 		}
 		declared[operation.Name] = true
 	}
-	for _, operation := range []Operation{OpBoardList, OpBoardView, OpBoardIssues, OpWorkItemFields, OpWorkItemHierarchy, OpAdminUser, OpAdminNamespace, OpAdminProject, OpAdminCreate, OpAdminEdit, OpAdminFork, OpIssueList, OpIssueView, OpIssueEditProject, OpIssueEditView, OpIssueEditLabelList, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpMRDiscussionsTargetProject, OpMRDiscussionsSourceProject, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
+	for _, operation := range []Operation{OpBoardList, OpBoardView, OpBoardIssues, OpWorkItemFields, OpWorkItemHierarchy, OpIssueList, OpIssueView, OpIssueEditProject, OpIssueEditView, OpIssueEditLabelList, OpMRList, OpMRView, OpMRDiff, OpMRChecks, OpMRDiscussions, OpMRDiscussionsTargetProject, OpMRDiscussionsSourceProject, OpPipelineList, OpPipelineView, OpJobList, OpJobView, OpJobTrace, OpReleaseList, OpReleaseView, OpRepoList, OpRepoView, OpLabelList, OpSearch, OpEnsureProject, OpEnsureList, OpEnsureCreate, OpEnsureUpdate, OpMergeProject, OpMergeMRView, OpMergeJobList, OpMergeBridgeList, OpMRMerge} {
 		if !declared[string(operation)] {
 			t.Fatalf("operation %q has no pinned fixture", operation)
 		}

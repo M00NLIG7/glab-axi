@@ -25,7 +25,7 @@
         "project": {"$ref": "#/$defs/project"},
         "source_id": {"type": "integer", "minimum": 1},
         "import_status": {"type": "string", "maxLength": 32},
-        "residual": {"const": "GitLab provides no atomic expected project revision or account binding; checks detect observed drift but cannot eliminate races. Never blindly retry a mutation."},
+        "residual": {"const": "GitLab provides no atomic expected project revision; one native credential is pinned for this operation, but identity/settings checks cannot eliminate provider-side races. Never blindly retry a mutation."},
         "local_effects": {"const": "none"}
       },
       "allOf": [

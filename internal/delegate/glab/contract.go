@@ -42,12 +42,6 @@ const (
 	OpJobTrace                   Operation = "job-trace"
 	OpReleaseList                Operation = "release-list"
 	OpReleaseView                Operation = "release-view"
-	OpAdminUser                  Operation = "repo-admin-user"
-	OpAdminNamespace             Operation = "repo-admin-namespace"
-	OpAdminProject               Operation = "repo-admin-project"
-	OpAdminCreate                Operation = "repo-admin-create"
-	OpAdminEdit                  Operation = "repo-admin-edit"
-	OpAdminFork                  Operation = "repo-admin-fork"
 	OpRepoList                   Operation = "repo-list"
 	OpRepoView                   Operation = "repo-view"
 	OpLabelList                  Operation = "label-list"
@@ -153,33 +147,6 @@ func build(request Request) (invocation, error) {
 		base = append(base, page...)
 		base = append(base, repoArgs()...)
 		return jsonPage(base), nil
-	case OpAdminUser:
-		return jsonObject(append(apiPrefix(), "user")), nil
-	case OpAdminNamespace:
-		if request.ID < 1 {
-			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "namespace ID must be positive")
-		}
-		return jsonObject(append(apiPrefix(), "namespaces/"+strconv.FormatInt(request.ID, 10))), nil
-	case OpAdminProject:
-		return jsonObject(append(apiPrefix(), "projects/"+escapedRepo)), nil
-	case OpAdminCreate, OpAdminEdit, OpAdminFork:
-		if err := validatePrivateInputPath(request.InputFile); err != nil {
-			return invocation{}, err
-		}
-		method, endpoint := "POST", "projects"
-		if request.Operation != OpAdminCreate {
-			if request.ID < 1 {
-				return invocation{}, uxv1.NewError(uxv1.CodeValidation, "project ID must be positive")
-			}
-			endpoint += "/" + strconv.FormatInt(request.ID, 10)
-			if request.Operation == OpAdminFork {
-				endpoint += "/fork"
-			} else {
-				method = "PUT"
-			}
-		}
-		args := []string{"api", "--method", method, "--hostname", request.Host, endpoint, "--input", request.InputFile, "--header", "Content-Type: application/json"}
-		return invocation{args: args, host: request.Host, maxStdout: limits.MaxJSONPageBytes, write: true, outputKind: outputJSON}, nil
 	case OpRepoList:
 		page, err := pageArgs()
 		if err != nil {
@@ -373,7 +340,7 @@ func build(request Request) (invocation, error) {
 
 func operationNeedsRepo(op Operation) bool {
 	switch op {
-	case OpRepoList, OpMRDiscussionsSourceProject, OpAdminUser, OpAdminNamespace:
+	case OpRepoList, OpMRDiscussionsSourceProject:
 		return false
 	case OpSearch:
 		return false // validated after the scope is known
