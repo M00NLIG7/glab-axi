@@ -41,6 +41,19 @@
     "configured API origin, same numeric project or escaped project path, packages/generic/{name}/{version}/{filename}",
     "exact configured project web URL, /-/jobs/{job_id}/artifacts/raw/{file_path}, translated to the typed same-project API route"
   ],
+  "raw_artifact_listing_collision": {
+    "gitlab_version": "v18.8.0",
+    "grape_version": "v2.0.0",
+    "listing_before_raw_wildcard": "GET /projects/:id/jobs/:job_id/artifacts/tree(.json)",
+    "matching": "Case-sensitive entire relative artifact path after one URL percent-decoding, with one optional .json suffix. Reject tree and tree.json including encoded equivalents before transfer; preserve unrelated, other-extension and nested paths.",
+    "basis": "GitLab declares the listing before the format:false raw wildcard. API::API declares format :json and only content_type :json; Grape format defines a single MIME type, and Path#suffix uses the literal optional (.json) for that single supported format, not an arbitrary extension.",
+    "sources": [
+      "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.8.0/lib/api/ci/job_artifacts.rb",
+      "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.8.0/lib/api/api.rb",
+      "https://raw.githubusercontent.com/ruby-grape/grape/v2.0.0/lib/grape/dsl/request_response.rb",
+      "https://raw.githubusercontent.com/ruby-grape/grape/v2.0.0/lib/grape/path.rb"
+    ]
+  },
   "integrity": {
     "job_archive": "exact metadata size and complete ZIP CRC verification; returned SHA-256 is locally computed receipt evidence, not a provider digest",
     "generic_package": "unique exact package name/version/type and file identity, provider file_sha256 and size, plus full metadata recheck",

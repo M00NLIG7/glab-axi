@@ -216,7 +216,9 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 			hash = strings.Repeat("0", 64)
 		}
 		write([]any{map[string]any{"id": 901, "package_id": 201, "file_name": "app.bin", "size": len(f.asset), "file_sha256": hash}})
-	case "/api/v4/projects/101/jobs/42/artifacts/tree":
+	// GitLab v18.8.0 declares this listing before the raw wildcard; its
+	// JSON-only Grape v2.0.0 route suffix is (.json), not any extension.
+	case "/api/v4/projects/101/jobs/42/artifacts/tree", "/api/v4/projects/101/jobs/42/artifacts/tree.json":
 		f.transferred = true
 		write([]any{map[string]any{"name": "app.bin", "path": "bin/app.bin", "type": "file", "size": len(f.asset), "mode": "100644"}})
 	case "/api/v4/projects/101/jobs/42/artifacts", "/api/v4/projects/101/packages/generic/app/v1.0/app.bin", "/api/v4/projects/101/jobs/42/artifacts/" + rawPath:
@@ -381,15 +383,29 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 					{"tree", "tree", false},
 					{"%74ree", "tree", false},
 					{"tr%65e", "tree", false},
+					{"tree.json", "tree.json", false},
+					{"%74ree.json", "tree.json", false},
+					{"tree%2Ejson", "tree.json", false},
+					{"tr%65e%2ejs%6Fn", "tree.json", false},
+					{"%74%72%65%65%2e%6a%73%6f%6e", "tree.json", false},
 					{"app.bin", "app.bin", true},
 					{"treehouse", "treehouse", true},
+					{"tree.xml", "tree.xml", true},
+					{"tree.JSON", "tree.JSON", true},
+					{"tree.json.json", "tree.json.json", true},
+					{"treehouse.json", "treehouse.json", true},
 					{"tree/app.bin", "tree/app.bin", true},
+					{"tree.json/app.bin", "tree.json/app.bin", true},
+					{"bin/tree.json", "bin/tree.json", true},
+					{"bin/%74ree%2ejson", "bin/tree.json", true},
 					{"bin/tree", "bin/tree", true},
 					{"bin/%74ree", "bin/tree", true},
 				} {
 					t.Run(tc.path, func(t *testing.T) {
 						f := newDownloadCLIFixture(t, "raw-job")
+						f.mu.Lock()
 						f.rawPath = tc.path
+						f.mu.Unlock()
 						command := f.command(binary, "release")
 						var stdout, stderr bytes.Buffer
 						command.Stdout, command.Stderr = &stdout, &stderr
@@ -399,7 +415,8 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 							t.Fatalf("decode: %v output=%s stderr=%s", err, &stdout, &stderr)
 						}
 						if result.OK != tc.ok || (runErr == nil) != tc.ok || result.Meta.Backend != "native" {
-							t.Fatalf("result=%+v run=%v stderr=%s", result, runErr, &stderr)
+							published, readErr := os.ReadFile(filepath.Join(f.destination, "app.bin"))
+							t.Fatalf("result=%+v run=%v stderr=%s published=%q read=%v", result, runErr, &stderr, published, readErr)
 						}
 						f.mu.Lock()
 						transferred := f.transferred
@@ -407,7 +424,7 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 						f.mu.Unlock()
 						transfers := 0
 						for _, request := range requests {
-							if request == "GET /api/v4/projects/101/jobs/42/artifacts/tree" {
+							if request == "GET /api/v4/projects/101/jobs/42/artifacts/tree" || request == "GET /api/v4/projects/101/jobs/42/artifacts/tree.json" {
 								t.Fatal("reserved listing route requested as an asset")
 							}
 							if request == "GET /api/v4/projects/101/jobs/42/artifacts/"+tc.route {

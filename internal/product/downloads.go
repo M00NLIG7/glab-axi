@@ -456,7 +456,10 @@ func selectReleaseDownload(ctx context.Context, c *productnative.Client, project
 			return plan, downloadSafety()
 		}
 		file, err := url.PathUnescape(parts[1])
-		if err != nil || !safedownload.ValidRelativePath(file) || file == "tree" {
+		// The JSON-only GitLab listing precedes the raw wildcard and has the
+		// exact Grape suffix tree(.json). Match after decoding, not by prefix.
+		// Versioned routing evidence: contracts/downloads/v1.json.
+		if err != nil || !safedownload.ValidRelativePath(file) || strings.TrimSuffix(file, ".json") == "tree" {
 			return plan, downloadSafety()
 		}
 		job, err := readDownloadJob(ctx, c, project, jobID, 0, "", p.Values["--expected-sha"])
