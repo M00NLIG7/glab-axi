@@ -456,7 +456,7 @@ func selectReleaseDownload(ctx context.Context, c *productnative.Client, project
 			return plan, downloadSafety()
 		}
 		file, err := url.PathUnescape(parts[1])
-		if err != nil || !safedownload.ValidRelativePath(file) {
+		if err != nil || !safedownload.ValidRelativePath(file) || file == "tree" {
 			return plan, downloadSafety()
 		}
 		job, err := readDownloadJob(ctx, c, project, jobID, 0, "", p.Values["--expected-sha"])

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +64,7 @@ type downloadCLIFixture struct {
 	archive, asset                       []byte
 	archiveSize                          int64
 	rawJob                               bool
+	rawPath                              string
 	mode                                 string
 	mu                                   sync.Mutex
 	requests                             []string
@@ -80,6 +82,7 @@ func newDownloadCLIFixture(t *testing.T, mode string) *downloadCLIFixture {
 	f := &downloadCLIFixture{home: home, destination: filepath.Join(home, "download"), token: strings.Join([]string{"synthetic", "download", "cli", "credential"}, "-"), archive: downloadTestArchive(t, mode == "malicious"), asset: []byte("release contents"), mode: mode, started: make(chan struct{})}
 	f.archiveSize = int64(len(f.archive))
 	f.rawJob = mode == "raw-job"
+	f.rawPath = "bin/app.bin"
 	f.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { f.handle(t, w, r) }))
 	f.server.EnableHTTP2 = mode == "http2"
 	f.server.StartTLS()
@@ -129,6 +132,12 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		}
 		_ = json.NewEncoder(w).Encode(value)
 	}
+	rawPath, err := url.PathUnescape(f.rawPath)
+	if err != nil {
+		t.Error(err)
+		http.Error(w, "invalid fixture path", 500)
+		return
+	}
 	switch r.URL.Path {
 	case "/api/v4/projects/group/project":
 		project := map[string]any{"id": 101, "path_with_namespace": "group/project", "web_url": web}
@@ -169,7 +178,7 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 	case "/api/v4/projects/101/releases/v1.0/assets/links":
 		assetURL := f.server.URL + "/api/v4/projects/101/packages/generic/app/v1.0/app.bin"
 		if f.rawJob {
-			assetURL = web + "/-/jobs/42/artifacts/raw/bin/app.bin"
+			assetURL = web + "/-/jobs/42/artifacts/raw/" + f.rawPath
 		}
 		if f.mode == "external" {
 			assetURL = "https://outside.example/app.bin"
@@ -207,7 +216,10 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 			hash = strings.Repeat("0", 64)
 		}
 		write([]any{map[string]any{"id": 901, "package_id": 201, "file_name": "app.bin", "size": len(f.asset), "file_sha256": hash}})
-	case "/api/v4/projects/101/jobs/42/artifacts", "/api/v4/projects/101/packages/generic/app/v1.0/app.bin", "/api/v4/projects/101/jobs/42/artifacts/bin/app.bin":
+	case "/api/v4/projects/101/jobs/42/artifacts/tree":
+		f.transferred = true
+		write([]any{map[string]any{"name": "app.bin", "path": "bin/app.bin", "type": "file", "size": len(f.asset), "mode": "100644"}})
+	case "/api/v4/projects/101/jobs/42/artifacts", "/api/v4/projects/101/packages/generic/app/v1.0/app.bin", "/api/v4/projects/101/jobs/42/artifacts/" + rawPath:
 		f.transferred = true
 		if f.mode == "redirect" {
 			w.Header().Set("Location", f.server.URL+"/api/v4/projects/999/private")
@@ -361,6 +373,75 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 					assertDownloadCleanup(t, f)
 				})
 			}
+			t.Run("raw-route-selection", func(t *testing.T) {
+				for _, tc := range []struct {
+					path, route string
+					ok          bool
+				}{
+					{"tree", "tree", false},
+					{"%74ree", "tree", false},
+					{"tr%65e", "tree", false},
+					{"app.bin", "app.bin", true},
+					{"treehouse", "treehouse", true},
+					{"tree/app.bin", "tree/app.bin", true},
+					{"bin/tree", "bin/tree", true},
+					{"bin/%74ree", "bin/tree", true},
+				} {
+					t.Run(tc.path, func(t *testing.T) {
+						f := newDownloadCLIFixture(t, "raw-job")
+						f.rawPath = tc.path
+						command := f.command(binary, "release")
+						var stdout, stderr bytes.Buffer
+						command.Stdout, command.Stderr = &stdout, &stderr
+						runErr := command.Run()
+						var result downloadCLIResult
+						if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+							t.Fatalf("decode: %v output=%s stderr=%s", err, &stdout, &stderr)
+						}
+						if result.OK != tc.ok || (runErr == nil) != tc.ok || result.Meta.Backend != "native" {
+							t.Fatalf("result=%+v run=%v stderr=%s", result, runErr, &stderr)
+						}
+						f.mu.Lock()
+						transferred := f.transferred
+						requests := append([]string(nil), f.requests...)
+						f.mu.Unlock()
+						transfers := 0
+						for _, request := range requests {
+							if request == "GET /api/v4/projects/101/jobs/42/artifacts/tree" {
+								t.Fatal("reserved listing route requested as an asset")
+							}
+							if request == "GET /api/v4/projects/101/jobs/42/artifacts/"+tc.route {
+								transfers++
+							}
+						}
+						if transferred != tc.ok {
+							t.Fatalf("transferred=%v want=%v", transferred, tc.ok)
+						}
+						if tc.ok {
+							body, err := os.ReadFile(filepath.Join(f.destination, "app.bin"))
+							if err != nil || !bytes.Equal(body, f.asset) || transfers != 1 {
+								t.Fatalf("body=%q err=%v transfers=%d", body, err, transfers)
+							}
+							digest := sha256.Sum256(f.asset)
+							receipt := result.Data.Download
+							if receipt.JobID != 42 || receipt.PipelineID != 71 || receipt.Bytes != int64(len(f.asset)) || receipt.SHA256 != hex.EncodeToString(digest[:]) || receipt.Checksum != "sha256_receipt_only" {
+								t.Fatalf("receipt=%+v", receipt)
+							}
+						} else {
+							if command.ProcessState.ExitCode() != 9 || result.Error.Code != "safety_violation" || result.Data.Download != (downloadReceipt{}) {
+								t.Fatalf("result=%+v run=%v", result, runErr)
+							}
+							if _, err := os.Stat(f.destination); !os.IsNotExist(err) {
+								t.Fatal("reserved route published destination")
+							}
+						}
+						if strings.Contains(stdout.String()+stderr.String(), f.token) {
+							t.Fatal("credential appeared in output")
+						}
+						assertDownloadCleanup(t, f)
+					})
+				}
+			})
 			t.Run("invalid-before-work", func(t *testing.T) {
 				for _, extra := range [][]string{{"--auth-source", "native"}, {"--auth-source=official"}, {"--asset-url=https://other.example"}} {
 					f := newDownloadCLIFixture(t, "ok")
