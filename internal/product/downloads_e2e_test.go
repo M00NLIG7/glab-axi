@@ -65,6 +65,7 @@ type downloadCLIFixture struct {
 	archiveSize                          int64
 	rawJob                               bool
 	rawPath                              string
+	releaseTag, releaseSelf              string
 	mode                                 string
 	mu                                   sync.Mutex
 	requests                             []string
@@ -83,6 +84,7 @@ func newDownloadCLIFixture(t *testing.T, mode string) *downloadCLIFixture {
 	f.archiveSize = int64(len(f.archive))
 	f.rawJob = mode == "raw-job"
 	f.rawPath = "bin/app.bin"
+	f.releaseTag = "v1.0"
 	f.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { f.handle(t, w, r) }))
 	f.server.EnableHTTP2 = mode == "http2"
 	f.server.StartTLS()
@@ -169,13 +171,17 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		write(map[string]any{"id": id, "ref": "main", "web_url": web + "/-/jobs/42", "pipeline": pipeline, "commit": map[string]any{"id": sha}, "artifacts_file": map[string]any{"filename": filename, "size": f.archiveSize}})
 	case "/api/v4/projects/101/pipelines/71", "/api/v4/projects/101/pipelines/72":
 		write(pipeline)
-	case "/api/v4/projects/101/releases/v1.0":
-		tag := "v1.0"
+	case "/api/v4/projects/101/releases/" + f.releaseTag:
+		tag := f.releaseTag
 		if f.mode == "wrong-tag" {
 			tag = "v2.0"
 		}
-		write(map[string]any{"tag_name": tag, "commit": map[string]any{"id": sha}, "_links": map[string]any{"self": web + "/-/releases/v1.0"}})
-	case "/api/v4/projects/101/releases/v1.0/assets/links":
+		self := f.releaseSelf
+		if self == "" {
+			self = web + "/-/releases/" + url.PathEscape(f.releaseTag)
+		}
+		write(map[string]any{"tag_name": tag, "commit": map[string]any{"id": sha}, "_links": map[string]any{"self": self}})
+	case "/api/v4/projects/101/releases/" + f.releaseTag + "/assets/links":
 		assetURL := f.server.URL + "/api/v4/projects/101/packages/generic/app/v1.0/app.bin"
 		if f.rawJob {
 			assetURL = web + "/-/jobs/42/artifacts/raw/" + f.rawPath
@@ -267,9 +273,11 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 	}
 }
 func (f *downloadCLIFixture) command(binary, kind string, extra ...string) *exec.Cmd {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	args := []string{"job", kind, "42", "--pipeline-id", "71", "--expected-ref", "main"}
 	if kind == "release" {
-		args = []string{"release", "download", "v1.0", "--asset-id", "7", "--asset-name", "app.bin"}
+		args = []string{"release", "download", f.releaseTag, "--asset-id", "7", "--asset-name", "app.bin"}
 	}
 	args = append(args, "--auth-source", "native", "--hostname", "download.example", "--repo", "group/project", "--expected-sha", strings.Repeat("a", 40), "--format", "json")
 	if kind != "artifacts" {
@@ -375,6 +383,88 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 					assertDownloadCleanup(t, f)
 				})
 			}
+			t.Run("release-self-url", func(t *testing.T) {
+				for _, tc := range []struct {
+					name, self string
+					ok         bool
+				}{
+					{"literal-parentheses", "{origin}/group/project/-/releases/v1.0(1)", true},
+					{"encoded-parentheses", "{origin}/group/project/-/releases/v1.0%281%29", true},
+					{"mixed-parentheses", "{origin}/group/project/-/releases/v1.0%281)", true},
+					{"encoded-tag", "{origin}/group/project/-/releases/%76%31%2e%30%28%31%29", true},
+					{"wrong-authority", "https://unbound.invalid/group/project/-/releases/v1.0(1)", false},
+					{"wrong-port", "https://127.0.0.1:1/group/project/-/releases/v1.0(1)", false},
+					{"wrong-scheme", "http://{authority}/group/project/-/releases/v1.0(1)", false},
+					{"protocol-relative", "//{authority}/group/project/-/releases/v1.0(1)", false},
+					{"userinfo", "https://user@{authority}/group/project/-/releases/v1.0(1)", false},
+					{"wrong-project", "{origin}/group/other/-/releases/v1.0(1)", false},
+					{"encoded-project-separator", "{origin}/group%2Fproject/-/releases/v1.0(1)", false},
+					{"encoded-route", "{origin}/group/project/-/releas%65s/v1.0(1)", false},
+					{"wrong-route", "{origin}/group/project/-/tags/v1.0(1)", false},
+					{"wrong-tag", "{origin}/group/project/-/releases/v1.0(2)", false},
+					{"encoded-wrong-tag", "{origin}/group/project/-/releases/v1.0%282%29", false},
+					{"double-encoded-tag", "{origin}/group/project/-/releases/v1.0%25281%2529", false},
+					{"tag-prefix", "{origin}/group/project/-/releases/v1.0", false},
+					{"tag-suffix", "{origin}/group/project/-/releases/v1.0(1)/edit", false},
+					{"query", "{origin}/group/project/-/releases/v1.0(1)?download=1", false},
+					{"empty-query", "{origin}/group/project/-/releases/v1.0(1)?", false},
+					{"fragment", "{origin}/group/project/-/releases/v1.0(1)#assets", false},
+					{"empty-fragment", "{origin}/group/project/-/releases/v1.0(1)#", false},
+					{"malformed-escape", "{origin}/group/project/-/releases/v1.0%2G1%29", false},
+				} {
+					t.Run(tc.name, func(t *testing.T) {
+						f := newDownloadCLIFixture(t, "ok")
+						const tag = "v1.0(1)"
+						f.mu.Lock()
+						f.releaseTag = tag
+						f.releaseSelf = strings.NewReplacer("{origin}", f.server.URL, "{authority}", strings.TrimPrefix(f.server.URL, "https://")).Replace(tc.self)
+						f.mu.Unlock()
+						command := f.command(binary, "release")
+						var stdout, stderr bytes.Buffer
+						command.Stdout, command.Stderr = &stdout, &stderr
+						runErr := command.Run()
+						var result downloadCLIResult
+						if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+							t.Fatalf("decode: %v output=%s stderr=%s", err, &stdout, &stderr)
+						}
+						if result.OK != tc.ok || (runErr == nil) != tc.ok || result.Meta.Backend != "native" {
+							t.Fatalf("result=%+v run=%v stderr=%s", result, runErr, &stderr)
+						}
+						f.mu.Lock()
+						transferred := f.transferred
+						requests := append([]string(nil), f.requests...)
+						f.mu.Unlock()
+						if transferred != tc.ok {
+							t.Fatalf("transferred=%v want=%v requests=%v", transferred, tc.ok, requests)
+						}
+						if tc.ok {
+							body, err := os.ReadFile(filepath.Join(f.destination, "app.bin"))
+							if err != nil || !bytes.Equal(body, f.asset) {
+								t.Fatalf("body=%q err=%v", body, err)
+							}
+							digest := sha256.Sum256(f.asset)
+							receipt := result.Data.Download
+							if receipt.Tag != tag || receipt.ProjectID != 101 || receipt.AssetID != 7 || receipt.Bytes != int64(len(f.asset)) || receipt.SHA256 != hex.EncodeToString(digest[:]) || receipt.Checksum != "provider_sha256_and_size" {
+								t.Fatalf("receipt=%+v", receipt)
+							}
+						} else {
+							if command.ProcessState.ExitCode() != 9 || result.Error.Code != "safety_violation" || result.Data.Download != (downloadReceipt{}) {
+								t.Fatalf("result=%+v run=%v", result, runErr)
+							}
+							if len(requests) != 2 || requests[1] != "GET /api/v4/projects/101/releases/"+url.PathEscape(tag) {
+								t.Fatalf("self URL rejection reached asset selection or transfer: %v", requests)
+							}
+							if _, err := os.Stat(f.destination); !os.IsNotExist(err) {
+								t.Fatal("invalid self URL published destination")
+							}
+						}
+						if strings.Contains(stdout.String()+stderr.String(), f.token) {
+							t.Fatal("credential appeared in output")
+						}
+						assertDownloadCleanup(t, f)
+					})
+				}
+			})
 			t.Run("raw-route-selection", func(t *testing.T) {
 				for _, tc := range []struct {
 					path, route string

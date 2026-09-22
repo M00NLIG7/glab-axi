@@ -348,7 +348,13 @@ func selectReleaseDownload(ctx context.Context, c *productnative.Client, project
 	if _, err := downloadJSON(ctx, c, releaseRoute, nil, &release); err != nil {
 		return plan, err
 	}
-	if release.Tag != tag || release.Commit.ID != p.Values["--expected-sha"] || release.Links.Self != project.URL+"/-/releases/"+url.PathEscape(tag) {
+	self, err := url.Parse(release.Links.Self)
+	tagPath, bound := strings.CutPrefix(release.Links.Self, project.URL+"/-/releases/")
+	if err != nil || self.Scheme != "https" || self.User != nil || strings.ContainsAny(release.Links.Self, "?#") || !bound {
+		return plan, downloadSafety()
+	}
+	selfTag, err := url.PathUnescape(tagPath)
+	if err != nil || release.Tag != tag || release.Commit.ID != p.Values["--expected-sha"] || selfTag != tag {
 		return plan, downloadSafety()
 	}
 	links, err := downloadCatalog[releaseDownloadLink](ctx, c, releaseRoute+"/assets/links", nil)
