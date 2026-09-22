@@ -28,17 +28,17 @@ var (
 	issueEditNextTime = time.Date(2026, 8, 15, 12, 0, 1, 0, time.UTC)
 )
 
-func TestIssueEditValidationBudgetFitsReadOperation(t *testing.T) {
-	if limits.IssueEditPreflight <= 0 || limits.IssueEditPreflight > limits.ShortOperation {
-		t.Fatalf("issue-edit validation budget=%s, outer read budget=%s", limits.IssueEditPreflight, limits.ShortOperation)
+func TestIssueEditBudgetsFitWriteOperation(t *testing.T) {
+	if limits.IssueEditPreflight <= 0 || limits.IssueEditMutation <= 0 || limits.IssueEditReconcile <= 0 || limits.IssueEditPreflight+limits.IssueEditMutation+limits.IssueEditReconcile > limits.WriteOperation {
+		t.Fatal("issue edit stages must fit the outer write deadline")
 	}
 	definition, ok := lookupDefinition([]string{"issue", "edit"})
-	if !ok || definition.Write {
-		t.Fatalf("issue edit must remain a read-only validation surface: %#v", definition)
+	if !ok || !definition.Write {
+		t.Fatalf("issue edit must use the bounded write deadline: %#v", definition)
 	}
 }
 
-func TestIssueEditFieldCombinationsRefuseBeforeMutationWithDeterministicReceipt(t *testing.T) {
+func TestIssueEditFieldCombinationsPreviewWithDeterministicReceipt(t *testing.T) {
 	tests := []struct {
 		name        string
 		title       *string
@@ -59,8 +59,8 @@ func TestIssueEditFieldCombinationsRefuseBeforeMutationWithDeterministicReceipt(
 			before := issueEditFixture()
 			delegate := issueEditDelegate(before, before, issueEditCatalog())
 			stdout, stderr, deps := productTestDeps(t, delegate)
-			args := issueEditArgs(t, test.title, test.description, test.add, test.remove, false, "json")
-			if code := Run(context.Background(), args, deps); code != 9 || stderr.Len() != 0 {
+			args := issueEditArgs(t, test.title, test.description, test.add, test.remove, true, "json")
+			if code := Run(context.Background(), args, deps); code != 0 || stderr.Len() != 0 {
 				t.Fatalf("exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 			}
 			assertIssueEditNoMutation(t, delegate)
@@ -90,26 +90,18 @@ func TestIssueEditFieldCombinationsRefuseBeforeMutationWithDeterministicReceipt(
 			}
 
 			var envelope struct {
-				OK    bool      `json:"ok"`
-				Meta  uxv1.Meta `json:"meta"`
-				Error struct {
-					Code      uxv1.Code       `json:"code"`
-					Message   string          `json:"message"`
-					Retryable bool            `json:"retryable"`
-					Receipt   issueEditOutput `json:"receipt"`
-				} `json:"error"`
+				OK   bool            `json:"ok"`
+				Meta uxv1.Meta       `json:"meta"`
+				Data issueEditOutput `json:"data"`
 			}
 			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 				t.Fatal(err)
 			}
-			if bytes.Contains(stdout.Bytes(), []byte(`"data":`)) {
-				t.Fatalf("refusal mixed success data into the strict failure envelope: %s", stdout.String())
-			}
-			edit := envelope.Error.Receipt.Edit
-			if envelope.OK || envelope.Error.Code != uxv1.CodeSafety || envelope.Error.Message != issueEditProviderPreconditionMessage || envelope.Error.Retryable || edit.Action != "refused" || edit.Outcome != "not_applied" || edit.DryRun || edit.RefusalReason != issueEditProviderPreconditionReason || fmt.Sprint(edit.ChangedFields) != fmt.Sprint(test.wantFields) || edit.Identity.ProjectID != 101 || edit.Identity.ProjectFullPath != "group/project" || edit.Identity.IssueID != 1001 || edit.Identity.IID != 42 || edit.Identity.WebURL != issueEditTestURL || edit.Expected.UpdatedAt != issueEditTestTimestamp || edit.ResultingUpdatedAt != issueEditTestTimestamp {
+			edit := envelope.Data.Edit
+			if !envelope.OK || edit.Action != "preview" || edit.Outcome != "not_applied" || !edit.DryRun || edit.Concurrency != "best_effort" || edit.Warning != issueEditRaceWarning || fmt.Sprint(edit.ChangedFields) != fmt.Sprint(test.wantFields) || edit.Identity.ProjectID != 101 || edit.Identity.ProjectFullPath != "group/project" || edit.Identity.IssueID != 1001 || edit.Identity.IID != 42 || edit.Identity.WebURL != issueEditTestURL || edit.Expected.UpdatedAt != issueEditTestTimestamp || edit.ResultingUpdatedAt != issueEditTestTimestamp {
 				t.Fatalf("unexpected refusal receipt: %#v", envelope)
 			}
-			if envelope.Meta.Backend != "official-glab" || envelope.Meta.Host != "gitlab.com" || envelope.Meta.Repo != "group/project" || envelope.Meta.Complete || envelope.Meta.Reason != issueEditProviderPreconditionReason || envelope.Meta.UpstreamVersion != glab.SupportedVersion {
+			if envelope.Meta.Backend != "official-glab" || envelope.Meta.Host != "gitlab.com" || envelope.Meta.Repo != "group/project" || !envelope.Meta.Complete || envelope.Meta.Reason != "" || envelope.Meta.UpstreamVersion != glab.SupportedVersion {
 				t.Fatalf("unexpected refusal metadata: %#v", envelope.Meta)
 			}
 			if test.name == "labels only" || test.name == "combined" {
@@ -169,7 +161,7 @@ func TestIssueEditNoOpAndPreviewPerformFullValidationWithoutMutation(t *testing.
 }
 
 func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "issue-edit", "v1.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "issue-edit", "v2.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,13 +183,12 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 			Actions    []string `json:"actions"`
 			Outcomes   []string `json:"outcomes"`
 		} `json:"success_contract"`
-		RefusalContract struct {
+		AmbiguityContract struct {
 			Error         string `json:"error"`
 			Action        string `json:"action"`
 			Outcome       string `json:"outcome"`
-			Reason        string `json:"reason"`
 			ReceiptSchema string `json:"receipt_schema"`
-		} `json:"refusal_contract"`
+		} `json:"ambiguity_contract"`
 		ProviderContract struct {
 			IssueReads           int      `json:"issue_reads_per_validation"`
 			MutationAttempts     int      `json:"mutation_attempts_maximum"`
@@ -210,13 +201,13 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
-	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v1" || contract.Surface != "exact-identity GitLab issue edit validation" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "official-glab" || contract.GlabAXI.RequiredUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.RefusalContract.Error != string(uxv1.CodeSafety) || contract.RefusalContract.Action != "refused" || contract.RefusalContract.Outcome != "not_applied" || contract.RefusalContract.Reason != issueEditProviderPreconditionReason || contract.RefusalContract.ReceiptSchema != contract.SuccessContract.DataSchema || contract.ProviderContract.IssueReads != 2 || contract.ProviderContract.MutationAttempts != 0 || contract.ProviderContract.PostReads != 0 || contract.ProviderContract.LabelCatalog != "complete bounded project and ancestor catalog, read twice when labels are requested" || contract.ProviderContract.ProviderPrecondition == "" {
+	if contract.Schema != "glab-axi/issue-edit-consumer-contract/v2" || contract.Surface != "best-effort exact-identity GitLab issue edit" || contract.GlabAXI.RequiredEnvelope != uxv1.Schema || contract.GlabAXI.RequiredBackend != "official-glab" || contract.GlabAXI.RequiredUpstreamVersion != glab.SupportedVersion || contract.PlannedInvocation.PreviewFlag != "--dry-run" || contract.SuccessContract.DataSchema != "schema/ux-v1/issue-edit.schema.json" || contract.AmbiguityContract.Error != string(uxv1.CodeAmbiguousUpdate) || contract.AmbiguityContract.Action != "ambiguous" || contract.AmbiguityContract.Outcome != "unknown" || contract.AmbiguityContract.ReceiptSchema != contract.SuccessContract.DataSchema || contract.ProviderContract.IssueReads != 2 || contract.ProviderContract.MutationAttempts != 1 || contract.ProviderContract.PostReads != 1 || contract.ProviderContract.LabelCatalog != "complete bounded project and ancestor catalog, twice before and once after a write when labels are requested" || contract.ProviderContract.ProviderPrecondition != issueEditRaceWarning {
 		t.Fatalf("unexpected issue-edit contract: %#v", contract)
 	}
 	wantInputs := []string{"iid", "nested_project", "host", "canonical_issue_url", "expected_state", "expected_updated_at", "at_least_one_field_change"}
-	wantActions := []string{"preview", "unchanged"}
+	wantActions := []string{"preview", "unchanged", "updated", "reconciled_update"}
 	wantFields := []string{"title", "description", "add_labels", "remove_labels"}
-	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || !reflect.DeepEqual(contract.SuccessContract.Outcomes, []string{"not_applied"}) || !reflect.DeepEqual(contract.ProviderContract.RequestedFields, wantFields) || len(contract.PlannedInvocation.ForbiddenFields) != 9 {
+	if !reflect.DeepEqual(contract.PlannedInvocation.RequiredExplicitInputs, wantInputs) || !reflect.DeepEqual(contract.SuccessContract.Actions, wantActions) || !reflect.DeepEqual(contract.SuccessContract.Outcomes, []string{"not_applied", "observed_applied"}) || !reflect.DeepEqual(contract.ProviderContract.RequestedFields, wantFields) || len(contract.PlannedInvocation.ForbiddenFields) != 9 {
 		t.Fatalf("incomplete issue-edit contract: %#v", contract)
 	}
 	result, err := Parse([]string{
@@ -233,7 +224,7 @@ func TestPinnedIssueEditConsumerContractDrivesGrammar(t *testing.T) {
 	}
 }
 
-func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
+func TestIssueEditSchemasPinStructuredAmbiguity(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "ux-v1", "issue-edit.schema.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -246,11 +237,11 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 						Enum []string `json:"enum"`
 					} `json:"action"`
 					Outcome struct {
-						Const string `json:"const"`
+						Enum []string `json:"enum"`
 					} `json:"outcome"`
-					RefusalReason struct {
+					Warning struct {
 						Const string `json:"const"`
-					} `json:"refusal_reason"`
+					} `json:"warning"`
 				} `json:"properties"`
 			} `json:"edit"`
 		} `json:"properties"`
@@ -259,7 +250,7 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	edit := receiptSchema.Properties.Edit.Properties
-	if !reflect.DeepEqual(edit.Action.Enum, []string{"preview", "unchanged", "refused"}) || edit.Outcome.Const != "not_applied" || edit.RefusalReason.Const != issueEditProviderPreconditionReason {
+	if !reflect.DeepEqual(edit.Action.Enum, []string{"preview", "unchanged", "updated", "reconciled_update", "ambiguous"}) || !reflect.DeepEqual(edit.Outcome.Enum, []string{"not_applied", "observed_applied", "unknown"}) || edit.Warning.Const != issueEditRaceWarning {
 		t.Fatalf("unexpected receipt schema: %#v", edit)
 	}
 
@@ -293,7 +284,7 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
-	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
+	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "ambiguous" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }
@@ -335,6 +326,9 @@ func TestIssueEditParserRefusalsConstructNoDelegate(t *testing.T) {
 		{name: "inline title denied", args: appendCopy(base, "--title", "unsafe")},
 		{name: "state mutation denied", args: appendCopy(base, "--state-event", "close")},
 		{name: "assignee mutation denied", args: appendCopy(base, "--assignee-id", "7")},
+		{name: "milestone mutation not supported", args: appendCopy(base, "--milestone", "v1")},
+		{name: "GitHub type not emulated", args: appendCopy(base, "--type", "Task")},
+		{name: "GitLab type not exposed", args: appendCopy(base, "--issue-type", "incident")},
 		{name: "unguarded update alias", args: []string{"issue", "update", "42"}},
 		{name: "unbound close remains denied", args: []string{"issue", "close", "42"}},
 	}
@@ -664,11 +658,11 @@ func TestIssueEditTOONAndLargeEvidenceAreBounded(t *testing.T) {
 		large := strings.Repeat("x", issueEditInlineTextBytes+1)
 		delegate := issueEditDelegate(before, before, nil)
 		stdout, stderr, deps := productTestDeps(t, delegate)
-		if code := Run(context.Background(), issueEditArgs(t, nil, &large, nil, nil, false, "toon"), deps); code != 9 || stderr.Len() != 0 {
+		if code := Run(context.Background(), issueEditArgs(t, nil, &large, nil, nil, true, "toon"), deps); code != 0 || stderr.Len() != 0 {
 			t.Fatalf("exit=%d stderr=%s output=%s", code, stderr.String(), stdout.String())
 		}
 		output := stdout.String()
-		if !strings.Contains(output, `action: "refused"`) || !strings.Contains(output, `outcome: "not_applied"`) || !strings.Contains(output, `refusal_reason: "provider_precondition_unavailable"`) || !strings.Contains(output, "sha256:") || strings.Contains(output, large) || len(output) > 16<<10 {
+		if !strings.Contains(output, `action: "preview"`) || !strings.Contains(output, `outcome: "not_applied"`) || !strings.Contains(output, `concurrency: "best_effort"`) || !strings.Contains(output, "sha256:") || strings.Contains(output, large) || len(output) > 16<<10 {
 			t.Fatalf("TOON evidence was not bounded: bytes=%d output=%s", len(output), output)
 		}
 		assertIssueEditNoMutation(t, delegate)

@@ -152,12 +152,13 @@ Backend: `official-glab`. Schema: `schema/ux-v1/issue-view.schema.json`.
 gl-axi issue edit <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]
 ```
 
-Validate one exact project issue edit without mutation.
+Edit one exact project issue with best-effort drift checks.
 
 Requires caller-bound URL, state, and updated-at evidence.
-Title and description are accepted only through private files.
-Labels are resolved exactly and unrelated labels are previewed as preserved.
-Dry-run returns the complete validated preview. GitLab accepts no expected issue revision and only label names, so a non-no-op live request returns a bounded safety refusal and sends no PUT.
+Title and description are accepted only through private files; slash-leading description lines are rejected to prevent implicit GitLab quick actions. Label additions/removals resolve exact identities; scoped-label replacement requires explicit removal.
+Two preflight reads detect drift, then one PUT sends only changed fields. Bounded post-read verification reconciles ambiguous responses without retry.
+GitLab cannot enforce an atomic expected revision or numeric label identity on writes: concurrent edits or label renames can race between checks and PUT. Receipts prove observed state, not exclusive authorship.
+Dry-run validates without mutation. Assignees, milestones, attachments, and work-item types are not supported by this edit contract.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/issue-edit.schema.json`.
 
@@ -736,4 +737,4 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, issue mutation outside the declared contracts, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --auth-source native` supports title, description, and label deltas with drift detection and reconciliation, not atomic revision enforcement. `--dry-run` validates without mutation; omission of the auth selector retains delegated preview/no-op behavior and refuses live changes. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

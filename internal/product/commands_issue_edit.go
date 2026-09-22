@@ -23,12 +23,11 @@ import (
 )
 
 const (
-	issueEditPageSize                    = 100
-	issueEditInlineTextBytes             = 4 << 10
-	issueEditInlineLabels                = 100
-	issueEditInlineLabelBytes            = 16 << 10
-	issueEditProviderPreconditionReason  = "provider_precondition_unavailable"
-	issueEditProviderPreconditionMessage = "GitLab issue edit refused before mutation: the provider cannot enforce the expected issue revision or requested numeric label identities; use --dry-run for a validated preview"
+	issueEditPageSize         = 100
+	issueEditInlineTextBytes  = 4 << 10
+	issueEditInlineLabels     = 100
+	issueEditInlineLabelBytes = 16 << 10
+	issueEditRaceWarning      = "GitLab cannot enforce an atomic expected revision or numeric label identity on this write. Concurrent edits or label renames between checks and PUT can race; receipts describe observed state, not exclusive authorship."
 )
 
 type issueEditProject struct {
@@ -93,12 +92,13 @@ type issueEditResult struct {
 	Action             string            `json:"action"`
 	Outcome            string            `json:"outcome"`
 	DryRun             bool              `json:"dry_run"`
-	RefusalReason      string            `json:"refusal_reason,omitempty"`
+	Concurrency        string            `json:"concurrency"`
+	Warning            string            `json:"warning"`
 	Identity           issueEditIdentity `json:"identity"`
 	Expected           issueEditExpected `json:"expected"`
 	ChangedFields      []string          `json:"changed_fields"`
 	Changes            issueEditChanges  `json:"changes"`
-	ResultingUpdatedAt string            `json:"resulting_updated_at"`
+	ResultingUpdatedAt string            `json:"resulting_updated_at,omitempty"`
 }
 
 type issueEditOutput struct {
@@ -112,9 +112,20 @@ type issueEditRequested struct {
 	RemoveLabels []string
 }
 
+// Only changed fields are sent. Label deltas never replace unseen labels.
+// No updated_at, state, assignee, milestone, or work-item type is writable here.
+type issueEditPayload struct {
+	Title        *string `json:"title,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	AddLabels    string  `json:"add_labels,omitempty"`
+	RemoveLabels string  `json:"remove_labels,omitempty"`
+}
+
 type issueEditPlan struct {
 	changedFields []string
 	changes       issueEditChanges
+	payload       issueEditPayload
+	desired       upstreamIssue
 }
 
 type issueEditReadBudget struct {
@@ -309,7 +320,7 @@ func executeIssueEdit(ctx context.Context, client delegateClient, target Target,
 	if len(plan.changedFields) == 0 {
 		return issueEditReceipt("unchanged", false, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta), nil
 	}
-	return issueEditProviderPreconditionRefusal(target, project, adjacent, expectedURL, expectedState, expectedAt, plan, meta)
+	return applyIssueEdit(ctx, client, target, project, adjacent, expectedURL, expectedState, expectedAt, plan, resolvedAdd, resolvedRemove, meta, budget)
 }
 
 func loadIssueEditRequested(parsed Parsed) (issueEditRequested, error) {
@@ -330,6 +341,9 @@ func loadIssueEditRequested(parsed Parsed) (issueEditRequested, error) {
 	if path := parsed.Values["--description-file"]; path != "" {
 		value, err := privatefile.Read(path, limits.MaxDescriptionBytes, false)
 		if err != nil {
+			return issueEditRequested{}, err
+		}
+		if err := validateIssueEditDescription(value); err != nil {
 			return issueEditRequested{}, err
 		}
 		requested.Description = &value
@@ -395,6 +409,9 @@ func loadIssueEditLabels(ctx context.Context, client delegateClient, target Targ
 	labels := make([]issueEditLabel, 0)
 	seenIDs := make(map[int64]bool)
 	for page := 1; page <= limits.MaxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, issueEditValidationContextError(err)
+		}
 		response, err := client.Do(ctx, glab.Request{
 			Operation: glab.OpIssueEditLabelList, Host: target.Host, Repo: target.Repo, Page: page, PerPage: issueEditPageSize,
 		})
@@ -515,6 +532,18 @@ func validateIssueEditIdentity(record upstreamIssue, target Target, projectID, i
 	return nil
 }
 
+// GitLab interprets description quick actions during issue updates. Reject
+// slash-leading lines conservatively rather than provide an implicit write
+// channel outside the typed payload (including inside Markdown code blocks).
+func validateIssueEditDescription(value string) error {
+	for _, line := range strings.FieldsFunc(value, func(r rune) bool { return r == '\n' || r == '\r' }) {
+		if strings.HasPrefix(strings.TrimSpace(line), "/") {
+			return uxv1.NewError(uxv1.CodeSafety, "issue edit descriptions must not contain slash-leading lines that could invoke GitLab quick actions")
+		}
+	}
+	return nil
+}
+
 func validIssueEditText(value string) bool {
 	return utf8.ValidString(value) && !strings.ContainsRune(value, '\x00')
 }
@@ -552,16 +581,20 @@ func canonicalIssueEditLabels(values []string) ([]string, error) {
 }
 
 func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add, remove []issueEditLabel) (issueEditPlan, error) {
-	plan := issueEditPlan{changedFields: make([]string, 0, 3)}
+	plan := issueEditPlan{changedFields: make([]string, 0, 3), desired: record}
 	if requested.Title != nil && record.Title != *requested.Title {
 		value := *requested.Title
 		plan.changedFields = append(plan.changedFields, "title")
 		plan.changes.Title = &issueEditTextChange{Before: issueEditTextValue(record.Title), After: issueEditTextValue(value)}
+		plan.payload.Title = &value
+		plan.desired.Title = value
 	}
 	if requested.Description != nil && record.Description != *requested.Description {
 		value := *requested.Description
 		plan.changedFields = append(plan.changedFields, "description")
 		plan.changes.Description = &issueEditTextChange{Before: issueEditTextValue(record.Description), After: issueEditTextValue(value)}
+		plan.payload.Description = &value
+		plan.desired.Description = value
 	}
 
 	beforeLabels, err := canonicalIssueEditLabels(record.Labels)
@@ -594,6 +627,20 @@ func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add,
 			actualAdd = append(actualAdd, label)
 		}
 	}
+	// On scoped-label tiers, adding key::value replaces any other key label.
+	// Require that removal explicitly rather than silently widen this request.
+	for _, label := range actualAdd {
+		scope, _, scoped := strings.Cut(label.Name, "::")
+		if !scoped {
+			continue
+		}
+		for name := range desired {
+			other, _, scoped := strings.Cut(name, "::")
+			if name != label.Name && scoped && strings.EqualFold(scope, other) {
+				return issueEditPlan{}, uxv1.NewError(uxv1.CodeConflict, "scoped label addition requires explicit removal of the existing same-scope label")
+			}
+		}
+	}
 	if len(actualAdd)+len(actualRemove) > 0 {
 		afterLabels := make([]string, 0, len(desired))
 		for name := range desired {
@@ -603,6 +650,9 @@ func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add,
 		if _, err := canonicalIssueEditLabels(afterLabels); err != nil {
 			return issueEditPlan{}, err
 		}
+		plan.desired.Labels = afterLabels
+		plan.payload.AddLabels = strings.Join(issueEditLabelNames(actualAdd), ",")
+		plan.payload.RemoveLabels = strings.Join(issueEditLabelNames(actualRemove), ",")
 		plan.changedFields = append(plan.changedFields, "labels")
 		plan.changes.Labels = &issueEditLabelChange{
 			Add: actualAdd, Remove: actualRemove,
@@ -683,6 +733,7 @@ func issueEditReceipt(action string, dryRun bool, target Target, project issueEd
 	copy(changedFields, plan.changedFields)
 	edit := issueEditResult{
 		Action: action, Outcome: "not_applied", DryRun: dryRun,
+		Concurrency: "best_effort", Warning: issueEditRaceWarning,
 		Identity: issueEditIdentity{
 			Host: target.Host, ProjectID: project.ID, ProjectFullPath: project.PathWithNamespace,
 			ProjectWebURL: project.WebURL, IssueID: issue.ID, IID: issue.IID, WebURL: issue.WebURL,
@@ -692,18 +743,14 @@ func issueEditReceipt(action string, dryRun bool, target Target, project issueEd
 		Changes:            plan.changes,
 		ResultingUpdatedAt: updatedAt,
 	}
-	if action == "refused" {
-		edit.RefusalReason = issueEditProviderPreconditionReason
+	switch action {
+	case "updated", "reconciled_update":
+		edit.Outcome = "observed_applied"
+	case "ambiguous":
+		edit.Outcome = "unknown"
+		edit.ResultingUpdatedAt = ""
 	}
 	return commandOutput{data: issueEditOutput{Edit: edit}, meta: meta}
-}
-
-func issueEditProviderPreconditionRefusal(target Target, project issueEditProject, before upstreamIssue, expectedURL, expectedState string, expectedAt time.Time, plan issueEditPlan, meta uxv1.Meta) (commandOutput, error) {
-	result := issueEditReceipt("refused", false, target, project, before, expectedURL, expectedState, expectedAt, plan, meta)
-	result.meta.Reason = issueEditProviderPreconditionReason
-	refusal := uxv1.NewError(uxv1.CodeSafety, issueEditProviderPreconditionMessage)
-	refusal.Receipt = result.data
-	return result, refusal
 }
 
 func issueEditValidationContextError(err error) error {

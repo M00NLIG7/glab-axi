@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://glab-axi.invalid/schema/ux-v1/issue-edit.schema.json",
-  "title": "glab-axi/ux-v1 exact issue-edit validation receipt",
+  "title": "glab-axi/ux-v1 best-effort issue-edit receipt",
   "type": "object",
   "additionalProperties": false,
   "required": ["edit"],
@@ -70,13 +70,15 @@
         "expected",
         "changed_fields",
         "changes",
-        "resulting_updated_at"
+        "concurrency",
+        "warning"
       ],
       "properties": {
-        "action": {"enum": ["preview", "unchanged", "refused"]},
-        "outcome": {"const": "not_applied"},
+        "action": {"enum": ["preview", "unchanged", "updated", "reconciled_update", "ambiguous"]},
+        "outcome": {"enum": ["not_applied", "observed_applied", "unknown"]},
         "dry_run": {"type": "boolean"},
-        "refusal_reason": {"const": "provider_precondition_unavailable"},
+        "concurrency": {"const": "best_effort"},
+        "warning": {"const": "GitLab cannot enforce an atomic expected revision or numeric label identity on this write. Concurrent edits or label renames between checks and PUT can race; receipts describe observed state, not exclusive authorship."},
         "identity": {
           "type": "object",
           "additionalProperties": false,
@@ -130,9 +132,17 @@
       },
       "allOf": [
         {
-          "if": {"properties": {"action": {"const": "refused"}}, "required": ["action"]},
-          "then": {"required": ["refusal_reason"], "properties": {"dry_run": {"const": false}}},
-          "else": {"not": {"required": ["refusal_reason"]}}
+          "if": {"properties": {"action": {"const": "ambiguous"}}, "required": ["action"]},
+          "then": {"not": {"required": ["resulting_updated_at"]}, "properties": {"outcome": {"const": "unknown"}}},
+          "else": {"required": ["resulting_updated_at"]}
+        },
+        {
+          "if": {"properties": {"action": {"enum": ["updated", "reconciled_update"]}}},
+          "then": {"properties": {"outcome": {"const": "observed_applied"}, "changed_fields": {"minItems": 1}}}
+        },
+        {
+          "if": {"properties": {"action": {"enum": ["preview", "unchanged"]}}},
+          "then": {"properties": {"outcome": {"const": "not_applied"}}}
         },
         {
           "if": {"properties": {"action": {"const": "preview"}}, "required": ["action"]},

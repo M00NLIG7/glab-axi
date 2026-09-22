@@ -29,7 +29,7 @@
           "oneOf": [
             {
               "$ref": "ux-v1/issue-edit.schema.json",
-              "properties": {"edit": {"properties": {"action": {"const": "refused"}}}}
+              "properties": {"edit": {"properties": {"action": {"const": "ambiguous"}}}}
             },
             {"$ref": "ux-v1/board-ordering-receipt.schema.json"},
             {
@@ -50,7 +50,7 @@
       "allOf": [
         {
           "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["edit"]}}},
-          "then": {"properties": {"code": {"const": "safety_violation"}}}
+          "then": {"properties": {"code": {"const": "ambiguous_update"}}}
         },
         {
           "if": {"required": ["receipt"], "properties": {"receipt": {"required": ["variable"]}}},

@@ -552,10 +552,10 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	}
 }
 
-// TestPinnedOfficialGlabIssueEditTLS proves that exact issue-edit validation
-// delegates only its fixed project, issue, and label GET routes. No synthetic
-// credential reaches a URI or body, and no issue PUT exists in the adapter.
+// TestPinnedOfficialGlabIssueEditTLS pins fixed issue-edit GETs and the single
+// numeric-project PUT, including transport failures and redirect refusal.
 func TestPinnedOfficialGlabIssueEditTLS(t *testing.T) {
+	t.Run("single mutation", testPinnedOfficialGlabIssueEditMutationTLS)
 	binary := officialGlabTestBinary()
 	if binary == "" {
 		t.Skip("official-glab package fixture not supplied")

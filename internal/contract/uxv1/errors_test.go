@@ -22,18 +22,18 @@ func TestAmbiguousMergeUsesConflictExitWithoutSerializingCause(t *testing.T) {
 	}
 }
 
-func TestSafetyRefusalSerializesOnlyExplicitReceipt(t *testing.T) {
+func TestAmbiguousUpdateSerializesOnlyExplicitReceipt(t *testing.T) {
 	raw := "provider-controlled-refusal-sentinel"
-	err := Wrap(CodeSafety, "mutation refused before provider write", errors.New(raw))
+	err := Wrap(CodeAmbiguousUpdate, "mutation outcome is unknown", errors.New(raw))
 	err.Receipt = struct {
 		Action  string `json:"action"`
 		Outcome string `json:"outcome"`
-	}{Action: "refused", Outcome: "not_applied"}
+	}{Action: "ambiguous", Outcome: "unknown"}
 	encoded, marshalErr := json.Marshal(Failure(err, Meta{Complete: false}))
 	if marshalErr != nil {
 		t.Fatal(marshalErr)
 	}
-	if ExitCode(err) != 9 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"refused","outcome":"not_applied"}`) {
+	if ExitCode(err) != 6 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"ambiguous","outcome":"unknown"}`) {
 		t.Fatalf("safety refusal envelope=%s exit=%d", encoded, ExitCode(err))
 	}
 }
