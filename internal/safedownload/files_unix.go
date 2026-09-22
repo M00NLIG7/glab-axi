@@ -28,12 +28,18 @@ func openAbsoluteDirectory(path string) (*os.File, error) {
 	}
 	return os.NewFile(uintptr(fd), path), nil
 }
-func verifyStage(parent, stage *os.File, name string) error {
+func openDirectory(parent *os.File, name string) (*os.File, error) {
 	fd, err := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+func verifyStage(parent, stage *os.File, name string) error {
+	current, err := openDirectory(parent, name)
 	if err != nil {
 		return err
 	}
-	current := os.NewFile(uintptr(fd), name)
 	defer current.Close()
 	a, err := current.Stat()
 	if err != nil {
@@ -64,11 +70,7 @@ func makeDirectory(parent *os.File, name string) (*os.File, error) {
 	if err := unix.Mkdirat(int(parent.Fd()), name, 0o700); err != nil {
 		return nil, err
 	}
-	fd, err := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), name), nil
+	return openDirectory(parent, name)
 }
 func createFile(parent *os.File, name string) (*os.File, error) {
 	fd, err := unix.Openat(int(parent.Fd()), name, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)

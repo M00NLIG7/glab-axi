@@ -90,6 +90,9 @@ func ensureAbsent(parent *os.File, name string) error {
 func makeDirectory(parent *os.File, name string) (*os.File, error) {
 	return ntOpen(windows.Handle(parent.Fd()), name, true, true)
 }
+func openDirectory(parent *os.File, name string) (*os.File, error) {
+	return ntOpen(windows.Handle(parent.Fd()), name, false, true)
+}
 func createFile(parent *os.File, name string) (*os.File, error) {
 	return ntOpen(windows.Handle(parent.Fd()), name, true, false)
 }
@@ -141,7 +144,7 @@ func publishDirectory(parent, stage *os.File, from, to string) error {
 		return err
 	}
 	var shape renameInformation
-	size := int(unsafe.Offsetof(shape.FileName)) + (len(name)-1)*2
+	size := max(int(unsafe.Sizeof(shape)), int(unsafe.Offsetof(shape.FileName))+(len(name)-1)*2)
 	buffer := make([]byte, size)
 	info := (*renameInformation)(unsafe.Pointer(&buffer[0]))
 	info.RootDirectory = windows.Handle(parent.Fd())

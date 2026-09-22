@@ -138,6 +138,15 @@ jobs:
             test "$("dist/glab-axi${{ matrix.suffix }}" --version)" = "glab-axi 0.2.0 (contract glab-axi/v1)"
           fi
 
+      - name: Run Windows download publication regressions
+        if: matrix.goos == 'windows'
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: go test ./internal/safedownload -count=1
+
       - name: Run Windows login terminal regressions
         if: matrix.goos == 'windows'
         shell: bash

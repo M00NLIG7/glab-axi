@@ -28,17 +28,18 @@ const (
 )
 
 type ownedEntry struct {
-	parent    *os.File
+	parent    *ownedEntry
 	name      string
 	info      os.FileInfo
 	directory bool
+	file      *os.File
 }
 type Transaction struct {
 	parent                      *os.File
 	stage                       *os.File
 	parentPath, name, stageName string
-	owned                       []ownedEntry
-	directories                 map[string]*os.File
+	owned                       []*ownedEntry
+	directories                 map[string]*ownedEntry
 	committed                   bool
 	closed                      bool
 }
@@ -93,21 +94,56 @@ func Prepare(destination string) (*Transaction, error) {
 		parent.Close()
 		return nil, err
 	}
-	return &Transaction{parent: parent, stage: stage, parentPath: parentPath, name: name, stageName: stageName, owned: []ownedEntry{{parent, stageName, info, true}}, directories: map[string]*os.File{"": stage}}, nil
+	entry := &ownedEntry{parent: &ownedEntry{file: parent}, name: stageName, info: info, directory: true, file: stage}
+	return &Transaction{parent: parent, stage: stage, parentPath: parentPath, name: name, stageName: stageName, owned: []*ownedEntry{entry}, directories: map[string]*ownedEntry{"": entry}}, nil
+}
+
+func (e *ownedEntry) openDirectory() (*os.File, error) {
+	if e.file != nil {
+		return e.file, nil
+	}
+	parent, err := e.parent.openDirectory()
+	if err != nil {
+		return nil, err
+	}
+	file, err := openDirectory(parent, e.name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(info, e.info) {
+		file.Close()
+		return nil, errors.New("staged directory was replaced or cannot be inspected")
+	}
+	e.file = file
+	return file, nil
+}
+
+func (e *ownedEntry) closeDirectory() error {
+	if e.file == nil {
+		return nil
+	}
+	err := e.file.Close()
+	e.file = nil
+	return err
 }
 
 func (t *Transaction) Write(ctx context.Context, name string, src io.Reader, size int64) error {
 	if t.closed || t.committed || !validName(name) || strings.Contains(name, "/") || size < 0 || size > MaxArchiveBytes {
 		return errors.New("invalid staged file")
 	}
-	return t.writeFile(ctx, t.stage, name, src, size)
+	return t.writeFile(ctx, t.directories[""], name, src, size)
 }
 
-func (t *Transaction) writeFile(ctx context.Context, dir *os.File, name string, src io.Reader, size int64) error {
+func (t *Transaction) writeFile(ctx context.Context, dir *ownedEntry, name string, src io.Reader, size int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	file, err := createFile(dir, name)
+	parent, err := dir.openDirectory()
+	if err != nil {
+		return err
+	}
+	file, err := createFile(parent, name)
 	if err != nil {
 		return errors.New("staged filename collision or unsafe path")
 	}
@@ -116,7 +152,7 @@ func (t *Transaction) writeFile(ctx context.Context, dir *os.File, name string, 
 		file.Close()
 		return err
 	}
-	t.owned = append(t.owned, ownedEntry{dir, name, info, false})
+	t.owned = append(t.owned, &ownedEntry{parent: dir, name: name, info: info})
 	n, copyErr := io.Copy(file, io.LimitReader(contextReader{ctx, src}, size+1))
 	syncErr := file.Sync()
 	closeErr := file.Close()
@@ -296,7 +332,11 @@ func (t *Transaction) Extract(ctx context.Context, data []byte) (Receipt, error)
 		if parent == "." {
 			parent = ""
 		}
-		dir, err := makeDirectory(t.directories[parent], path.Base(name))
+		parentDir, err := t.directories[parent].openDirectory()
+		if err != nil {
+			return Receipt{}, err
+		}
+		dir, err := makeDirectory(parentDir, path.Base(name))
 		if err != nil {
 			return Receipt{}, errors.New("cannot create staged archive directory")
 		}
@@ -305,8 +345,9 @@ func (t *Transaction) Extract(ctx context.Context, data []byte) (Receipt, error)
 			dir.Close()
 			return Receipt{}, err
 		}
-		t.directories[name] = dir
-		t.owned = append(t.owned, ownedEntry{t.directories[parent], path.Base(name), info, true})
+		entry := &ownedEntry{parent: t.directories[parent], name: path.Base(name), info: info, directory: true, file: dir}
+		t.directories[name] = entry
+		t.owned = append(t.owned, entry)
 	}
 	for _, entry := range entries {
 		if entry.dir {
@@ -349,6 +390,14 @@ func (t *Transaction) Commit(ctx context.Context) error {
 	if aerr != nil || berr != nil || !os.SameFile(a, b) {
 		return errors.New("destination parent changed")
 	}
+	for name, dir := range t.directories {
+		if name == "" {
+			continue
+		}
+		if err := dir.closeDirectory(); err != nil {
+			return errors.New("cannot close staged archive directory")
+		}
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -365,34 +414,24 @@ func (t *Transaction) Close() error {
 	}
 	t.closed = true
 	var cleanup error
-	closed := map[*os.File]bool{}
 	if !t.committed {
 		for i := len(t.owned) - 1; i >= 0; i-- {
 			entry := t.owned[i]
-			if err := removeOwned(entry.parent, entry.name, entry.info, entry.directory); err != nil {
-				cleanup = errors.New("download cleanup incomplete; unrelated entries preserved")
+			if err := entry.closeDirectory(); err != nil {
+				cleanup = err
 			}
-			if entry.directory {
-				for _, dir := range t.directories {
-					if closed[dir] {
-						continue
-					}
-					info, err := dir.Stat()
-					if err == nil && os.SameFile(info, entry.info) {
-						if err := dir.Close(); err != nil {
-							cleanup = err
-						}
-						closed[dir] = true
-					}
-				}
+			parent, err := entry.parent.openDirectory()
+			if err != nil {
+				cleanup = errors.New("download cleanup incomplete; unrelated entries preserved")
+				continue
+			}
+			if err := removeOwned(parent, entry.name, entry.info, entry.directory); err != nil {
+				cleanup = errors.New("download cleanup incomplete; unrelated entries preserved")
 			}
 		}
 	}
 	for _, dir := range t.directories {
-		if closed[dir] {
-			continue
-		}
-		if err := dir.Close(); err != nil && cleanup == nil {
+		if err := dir.closeDirectory(); err != nil && cleanup == nil {
 			cleanup = err
 		}
 	}
