@@ -1,0 +1,92 @@
+{
+  "schema": "glab-axi/download-consumer-contract/v1",
+  "provider": "gitlab",
+  "reference": {
+    "repository": "https://github.com/kunchenguid/gh-axi",
+    "commit": "2bffd9a5b60ded64d6c9851683b27a480173a7ee",
+    "commands": ["run download", "release download"],
+    "difference": "GitLab artifacts belong to an exact job; job download extracts a bounded ZIP. Release download selects one exact link and preserves asset bytes. No pipeline-wide bundle or glob selection is invented."
+  },
+  "backend": "native",
+  "envelope": "glab-axi/ux-v1",
+  "commands": [
+    {"path": ["job", "artifacts"], "position": "job_id", "required": ["--auth-source", "--hostname", "--repo", "--pipeline-id", "--expected-ref", "--expected-sha"], "data_schema": "schema/ux-v1/job-artifacts.schema.json"},
+    {"path": ["job", "download"], "position": "job_id", "required": ["--auth-source", "--hostname", "--repo", "--pipeline-id", "--expected-ref", "--expected-sha", "--destination"], "data_schema": "schema/ux-v1/download.schema.json"},
+    {"path": ["release", "download"], "position": "tag", "required": ["--auth-source", "--hostname", "--repo", "--expected-sha", "--asset-id", "--asset-name", "--destination"], "data_schema": "schema/ux-v1/download.schema.json"}
+  ],
+  "authentication": {
+    "selector": "--auth-source native",
+    "resolver": "existing native environment/keyring resolver",
+    "authority": "existing configured native logical host/API/web mapping",
+    "scope": "one credential and authority for all reads, pages, transfer and rechecks in the operation",
+    "official_profile_fallback": false,
+    "credential_export": false,
+    "automatic_redirects": false,
+    "automatic_retries": false,
+    "arbitrary_urls": false
+  },
+  "routes": [
+    "GET /projects/{escaped_project}",
+    "GET /projects/{project_id}/jobs/{job_id}",
+    "GET /projects/{project_id}/pipelines/{pipeline_id}",
+    "GET /projects/{project_id}/jobs/{job_id}/artifacts",
+    "GET /projects/{project_id}/jobs/{job_id}/artifacts/{escaped_file_path}",
+    "GET /projects/{project_id}/releases/{escaped_tag}",
+    "GET /projects/{project_id}/releases/{escaped_tag}/assets/links?page={page}&per_page=100",
+    "GET /projects/{project_id}/packages?package_type=generic&package_name={name}&package_version={version}&status=default&page={page}&per_page=100",
+    "GET /projects/{project_id}/packages/{package_id}/package_files?page={page}&per_page=100",
+    "GET /projects/{project_id}/packages/generic/{name}/{version}/{filename}"
+  ],
+  "release_link_targets": [
+    "configured API origin, same numeric project or escaped project path, packages/generic/{name}/{version}/{filename}",
+    "exact configured project web URL, /-/jobs/{job_id}/artifacts/raw/{file_path}, translated to the typed same-project API route"
+  ],
+  "integrity": {
+    "job_archive": "exact metadata size and complete ZIP CRC verification; returned SHA-256 is locally computed receipt evidence, not a provider digest",
+    "generic_package": "unique exact package name/version/type and file identity, provider file_sha256 and size, plus full metadata recheck",
+    "raw_job_asset": "exact project/job/pipeline/release commit binding and metadata recheck; returned SHA-256 is locally computed receipt evidence"
+  },
+  "filesystem": {
+    "destination": "explicit absolute new directory with existing symlink-free parent",
+    "publication": "atomic no-replace directory publication",
+    "rollback": "recorded operation-owned entries only; foreign entries preserved and incomplete cleanup reported",
+    "zip": "single-disk non-ZIP64; complete bounded directory/path/type/collision/size/CRC validation before extracted-content writes",
+    "paths": "portable ASCII; no links, devices, traversal, case-fold collisions, reserved device names or path replacement through symlinks",
+    "permissions": "private; executable bits are not preserved",
+    "platforms": ["linux", "darwin", "windows"]
+  },
+  "limits": {
+    "operation_seconds": 45,
+    "download_cli_outer_seconds": 30,
+    "requests": 64,
+    "buffered_metadata_bytes": 8388608,
+    "response_header_metadata_bytes": 16384,
+    "transfer_bytes": 67108864,
+    "expanded_bytes": 268435456,
+    "zip_paths": 1000,
+    "zip_directories": 128,
+    "expansion_ratio": 1000,
+    "catalog_pages": 10,
+    "page_items": 100
+  },
+  "residuals": [
+    "Redirect/CDN/object-storage transfer is refused; no universal private-deployment coverage is claimed.",
+    "External or other release link types are refused, not downloaded anonymously as a false equivalent.",
+    "Job archive and raw artifact routes provide no pinned SHA-256 metadata; local hashes are not represented as verified provider checksums.",
+    "Cooperative cancellation cleans staging; crash/forced-kill recovery and isolation from a malicious same-account process are not claimed."
+  ],
+  "provider_evidence": {
+    "gitlab_documentation_version": "v18.3.0-ee",
+    "client_go_version": "v2.53.0",
+    "client_go_commit": "c5e9d2aeb5d5f9f6319895acc95a00fe953a9870",
+    "sources": [
+      "https://gitlab.com/gitlab-org/gitlab/-/raw/v18.3.0-ee/doc/api/releases/links.md",
+      "https://gitlab.com/gitlab-org/api/client-go/-/raw/c5e9d2aeb5d5f9f6319895acc95a00fe953a9870/jobs.go",
+      "https://gitlab.com/gitlab-org/api/client-go/-/raw/c5e9d2aeb5d5f9f6319895acc95a00fe953a9870/packages.go",
+      "https://gitlab.com/gitlab-org/api/client-go/-/raw/c5e9d2aeb5d5f9f6319895acc95a00fe953a9870/generic_packages.go",
+      "https://gitlab.com/gitlab-org/cli/-/raw/816e3a52411aba73d90237859fdc6ecbc86bd169/internal/commands/release/download/download.go",
+      "https://gitlab.com/gitlab-org/cli/-/raw/816e3a52411aba73d90237859fdc6ecbc86bd169/internal/commands/job/artifact/logic.go"
+    ],
+    "delegated_dependency": "Pinned glab 1.112.0 has independently reproduced PAT redirect forwarding and unsafe dedicated extraction. It is not used by these native download operations and is not claimed fixed upstream."
+  }
+}

@@ -26,9 +26,12 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi pipeline list [global flags]` - List project pipelines.
 - `glab-axi pipeline view <id> [global flags]` - View one pipeline.
 - `glab-axi job list --pipeline-id ID [global flags]` - List jobs for one pipeline.
+- `glab-axi job artifacts <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA` - Read artifact metadata for one exact job and pipeline.
+- `glab-axi job download <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA --destination ABSOLUTE_NEW_DIRECTORY` - Safely extract one exact job's artifact ZIP into a new directory.
 - `glab-axi job view <id> [global flags]` - View one CI/CD job.
 - `glab-axi job trace <id> [global flags]` - View a bounded, redacted tail of one job trace.
 - `glab-axi release list [global flags]` - List project releases and bounded download metadata.
+- `glab-axi release download <tag> --auth-source native --hostname HOST -R PROJECT --expected-sha SHA --asset-id ID --asset-name NAME --destination ABSOLUTE_NEW_DIRECTORY` - Download one exact release asset into a new private directory.
 - `glab-axi release view [tag] [global flags]` - View a release and project-bound download metadata (latest when omitted).
 - `glab-axi repo list [--hostname HOST] [--limit N]` - List repositories visible to the official profile.
 - `glab-axi repo view [namespace/project] [global flags]` - View a project/repository.

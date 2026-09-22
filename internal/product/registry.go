@@ -24,6 +24,8 @@ type Definition struct {
 	NoLimit             bool
 	RequireExplicitHost bool
 	RequireExplicitRepo bool
+	NativeAuth          bool // enable only on explicitly approved feature leaves
+	RequireNativeAuth   bool // new native-only leaves must require deliberate opt-in
 }
 
 type RepoMode int
@@ -61,9 +63,12 @@ var definitions = append([]Definition{
 	{Path: []string{"pipeline", "list"}, Summary: "List project pipelines.", Usage: "gl-axi pipeline list [global flags]", RepoMode: RepoRequired, Schema: "pipeline-list", Backend: "official-glab"},
 	{Path: []string{"pipeline", "view"}, Summary: "View one pipeline.", Usage: "gl-axi pipeline view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "pipeline-view", Backend: "official-glab"},
 	{Path: []string{"job", "list"}, Summary: "List jobs for one pipeline.", Usage: "gl-axi job list --pipeline-id ID [global flags]", RepoMode: RepoRequired, Flags: []FlagDefinition{{Name: "--pipeline-id", Value: "ID", Description: "Pipeline ID."}}, Schema: "job-list", Backend: "official-glab"},
+	{Path: []string{"job", "artifacts"}, Summary: "Read artifact metadata for one exact job and pipeline.", Details: "Requires explicit native authentication and caller-bound pipeline/ref/commit identity. Artifacts are job-owned, not a run-level collection.", Usage: "gl-axi job artifacts <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: downloadFlags(true, true), Schema: "job-artifacts", Backend: "native", NoLimit: true, NativeAuth: true, RequireNativeAuth: true},
+	{Path: []string{"job", "download"}, Summary: "Safely extract one exact job's artifact ZIP into a new directory.", Details: "Checks project/pipeline/job/ref/commit identity before and after transfer. Bounded ZIP extraction validates paths, entry types, collisions, CRC and expansion before output writes. Maximum archive 64 MiB, expansion 256 MiB, 1000 paths, 128 directories. Portable ASCII paths only; output permissions are private and executable bits are not retained. Archive SHA-256 is a receipt, not a provider-authenticated digest. Redirects/CDN transfers are refused. Existing directories/files are never merged or replaced.", Usage: "gl-axi job download <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA --destination ABSOLUTE_NEW_DIRECTORY", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: downloadFlags(true, false), Schema: "download", Backend: "native", NoLimit: true, NativeAuth: true, RequireNativeAuth: true},
 	{Path: []string{"job", "view"}, Summary: "View one CI/CD job.", Usage: "gl-axi job view <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-view", Backend: "official-glab"},
 	{Path: []string{"job", "trace"}, Summary: "View a bounded, redacted tail of one job trace.", Usage: "gl-axi job trace <id> [global flags]", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Schema: "job-trace", Backend: "official-glab"},
 	{Path: []string{"release", "list"}, Summary: "List project releases and bounded download metadata.", Usage: "gl-axi release list [global flags]", RepoMode: RepoRequired, Schema: "release-list", Backend: "official-glab"},
+	{Path: []string{"release", "download"}, Summary: "Download one exact release asset into a new private directory.", Details: "Selects a complete bounded link catalog by exact tag/commit, link ID and name. Supports only the same project's GitLab generic-package files (provider SHA-256/size verified) or job-owned raw artifacts at the release commit (SHA-256 receipt only). Rechecks metadata before publication. Maximum 64 MiB, 10 pages/catalog and 45-second native lifetime (caller deadlines may be shorter). No arbitrary/external URLs, redirect/CDN transfer, overwrite, glob selection, archive extraction or public-only fallback.", Usage: "gl-axi release download <tag> --auth-source native --hostname HOST -R PROJECT --expected-sha SHA --asset-id ID --asset-name NAME --destination ABSOLUTE_NEW_DIRECTORY", RepoMode: RepoRequired, Positionals: 1, MaxPositions: 1, Flags: downloadFlags(false, false), Schema: "download", Backend: "native", NoLimit: true, NativeAuth: true, RequireNativeAuth: true},
 	{Path: []string{"release", "view"}, Summary: "View a release and project-bound download metadata (latest when omitted).", Usage: "gl-axi release view [tag] [global flags]", RepoMode: RepoRequired, MaxPositions: 1, Schema: "release-view", Backend: "official-glab"},
 	{Path: []string{"repo", "list"}, Summary: "List repositories visible to the official profile.", Usage: "gl-axi repo list [--hostname HOST] [--limit N]", RepoMode: RepoNone, Schema: "repo-list", Backend: "official-glab"},
 	{Path: []string{"repo", "view"}, Summary: "View a project/repository.", Usage: "gl-axi repo view [namespace/project] [global flags]", RepoMode: RepoOptional, MaxPositions: 1, Schema: "repo-view", Backend: "official-glab"},
@@ -76,6 +81,14 @@ var definitions = append([]Definition{
 	{Path: []string{"setup", "hooks"}, Summary: "Install or repair generated Agent Skill and session hooks.", Usage: "gl-axi setup hooks", RepoMode: RepoNone, Schema: "setup-hooks", Backend: "local"},
 	{Path: []string{"update"}, Summary: "Check for or install a signed gl-axi release.", Usage: "gl-axi update [--check]", RepoMode: RepoNone, Flags: []FlagDefinition{{Name: "--check", Description: "Check only; do not replace the executable.", Boolean: true}}, Schema: "update", Backend: "local"},
 }, planningDefinitions()...)
+
+func definitionFlags(definition Definition) []FlagDefinition {
+	flags := append([]FlagDefinition(nil), definition.Flags...)
+	if definition.NativeAuth {
+		flags = append(flags, FlagDefinition{Name: "--auth-source", Value: "native", Required: definition.RequireNativeAuth, Description: "Explicit native environment/keyring identity; never falls back to the official profile. Requires explicit target flags."})
+	}
+	return flags
+}
 
 func issueEditFlags() []FlagDefinition {
 	return []FlagDefinition{
@@ -175,7 +188,7 @@ func TopHelp() string {
 	out.WriteString("      --format toon|json        output format (default toon)\n")
 	out.WriteString("  -h, --help                    show contextual help\n")
 	out.WriteString("  -v, -V, --version             show version (the long form preserves the v1 handshake)\n")
-	out.WriteString("\nBackends:\n  bounded product operations and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend.\n")
+	out.WriteString("\nBackends:\n  bounded product operations and human login use pinned official glab 1.112.0 (816e3a52);\n  exact glab-axi/v1 automation remains a standalone native backend;\n  declared download commands require explicit --auth-source native, with no profile fallback.\n")
 	out.WriteString("\nSecurity boundary:\n  MR ensure, guarded squash merge and opted-in board issues may write;\n  board issues may initialize ordering and shift sibling positions;\n  issue edit validates and previews but refuses live mutation because GitLab has no enforceable issue revision;\n  no generic API, approve, comment/reply/resolve, close/reopen/delete,\n  label-resource or MR-label mutation, repository/release mutation,\n  secrets/variables, pipeline mutation, or alternate merge strategy.\n")
 	return out.String()
 }
@@ -266,9 +279,13 @@ func leafHelp(definition Definition) string {
 	if definition.Write {
 		out.WriteString("Write boundary: this is a pinned provider-write contract with command-specific guards.\n")
 	}
-	if len(definition.Flags) > 0 {
+	if definition.NativeAuth {
+		out.WriteString("Native opt-in: --auth-source native uses the existing native environment/keyring and configured API/web authority for the whole operation. This account may differ from official glab. Redirects and credential/profile fallback are refused.\n")
+	}
+	flags := definitionFlags(definition)
+	if len(flags) > 0 {
 		out.WriteString("\nCommand flags:\n")
-		for _, flag := range definition.Flags {
+		for _, flag := range flags {
 			name := flag.Name
 			if flag.Value != "" {
 				name += " " + flag.Value

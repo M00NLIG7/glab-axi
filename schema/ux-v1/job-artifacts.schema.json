@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/M00NLIG7/glab-axi/schema/ux-v1/job-artifacts.schema.json",
+  "title": "Exact job-owned artifact metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifacts"],
+  "properties": {
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "pipeline_id", "job_id", "ref", "sha", "filename", "size"],
+      "properties": {
+        "project_id": {"type": "integer", "minimum": 1},
+        "pipeline_id": {"type": "integer", "minimum": 1},
+        "job_id": {"type": "integer", "minimum": 1},
+        "ref": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "filename": {"type": "string", "minLength": 1, "maxLength": 255},
+        "size": {"type": "integer", "minimum": 1, "maximum": 67108864}
+      }
+    }
+  }
+}

@@ -188,6 +188,30 @@ List jobs for one pipeline.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/job-list.schema.json`.
 
+## `job artifacts`
+
+```text
+gl-axi job artifacts <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA
+```
+
+Read artifact metadata for one exact job and pipeline.
+
+Requires explicit native authentication and caller-bound pipeline/ref/commit identity. Artifacts are job-owned, not a run-level collection.
+
+Backend: `native`. Schema: `schema/ux-v1/job-artifacts.schema.json`.
+
+## `job download`
+
+```text
+gl-axi job download <job-id> --auth-source native --hostname HOST -R PROJECT --pipeline-id ID --expected-ref REF --expected-sha SHA --destination ABSOLUTE_NEW_DIRECTORY
+```
+
+Safely extract one exact job's artifact ZIP into a new directory.
+
+Checks project/pipeline/job/ref/commit identity before and after transfer. Bounded ZIP extraction validates paths, entry types, collisions, CRC and expansion before output writes. Maximum archive 64 MiB, expansion 256 MiB, 1000 paths, 128 directories. Portable ASCII paths only; output permissions are private and executable bits are not retained. Archive SHA-256 is a receipt, not a provider-authenticated digest. Redirects/CDN transfers are refused. Existing directories/files are never merged or replaced.
+
+Backend: `native`. Schema: `schema/ux-v1/download.schema.json`.
+
 ## `job view`
 
 ```text
@@ -217,6 +241,18 @@ gl-axi release list [global flags]
 List project releases and bounded download metadata.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/release-list.schema.json`.
+
+## `release download`
+
+```text
+gl-axi release download <tag> --auth-source native --hostname HOST -R PROJECT --expected-sha SHA --asset-id ID --asset-name NAME --destination ABSOLUTE_NEW_DIRECTORY
+```
+
+Download one exact release asset into a new private directory.
+
+Selects a complete bounded link catalog by exact tag/commit, link ID and name. Supports only the same project's GitLab generic-package files (provider SHA-256/size verified) or job-owned raw artifacts at the release commit (SHA-256 receipt only). Rechecks metadata before publication. Maximum 64 MiB, 10 pages/catalog and 45-second native lifetime (caller deadlines may be shorter). No arbitrary/external URLs, redirect/CDN transfer, overwrite, glob selection, archive extraction or public-only fallback.
+
+Backend: `native`. Schema: `schema/ux-v1/download.schema.json`.
 
 ## `release view`
 

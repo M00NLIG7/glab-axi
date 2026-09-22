@@ -31,7 +31,16 @@ func Success(data any, meta Meta) Envelope {
 
 func Failure(err error, meta Meta) Envelope {
 	typed := AsError(err)
-	return Envelope{Schema: Schema, OK: false, Error: typed, Help: helpFor(typed.Code), Meta: meta}
+	help := helpFor(typed.Code)
+	if meta.Backend == "native" {
+		switch typed.Code {
+		case CodeAuthentication:
+			help = []string{"verify the explicitly selected native environment/keyring credential; official-glab login is not a fallback"}
+		case CodeForbidden:
+			help = []string{"verify the selected native account's role on the exact configured GitLab authority"}
+		}
+	}
+	return Envelope{Schema: Schema, OK: false, Error: typed, Help: help, Meta: meta}
 }
 
 func helpFor(code Code) []string {
