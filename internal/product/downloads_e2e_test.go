@@ -321,6 +321,9 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 			if out, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v %s", err, out)
 			}
+			t.Run("publication", func(t *testing.T) {
+				testDownloadExecutablePublication(t, binary)
+			})
 			for _, tc := range []struct {
 				kind, mode string
 				ok         bool

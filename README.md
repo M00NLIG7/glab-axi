@@ -265,7 +265,8 @@ require explicit host/project, pipeline ID, expected ref and commit SHA.
 `release download` selects an exact tag/commit and link ID/name from a complete
 bounded catalog. It supports that project's generic-package files (provider
 SHA-256 and size verified) and raw job-artifact links at the release commit.
-Release assets are not automatically extracted.
+The exact link name supplied as `--asset-name` must be a portable filename and
+becomes the output filename. Release assets are not automatically extracted.
 
 Downloads require `--auth-source native`; they use the existing native
 configuration and environment/keyring resolver for the whole operation. That
@@ -273,8 +274,9 @@ account can differ from the official profile. They neither discover `glab` nor
 export its credential, and never silently switch accounts or retry transfers.
 
 `--destination` must be an absolute, nonexistent directory with an existing
-symlink-free parent. Publication is atomic and no-clobber. ZIP paths, types,
-collisions, size and CRC are validated before extracted files are written;
+symlink-free parent. Windows requires a drive-letter path; UNC paths are refused.
+Publication is atomic and no-clobber. ZIP paths, types, collisions, size and CRC
+are validated before extracted files are written;
 links, devices, ZIP64, traversal and archive bombs are refused. Paths are
 portable ASCII, and extracted files have private, non-executable permissions.
 Maximum transfer is 64 MiB; ZIP expansion is 256 MiB with 1,000 paths and 128
@@ -283,10 +285,10 @@ directories. Errors/cancellation clean only operation-owned staging entries.
 All redirects, external release links and unproved CDN/storage transfers fail
 closed. This supports authenticated private direct responses, but is **not** a
 claim of every GitLab deployment or release-link equivalent: redirected assets
-remain an explicit limitation. Artifact CRC/size and a locally computed SHA-256
-receipt are not a provider-authenticated digest. See [download evidence and
-bounds](contracts/downloads/v1.json), [authentication](docs/authentication.md),
-and command help for the exact selectors.
+remain an explicit limitation. The [download contract](contracts/downloads/v1.json)
+specifies the integrity evidence for each asset kind, route restrictions and bounds,
+including the CLI deadline. See [authentication](docs/authentication.md) and
+command help for the exact selectors.
 
 ## Standalone native contract
 

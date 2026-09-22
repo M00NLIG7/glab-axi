@@ -144,6 +144,8 @@ func publishDirectory(parent, stage *os.File, from, to string) error {
 		return err
 	}
 	var shape renameInformation
+	// Include the native structure's padding even for a one-character name;
+	// FileNameLength below still counts only the actual UTF-16 filename bytes.
 	size := max(int(unsafe.Sizeof(shape)), int(unsafe.Offsetof(shape.FileName))+(len(name)-1)*2)
 	buffer := make([]byte, size)
 	info := (*renameInformation)(unsafe.Pointer(&buffer[0]))

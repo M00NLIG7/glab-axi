@@ -65,8 +65,9 @@ native-only leaves. `openNative` opens one `internal/productnative.Client` per
 complete operation, using existing native configuration, credential resolution
 and TLS patterns. The client owns the selected authority/credential, refuses
 all redirects and automatic retries, uses fresh HTTP/1.1 connections to avoid
-HTTP/2 refused-stream replay, and enforces a 45-second lifetime,
-64-request bound, 8 MiB buffered-response budget and 64 MiB stream budget.
+HTTP/2 refused-stream replay, and bounds requests, responses and lifetime.
+The [download contract](../contracts/downloads/v1.json) owns these bounds,
+including the shorter outer deadline applied by the product dispatcher.
 Feature handlers retain their own route/identity/expected-state authority.
 This internal request interface does not expose generic user HTTP authority.
 

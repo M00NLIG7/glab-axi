@@ -145,7 +145,11 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
-        run: go test ./internal/safedownload -count=1
+        run: |
+          go test ./internal/safedownload -count=1
+          go test ./internal/product \
+            -run '^TestDownloadExecutableAliasesEndToEnd$/^(gl-axi|glab-axi)$/^publication$' \
+            -count=1 -v
 
       - name: Run Windows login terminal regressions
         if: matrix.goos == 'windows'

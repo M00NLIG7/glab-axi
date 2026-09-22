@@ -61,8 +61,9 @@ func ValidateDestination(destination string) error {
 }
 
 // Prepare requires an existing symlink-free parent and a nonexistent final
-// component. It must run before network access. All filesystem access after
-// this point is relative to opened directory descriptors.
+// component. It must run before network access. Mutations stay relative to
+// opened directory descriptors; Commit reopens the absolute parent path only
+// to verify that it still identifies the pinned directory.
 func Prepare(destination string) (*Transaction, error) {
 	if err := ValidateDestination(destination); err != nil {
 		return nil, err
@@ -390,6 +391,8 @@ func (t *Transaction) Commit(ctx context.Context) error {
 	if aerr != nil || berr != nil || !os.SameFile(a, b) {
 		return errors.New("destination parent changed")
 	}
+	// Windows directory publication requires closing descendant handles first.
+	// Rollback can reopen recorded directories with no-follow and identity checks.
 	for name, dir := range t.directories {
 		if name == "" {
 			continue
