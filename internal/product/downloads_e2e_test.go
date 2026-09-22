@@ -61,6 +61,8 @@ type downloadCLIResult struct {
 type downloadCLIFixture struct {
 	server                               *httptest.Server
 	home, configPath, destination, token string
+	hostname, origin, caPath             string
+	env                                  []string
 	archive, asset                       []byte
 	archiveSize                          int64
 	rawJob                               bool
@@ -76,6 +78,19 @@ type downloadCLIFixture struct {
 
 func newDownloadCLIFixture(t *testing.T, mode string) *downloadCLIFixture {
 	t.Helper()
+	f := newDownloadTLSFixture(t, mode)
+	cfg := config.New()
+	if err := cfg.Put(f.hostname, config.Host{GitHosts: []string{f.hostname}, APIBase: f.origin + "/api/v4", WebBase: f.origin, CABundle: f.caPath, ProxyDisabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Save(f.configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func newDownloadTLSFixture(t *testing.T, mode string) *downloadCLIFixture {
+	t.Helper()
 	home, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -89,18 +104,12 @@ func newDownloadCLIFixture(t *testing.T, mode string) *downloadCLIFixture {
 	f.server.EnableHTTP2 = mode == "http2"
 	f.server.StartTLS()
 	t.Cleanup(f.server.Close)
-	ca := filepath.Join(home, "ca.pem")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.server.Certificate().Raw}), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg := config.New()
-	if err := cfg.Put("download.example", config.Host{GitHosts: []string{"download.example"}, APIBase: f.server.URL + "/api/v4", WebBase: f.server.URL, CABundle: ca, ProxyDisabled: true}); err != nil {
+	f.hostname, f.origin = "download.example", f.server.URL
+	f.caPath = filepath.Join(home, "ca.pem")
+	if err := os.WriteFile(f.caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.server.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	f.configPath = filepath.Join(home, "private", "config.json")
-	if err := config.Save(f.configPath, cfg); err != nil {
-		t.Fatal(err)
-	}
 	return f
 }
 func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http.Request) {
@@ -119,7 +128,7 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		return
 	}
 	sha := strings.Repeat("a", 40)
-	web := f.server.URL + "/group/project"
+	web := f.origin + "/group/project"
 	pipeline := map[string]any{"id": 71, "project_id": 101, "ref": "main", "sha": sha, "web_url": web + "/-/pipelines/71"}
 	write := func(value any) {
 		w.Header().Set("Content-Type", "application/json")
@@ -182,7 +191,7 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 		}
 		write(map[string]any{"tag_name": tag, "commit": map[string]any{"id": sha}, "_links": map[string]any{"self": self}})
 	case "/api/v4/projects/101/releases/" + f.releaseTag + "/assets/links":
-		assetURL := f.server.URL + "/api/v4/projects/101/packages/generic/app/v1.0/app.bin"
+		assetURL := f.origin + "/api/v4/projects/101/packages/generic/app/v1.0/app.bin"
 		if f.rawJob {
 			assetURL = web + "/-/jobs/42/artifacts/raw/" + f.rawPath
 		}
@@ -230,7 +239,7 @@ func (f *downloadCLIFixture) handle(t *testing.T, w http.ResponseWriter, r *http
 	case "/api/v4/projects/101/jobs/42/artifacts", "/api/v4/projects/101/packages/generic/app/v1.0/app.bin", "/api/v4/projects/101/jobs/42/artifacts/" + rawPath:
 		f.transferred = true
 		if f.mode == "redirect" {
-			w.Header().Set("Location", f.server.URL+"/api/v4/projects/999/private")
+			w.Header().Set("Location", f.origin+"/api/v4/projects/999/private")
 			w.WriteHeader(302)
 			return
 		}
@@ -279,7 +288,7 @@ func (f *downloadCLIFixture) command(binary, kind string, extra ...string) *exec
 	if kind == "release" {
 		args = []string{"release", "download", f.releaseTag, "--asset-id", "7", "--asset-name", "app.bin"}
 	}
-	args = append(args, "--auth-source", "native", "--hostname", "download.example", "--repo", "group/project", "--expected-sha", strings.Repeat("a", 40), "--format", "json")
+	args = append(args, "--auth-source", "native", "--hostname", f.hostname, "--repo", "group/project", "--expected-sha", strings.Repeat("a", 40), "--format", "json")
 	if kind != "artifacts" {
 		args = append(args, "--destination", f.destination)
 	}
@@ -287,6 +296,7 @@ func (f *downloadCLIFixture) command(binary, kind string, extra ...string) *exec
 	command := exec.Command(binary, args...)
 	command.Dir = f.home
 	command.Env = []string{"HOME=" + f.home, "USERPROFILE=" + f.home, "PATH=" + f.home, "GL_AXI_CONFIG=" + f.configPath, "GL_AXI_TOKEN=" + f.token, "NO_PROXY=*"}
+	command.Env = append(command.Env, f.env...)
 	if runtime.GOOS == "windows" {
 		command.Env = append(command.Env, "SYSTEMROOT="+os.Getenv("SYSTEMROOT"), "TEMP="+f.home, "TMP="+f.home)
 	}
@@ -322,7 +332,7 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 				t.Fatalf("build: %v %s", err, out)
 			}
 			t.Run("publication", func(t *testing.T) {
-				testDownloadExecutablePublication(t, binary)
+				testDownloadExecutablePublication(t, binary, newDownloadCLIFixture)
 			})
 			for _, tc := range []struct {
 				kind, mode string

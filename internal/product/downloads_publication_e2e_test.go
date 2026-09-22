@@ -7,12 +7,43 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
-func testDownloadExecutablePublication(t *testing.T, binary string) {
+// Exercise the CLI entry point with an injected TLS client and the built-in
+// host mapping. Publication does not depend on persisting native config, whose
+// Unix permission checks cannot be satisfied on Windows.
+func TestDownloadPublicationExecutableAliases(t *testing.T) {
+	for _, program := range []string{"gl-axi", "glab-axi"} {
+		t.Run(program, func(t *testing.T) {
+			binary := filepath.Join(t.TempDir(), program)
+			if runtime.GOOS == "windows" {
+				binary += ".exe"
+			}
+			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./testdata/download-cli")
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v %s", err, out)
+			}
+			testDownloadExecutablePublication(t, binary, func(t *testing.T, mode string) *downloadCLIFixture {
+				f := newDownloadTLSFixture(t, mode)
+				f.mu.Lock()
+				f.hostname, f.origin = "gitlab.com", "https://gitlab.com"
+				f.env = []string{
+					"GL_AXI_TEST_TLS_ADDRESS=" + f.server.Listener.Addr().String(),
+					"GL_AXI_TEST_CA_BUNDLE=" + f.caPath,
+				}
+				f.mu.Unlock()
+				return f
+			})
+		})
+	}
+}
+
+func testDownloadExecutablePublication(t *testing.T, binary string, fixture func(*testing.T, string) *downloadCLIFixture) {
 	t.Helper()
 	for _, tc := range []struct {
 		name, kind, mode, destination string
@@ -24,7 +55,7 @@ func testDownloadExecutablePublication(t *testing.T, binary string) {
 		{"release-owned-rollback", "release", "race-destination", "x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newDownloadCLIFixture(t, tc.mode)
+			f := fixture(t, tc.mode)
 			var archive bytes.Buffer
 			writer := zip.NewWriter(&archive)
 			for _, entry := range []struct{ name, body string }{

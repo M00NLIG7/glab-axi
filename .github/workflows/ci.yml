@@ -148,7 +148,7 @@ jobs:
         run: |
           go test ./internal/safedownload -count=1
           go test ./internal/product \
-            -run '^TestDownloadExecutableAliasesEndToEnd$/^(gl-axi|glab-axi)$/^publication$' \
+            -run '^TestDownloadPublicationExecutableAliases$' \
             -count=1 -v
 
       - name: Run Windows login terminal regressions
