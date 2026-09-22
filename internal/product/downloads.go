@@ -381,7 +381,7 @@ func selectReleaseDownload(ctx context.Context, c *productnative.Client, project
 		return plan, downloadSafety()
 	}
 	u, err := url.Parse(plan.Link.URL)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || strings.Contains(plan.Link.URL, "#") {
 		return plan, downloadSafety()
 	}
 	api := c.Host().Authority

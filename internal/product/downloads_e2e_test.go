@@ -479,6 +479,13 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 					{"tr%65e%2ejs%6Fn", "tree.json", false},
 					{"%74%72%65%65%2e%6a%73%6f%6e", "tree.json", false},
 					{"app.bin", "app.bin", true},
+					{"app.bin#", "app.bin%23", false},
+					{"app.bin#section", "app.bin%23section", false},
+					{"app.bin%23", "app.bin%23", true},
+					{"app.bin%23section", "app.bin%23section", true},
+					{"app.bin%23#", "app.bin%23%23", false},
+					{"bin/app.bin#", "bin/app.bin%23", false},
+					{"bin/app.bin%23", "bin/app.bin%23", true},
 					{"treehouse", "treehouse", true},
 					{"tree.xml", "tree.xml", true},
 					{"tree.JSON", "tree.JSON", true},
@@ -495,6 +502,7 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 						f := newDownloadCLIFixture(t, "raw-job")
 						f.mu.Lock()
 						f.rawPath = tc.path
+						f.asset = []byte("raw artifact at " + tc.route)
 						f.mu.Unlock()
 						command := f.command(binary, "release")
 						var stdout, stderr bytes.Buffer
@@ -504,14 +512,14 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 						if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 							t.Fatalf("decode: %v output=%s stderr=%s", err, &stdout, &stderr)
 						}
-						if result.OK != tc.ok || (runErr == nil) != tc.ok || result.Meta.Backend != "native" {
-							published, readErr := os.ReadFile(filepath.Join(f.destination, "app.bin"))
-							t.Fatalf("result=%+v run=%v stderr=%s published=%q read=%v", result, runErr, &stderr, published, readErr)
-						}
 						f.mu.Lock()
 						transferred := f.transferred
 						requests := append([]string(nil), f.requests...)
 						f.mu.Unlock()
+						if result.OK != tc.ok || (runErr == nil) != tc.ok || result.Meta.Backend != "native" {
+							published, readErr := os.ReadFile(filepath.Join(f.destination, "app.bin"))
+							t.Fatalf("result=%+v run=%v stderr=%s requests=%v published=%q read=%v", result, runErr, &stderr, requests, published, readErr)
+						}
 						transfers := 0
 						for _, request := range requests {
 							if request == "GET /api/v4/projects/101/jobs/42/artifacts/tree" || request == "GET /api/v4/projects/101/jobs/42/artifacts/tree.json" {
@@ -538,8 +546,11 @@ func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
 							if command.ProcessState.ExitCode() != 9 || result.Error.Code != "safety_violation" || result.Data.Download != (downloadReceipt{}) {
 								t.Fatalf("result=%+v run=%v", result, runErr)
 							}
+							if len(requests) != 3 || requests[2] != "GET /api/v4/projects/101/releases/v1.0/assets/links?page=1&per_page=100" {
+								t.Fatalf("invalid raw link reached artifact selection or transfer: %v", requests)
+							}
 							if _, err := os.Stat(f.destination); !os.IsNotExist(err) {
-								t.Fatal("reserved route published destination")
+								t.Fatal("invalid raw link published destination")
 							}
 						}
 						if strings.Contains(stdout.String()+stderr.String(), f.token) {
