@@ -62,6 +62,7 @@ type mrNativeFixture struct {
 	writes         int
 	reads          int
 	noteBody       string
+	storedNoteBody string
 	mutate         func(http.ResponseWriter, *http.Request) bool
 	ensure         bool
 	ensureRecord   upstreamMR
@@ -150,15 +151,16 @@ func (f *mrNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(f.mr())
 	case r.Method == http.MethodPost && path == mrNativeAPIPath+"/merge_requests/42/notes":
-		var payload map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload) != 1 || payload["body"] != f.noteBody {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload) != 1 || payload["body"] == "" {
 			f.t.Error("invalid native note body")
 			w.WriteHeader(400)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(mrWriteNote(f.noteBody))
+		f.storedNoteBody = strings.TrimRight(payload["body"], "\x00\t\n\v\f\r ")
+		_ = json.NewEncoder(w).Encode(mrWriteNote(f.storedNoteBody))
 	case r.Method == http.MethodGet && path == mrNativeAPIPath+"/merge_requests/42/notes/501":
-		_ = json.NewEncoder(w).Encode(mrWriteNote(f.noteBody))
+		_ = json.NewEncoder(w).Encode(mrWriteNote(f.storedNoteBody))
 	case f.ensure && r.Method == http.MethodGet && path == mrNativeAPIPath+"/merge_requests":
 		if r.URL.Query().Get("source_branch") != "feature" || r.URL.Query().Get("target_branch") != "main" || r.URL.Query().Get("state") != "opened" {
 			f.t.Error("native ensure lost its exact branch/state selectors")
@@ -223,6 +225,58 @@ func TestMRNativeFullSequenceIdentityAndConfiguredAuthority(t *testing.T) {
 				t.Fatalf("mutations=%d want=%d", f.writes, tc.writes)
 			}
 		})
+	}
+}
+
+func TestMRNativeNoteCanonicalBody(t *testing.T) {
+	for _, action := range []string{"comment", "note"} {
+		for _, tc := range []struct{ name, body, want string }{
+			{"unchanged", "Hello", "Hello"},
+			{"final newline", "Hello\n", "Hello"},
+			{"trailing whitespace", "Hello \t\n\n\t ", "Hello"},
+			{"leading and interior whitespace", "\n \tHello  \n\tworld\t \n", "\n \tHello  \n\tworld"},
+			{"Unicode whitespace", "Hello\u00a0\u2003 \t\n", "Hello\u00a0\u2003"},
+		} {
+			t.Run(action+"/"+tc.name, func(t *testing.T) {
+				f := newMRNativeFixture(t, "opened")
+				f.noteBody = tc.body
+				if code := Run(context.Background(), f.args(action), f.deps); code != 0 {
+					t.Fatalf("exit=%d output=%s", code, f.stdout.String())
+				}
+				var envelope struct {
+					Data struct {
+						Write mrWriteReceipt `json:"write"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal(f.stdout.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				receipt := envelope.Data.Write
+				if receipt.Action != action || receipt.Outcome != "created" || receipt.Attempts != 1 || receipt.NoteID != 501 || receipt.NoteURL != mrNativeWebBase+"/group/project/-/merge_requests/42#note_501" {
+					t.Fatalf("invalid note receipt: %+v", receipt)
+				}
+				posts, readbacks := 0, 0
+				for _, request := range f.server.Requests() {
+					if request.Method == http.MethodPost {
+						posts++
+						var payload map[string]string
+						if err := json.Unmarshal(request.Body, &payload); err != nil {
+							t.Fatal(err)
+						}
+						if len(payload) != 1 || payload["body"] != tc.want {
+							t.Fatalf("posted body=%q want=%q", payload["body"], tc.want)
+						}
+					}
+					if request.Method == http.MethodGet && request.URL == mrNativeAPIPath+"/merge_requests/42/notes/501" {
+						readbacks++
+					}
+				}
+				if posts != 1 || readbacks != 1 {
+					t.Fatalf("note posts=%d readbacks=%d, want one each", posts, readbacks)
+				}
+				f.checkNoCredentialOutput(t)
+			})
+		}
 	}
 }
 

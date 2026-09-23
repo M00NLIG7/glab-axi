@@ -72,6 +72,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 				{"malformed note ID", "comment", "opened", "malformed", 1, 6, "unknown"},
 				{"note ID drift", "comment", "opened", "note-id", 1, 6, "unknown"},
 				{"note body drift", "comment", "opened", "note-body", 1, 6, "unknown"},
+				{"note whitespace drift", "comment", "opened", "note-whitespace", 1, 6, "unknown"},
 				{"wrong note resource", "comment", "opened", "note-resource", 1, 6, "unknown"},
 				{"state rejection", "close", "opened", "rejected", 1, 4, "rejected"},
 				{"note rejection", "comment", "opened", "rejected", 1, 4, "rejected"},
@@ -157,12 +158,15 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 							return true
 						}
 						if r.Method == "GET" && strings.HasSuffix(path, "/notes/501") {
-							note := mrWriteNote(f.noteBody)
+							note := mrWriteNote(f.storedNoteBody)
 							if tc.mode == "note-id" {
 								note["id"] = 502
 							}
 							if tc.mode == "note-body" {
 								note["body"] = "unseen edit"
+							}
+							if tc.mode == "note-whitespace" {
+								note["body"] = f.storedNoteBody + " "
 							}
 							_ = json.NewEncoder(w).Encode(note)
 							return true
@@ -202,7 +206,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 								}
 								return true
 							case "note-resource":
-								note := mrWriteNote(f.noteBody)
+								note := mrWriteNote(strings.TrimRight(f.noteBody, "\x00\t\n\v\f\r "))
 								note["noteable_id"] = 999
 								_ = json.NewEncoder(w).Encode(note)
 								return true

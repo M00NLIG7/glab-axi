@@ -62,7 +62,7 @@ func TestMRWriteInvalidInputNoDependency(t *testing.T) {
 			t.Fatalf("accepted %v: %s", args, stdout.String())
 		}
 	}
-	for _, body := range []string{"", " ", "/merge", "ordinary\n  /close", "```\n/approve\n```", "ordinary\n\t/label label", ":thumbsup:", "👍", "hello\r/merge", "hi\x00there", "hello\u200b", strings.Repeat("a", limits.MaxDescriptionBytes+1)} {
+	for _, body := range []string{"", " ", " \t\n", "/merge", "ordinary\n  /close", "```\n/approve\n```", "ordinary\n\t/label label", ":thumbsup:", "👍", "hello\r/merge", "hi\x00there", "hello\u200b", "hello\r\n", "hello\v", "hello\f", "hello\x00", strings.Repeat("a", limits.MaxDescriptionBytes+1), "a" + strings.Repeat(" ", limits.MaxDescriptionBytes)} {
 		t.Run("body "+string([]rune(body)[:min(12, len([]rune(body)))]), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "body")
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {

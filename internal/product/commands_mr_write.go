@@ -104,7 +104,7 @@ func readMRNoteBody(path string) (string, error) {
 	if err := validateMRContentActions(body); err != nil {
 		return "", err
 	}
-	return body, nil
+	return strings.TrimRight(body, " \t\n"), nil
 }
 
 func validateMRContentActions(body string) error {
