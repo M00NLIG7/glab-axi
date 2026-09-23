@@ -133,8 +133,8 @@ gl-axi repo fork --auth-source native -R upstream/project --hostname gitlab.exam
 ```
 
 Forking copies provider repository contents asynchronously, unlike empty
-project creation. Only namespace, name/path, visibility and optional
-description are set. No follow-up settings change, local clone, remote edit,
+project creation. Only namespace, name/path and visibility are set.
+No follow-up settings change, local clone, remote edit,
 push or pipeline mutation is performed.
 
 Receipts distinguish:
@@ -148,12 +148,14 @@ Receipts distinguish:
 | `ambiguous` | Identity, metadata, transport or unknown status prevents proof. No retry is attempted. |
 
 The default wait is zero: one canonical postcondition read follows the POST.
-`--wait-seconds 0..20` adds bounded observation, at most ten canonical reads in
-total, separated by at most one second. `meta.complete:false` and a reason
+`--wait-seconds 0..20` bounds additional observation, including in-flight polling
+requests, with at most ten canonical reads in total and one-second polling
+intervals. `meta.complete:false` and a reason
 accompany pending/timeout receipts, even when exit status is zero. Caller
 cancellation after acceptance returns a cancellation receipt, not a claim that
-the provider stopped. A polling deadline returns the last observed pending
-state. Failed imports are exit 8; ambiguity is exit 6.
+the provider stopped. A polling deadline returns the last validated pending
+state. Failed reads or detected drift retain that snapshot in the error receipt.
+Failed imports are exit 8; ambiguity is exit 6.
 
 Later read-only `repo view --admin-snapshot --auth-source native` reports
 `import_status` and, when

@@ -95,7 +95,9 @@ func repoAdminFlags(action string) []FlagDefinition {
 		{Name: "--namespace-id", Value: "ID", Required: true, Description: "Exact destination namespace ID; never defaults to the account."},
 		{Name: "--namespace-kind", Value: "user|group", Required: true, Description: "Exact namespace kind; subgroup paths remain distinct."},
 		{Name: "--visibility", Value: "private|internal|public", Required: action != "edit", Description: "Explicit project visibility. No implicit public creation."},
-		{Name: "--description-file", Value: "FILE", Description: "Absolute private description file (maximum 2000 UTF-8 bytes)."},
+	}
+	if action == "create" || action == "edit" {
+		flags = append(flags, FlagDefinition{Name: "--description-file", Value: "FILE", Description: "Absolute private description file (maximum 2000 UTF-8 bytes)."})
 	}
 	if action == "edit" {
 		flags = append(flags,
@@ -351,7 +353,7 @@ func executeRepoAdmin(ctx context.Context, p Parsed, deps Dependencies, meta uxv
 		Namespace: adminNamespace{ID: nsID, FullPath: dest[:strings.LastIndex(dest, "/")], Kind: p.Values["--namespace-kind"]},
 		Account:   adminAccount{ID: userID, Username: p.Values["--expected-username"]}, Residual: repoAdminRace, LocalEffects: "none"}
 	var description *string
-	if path := p.Values["--description-file"]; path != "" {
+	if path := p.Values["--description-file"]; (action == "create" || action == "edit") && path != "" {
 		text, err := privatefile.Read(path, 2000, false)
 		if err != nil {
 			return s.output(r), err
@@ -543,21 +545,23 @@ func executeRepoAdmin(ctx context.Context, p Parsed, deps Dependencies, meta uxv
 
 func (s *adminSession) observeFork(ctx context.Context, p Parsed, r adminReceipt, project adminProviderProject) (commandOutput, error) {
 	seconds, _ := strconv.Atoi(p.Values["--wait-seconds"])
-	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(seconds)*time.Second)
+	defer cancel()
 	for reads := 1; ; reads++ {
-		r.Project = &project.adminProject
-		r.ImportStatus = project.ImportStatus
 		from := project.ForkedFrom
 		if from != nil && (from.ID != r.SourceID || from.Path != s.target.Repo || from.URL != s.authority.ExpectedProjectURL(s.target.Repo)) {
 			r.Outcome = "ambiguous"
 			return s.failure(r, uxv1.CodeAmbiguousCreate, "fork source identity did not match")
 		}
+		if project.ImportStatus == "finished" && from == nil {
+			r.Outcome = "ambiguous"
+			return s.failure(r, uxv1.CodeAmbiguousCreate, "completed fork lacks exact source identity evidence")
+		}
+		snapshot := project.adminProject
+		r.Project = &snapshot
+		r.ImportStatus = project.ImportStatus
 		switch project.ImportStatus {
 		case "finished":
-			if from == nil {
-				r.Outcome = "ambiguous"
-				return s.failure(r, uxv1.CodeAmbiguousCreate, "completed fork lacks exact source identity evidence")
-			}
 			r.Outcome = "completed"
 			return s.output(r), nil
 		case "failed":
@@ -574,10 +578,10 @@ func (s *adminSession) observeFork(ctx context.Context, p Parsed, r adminReceipt
 		}
 		s.meta.Complete = false
 		s.meta.Reason = "fork_incomplete"
-		if seconds == 0 || reads >= 10 || !time.Now().Before(deadline) {
+		if seconds == 0 || reads >= 10 {
 			return s.output(r), nil
 		}
-		timer := time.NewTimer(min(time.Second, time.Until(deadline)))
+		timer := time.NewTimer(time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -588,12 +592,8 @@ func (s *adminSession) observeFork(ctx context.Context, p Parsed, r adminReceipt
 			return s.failure(r, uxv1.CodeCanceled, "fork observation was canceled after mutation; the accepted fork may still complete")
 		case <-timer.C:
 		}
-		if !time.Now().Before(deadline) {
-			return s.output(r), nil
-		}
-		var err error
-		project, err = s.project(ctx, r.ProjectPath, r.Project.ID, &r.Namespace)
-		if err != nil {
+		next, err := s.project(ctx, r.ProjectPath, r.Project.ID, &r.Namespace)
+		if err != nil || ctx.Err() != nil {
 			if ctx.Err() == context.DeadlineExceeded {
 				s.meta.Reason = "fork_observation_deadline"
 				return s.output(r), nil
@@ -604,10 +604,11 @@ func (s *adminSession) observeFork(ctx context.Context, p Parsed, r adminReceipt
 			r.Outcome = "ambiguous"
 			return s.failure(r, uxv1.CodeAmbiguousCreate, "fork observation failed; no mutation was retried")
 		}
-		if project.Visibility != r.Project.Visibility || project.Description != r.Project.Description {
+		if next.Visibility != r.Project.Visibility || next.Description != r.Project.Description {
 			r.Outcome = "ambiguous"
 			return s.failure(r, uxv1.CodeAmbiguousCreate, "fork settings drifted while observing completion")
 		}
+		project = next
 		s.meta.Complete = true
 		s.meta.Reason = ""
 	}

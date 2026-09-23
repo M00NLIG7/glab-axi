@@ -401,7 +401,7 @@ Backend: `native`. Schema: `schema/ux-v1/repo-admin.schema.json`.
 ## `repo fork`
 
 ```text
-gl-axi repo fork --auth-source native -R SOURCE/PROJECT --hostname HOST --expected-source-id ID --destination NAMESPACE/PROJECT --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--description-file FILE] [--wait-seconds 0..20] [--format toon|json]
+gl-axi repo fork --auth-source native -R SOURCE/PROJECT --hostname HOST --expected-source-id ID --destination NAMESPACE/PROJECT --namespace-id ID --namespace-kind user|group --expected-user-id ID --expected-username NAME --visibility private|internal|public --allow-project-admin [--wait-seconds 0..20] [--format toon|json]
 ```
 
 Request one asynchronous project fork into an explicit namespace.

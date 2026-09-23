@@ -12,7 +12,7 @@
   "commands": [
     {"argv": ["repo", "create", "-R", "team/sub/project", "--visibility", "private"], "method": "POST", "route": "projects", "allowed_fields": ["namespace_id", "path", "name", "visibility", "initialize_with_readme", "description"]},
     {"argv": ["repo", "edit", "-R", "team/sub/project", "--expected-state-file", "{snapshot}", "--accept-non-atomic", "--visibility", "internal"], "method": "PUT", "route": "projects/101", "allowed_fields": ["description", "visibility", "default_branch", "issues_access_level", "wiki_access_level"]},
-    {"argv": ["repo", "fork", "-R", "team/sub/project", "--destination", "team/sub/fork", "--expected-source-id", "101", "--visibility", "private"], "method": "POST", "route": "projects/101/fork", "allowed_fields": ["namespace_id", "path", "name", "visibility", "description"]}
+    {"argv": ["repo", "fork", "-R", "team/sub/project", "--destination", "team/sub/fork", "--expected-source-id", "101", "--visibility", "private"], "method": "POST", "route": "projects/101/fork", "allowed_fields": ["namespace_id", "path", "name", "visibility"]}
   ],
   "data_schema": "schema/ux-v1/repo-admin.schema.json",
   "expected_state_schema": "schema/ux-v1/repo-admin.schema.json#/$defs/project",
