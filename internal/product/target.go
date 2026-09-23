@@ -12,8 +12,9 @@ import (
 )
 
 type Target struct {
-	Host string
-	Repo string
+	Host        string
+	Repo        string
+	webBasePath string
 }
 
 func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.LookupEnv) (Target, error) {
@@ -63,6 +64,13 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 		if err := safeurl.ValidateProject(target.Repo); err != nil {
 			return Target{}, uxv1.Wrap(uxv1.CodeValidation, "invalid repository target", err)
 		}
+	}
+	if raw := parsed.Values["--web-base"]; raw != "" {
+		basePath, err := ciWebBasePath(raw, target.Host)
+		if err != nil {
+			return Target{}, err
+		}
+		target.webBasePath = basePath
 	}
 	return target, nil
 }

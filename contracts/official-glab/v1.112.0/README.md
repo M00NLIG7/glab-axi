@@ -49,11 +49,23 @@ pins four fixed reads and one fixed PUT; the PUT consumes only a private
 four-key JSON file, is invoked once, and is never delegated through interactive
 `glab mr merge` behavior.
 
+CI read parity is pinned separately in `contracts/read-parity/ci-reads.json`.
+`ci-list-source.go.txt` is the exact upstream `internal/commands/ci/list/list.go`
+from this release; it proves typed ref/status/source/username/SHA translation
+and the default `order_by=id&sort=desc`. `ci-reads-source.go.txt` contains exact
+client-go/v2 v2.53.0 excerpts (the dependency pinned in this release's `go.mod`)
+for pipeline IID, pipeline/job GET routes, job `scope[]`, and CI status/source
+enums. Source artifacts were acquired from the public Go module proxy, not an
+API/account. The fixture pins their SHA-256 digests. `TestPinnedOfficialGlabCIReadsTLS`
+executes the pinned CLI against a local TLS fake for all five route shapes.
+Filtered job reads are not used by guarded merge's complete jobs/bridges proof.
+
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
-ensure, exact-MR-view normalization, read-only issue-edit validation, test-only
-issue-write characterization and guarded-merge requests with synthetic
-credentials; it never contacts a live GitLab API.
+ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
+read-only issue-edit validation, test-only issue-write characterization and
+guarded-merge requests with synthetic credentials; it never contacts a live
+GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter
 tests before changing the runtime pin.

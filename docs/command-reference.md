@@ -255,27 +255,43 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.
 ## `pipeline list`
 
 ```text
-gl-axi pipeline list [global flags]
+gl-axi pipeline list [--ref REF] [--status STATUS] [--source SOURCE] [--user USERNAME] [--sha SHA] [--fields iid] [--web-base URL] [global flags]
 ```
 
 List project pipelines.
+
+Filters use exact GitLab values and are retained on every page. Username is a provider-side filter; the pinned pipeline list response omits user identity. Fields are additive: iid is opt-in, while existing SHA, URL and updated-at fields remain unchanged. A source is not a workflow resource.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-list.schema.json`.
 
 ## `pipeline view`
 
 ```text
-gl-axi pipeline view <id> [global flags]
+gl-axi pipeline view <id> [--ref REF] [--sha SHA] [--jobs] [--job-id ID] [--job-status STATUS] [--trace | --trace-failed] [--web-base URL] [global flags]
 ```
 
 View one pipeline.
 
+Optional jobs and traces are selected reads, never complete jobs/bridges merge-check proof. Trace selection is capped at five jobs and 256 KiB per tail. CI reads cap cumulative provider bodies at 8 MiB, 100 requests, and final data at 2 MiB. No workflow or step alias and no full-log file escape.
+
 Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-view.schema.json`.
+
+## `pipeline watch`
+
+```text
+gl-axi pipeline watch <id> [--timeout SECONDS] [--interval SECONDS] [--ref REF] [--sha SHA] [--web-base URL] [target/output flags]
+```
+
+Watch one exact pipeline within a finite budget.
+
+Defaults: 30 seconds, 3-second interval. Hard bounds: 300 seconds, 100 requests, 8 MiB cumulative provider bodies, 64 KiB final data. Emits only a final result, never progress as success. Exit zero requires pipeline success; non-green, unknown/stale evidence, timeout, budget exhaustion, and caller cancellation fail truthfully. This is pipeline status, not merge readiness or complete job/bridge proof.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/pipeline-watch.schema.json`.
 
 ## `job list`
 
 ```text
-gl-axi job list --pipeline-id ID [global flags]
+gl-axi job list --pipeline-id ID [--job-id ID] [--status STATUS] [--web-base URL] [global flags]
 ```
 
 List jobs for one pipeline.
@@ -309,7 +325,7 @@ Backend: `native`. Schema: `schema/ux-v1/download.schema.json`.
 ## `job view`
 
 ```text
-gl-axi job view <id> [global flags]
+gl-axi job view <id> [--pipeline-id ID] [--web-base URL] [global flags]
 ```
 
 View one CI/CD job.
@@ -319,7 +335,7 @@ Backend: `official-glab`. Schema: `schema/ux-v1/job-view.schema.json`.
 ## `job trace`
 
 ```text
-gl-axi job trace <id> [global flags]
+gl-axi job trace <id> [--pipeline-id ID] [--web-base URL] [global flags]
 ```
 
 View a bounded, redacted tail of one job trace.

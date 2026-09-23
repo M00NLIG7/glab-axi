@@ -39,6 +39,7 @@ type Dependencies struct {
 	NewDelegate     func() delegateClient
 	SetupHooks      func(context.Context) (any, error)
 	Update          func(context.Context, bool) (any, uxv1.Meta, error)
+	watchClock      *watchClock
 }
 
 func Defaults(runtimeDeps runtimepkg.Dependencies) Dependencies {
@@ -182,7 +183,7 @@ func writeFailure(stdout, stderr io.Writer, programName string, format output.Fo
 	return uxv1.ExitCode(err)
 }
 
-func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandOutput, error) {
+func execute(parent context.Context, parsed Parsed, deps Dependencies) (out commandOutput, resultErr error) {
 	path := strings.Join(parsed.Definition.Path, " ")
 	if path == "setup hooks" {
 		if deps.SetupHooks == nil {
@@ -211,6 +212,11 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	} else {
 		meta.Backend = "native"
 	}
+	switch path {
+	case "pipeline list", "pipeline view", "pipeline watch", "job list", "job view", "job trace":
+		client = &ciReadBudget{delegateClient: client}
+		defer func() { out, resultErr = boundCIOutput(out, resultErr) }()
+	}
 	if path == "auth login" {
 		// Human authorization follows only caller cancellation. The ordinary
 		// noninteractive operation deadline is too short for a human prompt.
@@ -225,6 +231,9 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	timeout := limits.ShortOperation
 	if parsed.Definition.Write {
 		timeout = limits.WriteOperation
+	}
+	if path == "pipeline watch" {
+		timeout, _, _ = watchDurations(parsed)
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
@@ -271,10 +280,16 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (commandO
 	case "mr ensure", "mr create-or-update":
 		return executeMREnsure(ctx, client, target, parsed, meta)
 	case "pipeline list":
-		items, listMeta, err := fetchPipelines(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchSelectedPipelines(ctx, client, target, parsed)
 		return listOutput("pipelines", items, meta, listMeta), err
 	case "pipeline view":
-		return executePipelineView(ctx, client, target, parsed, meta)
+		return executeSelectedPipelineView(ctx, client, target, parsed, meta)
+	case "pipeline watch":
+		clock := defaultWatchClock()
+		if deps.watchClock != nil {
+			clock = *deps.watchClock
+		}
+		return executePipelineWatch(ctx, client, target, parsed, meta, clock)
 	case "job list":
 		items, listMeta, err := fetchJobs(ctx, client, target, parsed)
 		return listOutput("jobs", items, meta, listMeta), err

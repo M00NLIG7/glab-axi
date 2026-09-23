@@ -27,8 +27,10 @@ native HTTP transport.
   bounded output is relayed and monitored;
 - ambient token/job-token removal and exact pinned plaintext-fallback warning
   cancellation, with warning state reconciled before success;
-- 5-second version check, 30/45-second noninteractive operations, bounded
-  stdout/stderr, and human login governed by caller/process cancellation;
+- 5-second version check, ordinary 30/45-second noninteractive operations,
+  bounded stdout/stderr, and human login governed by caller/process cancellation;
+  `pipeline watch` uses the finite budget in the
+  [CI read contract](../contracts/read-parity/ci-reads.json);
 - malformed, duplicate, ANSI-prefixed, trailing, non-UTF-8, or oversized
   data-command child output rejected;
 - official MR-view `diff_refs.head_sha` and `diff_refs.base_sha` normalized to
@@ -318,6 +320,8 @@ lifetime and the shorter download CLI deadline. CI-variable operation bounds
 are documented in [CI variables](ci-variables.md#outcomes-races-and-bounds).
 Deletion-specific request, phase and response bounds live in the
 [resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
+Product CI-read request, trace-selection, final-data and watch budgets are
+pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 
 | Input/output | Limit |
 |---|---:|
@@ -330,7 +334,7 @@ Deletion-specific request, phase and response bounds live in the
 | description / individual discussion body | 128 KiB |
 | all discussion bodies / nested notes | 2 MiB / 1,000 notes |
 | JSON page | 2 MiB |
-| operation/output | 8 MiB |
+| shared operation/output ceiling (command-specific budgets may be lower) | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |
 | issue-edit validation | 20 s preflight (30 s outer read budget), no PUT |

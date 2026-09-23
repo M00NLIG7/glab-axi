@@ -165,6 +165,20 @@ func selfManagedTestCertificate(t *testing.T, hostname string) (tls.Certificate,
 	return certificate, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 }
 
+// Explicit per-test CA configuration works on Darwin too, where the Go system
+// verifier does not use SSL_CERT_FILE. It never changes a real profile or trust store.
+func writeOfficialTestCAConfig(t *testing.T, home, host, caPath string) {
+	t.Helper()
+	dir := filepath.Join(home, "config")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf("hosts:\n  %s:\n    ca_cert: %q\n", host, caPath)
+	if err := os.WriteFile(filepath.Join(dir, "config.yml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newTestTLSTunnelProxy(targetAuthority, targetAddress string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodConnect || r.Host != targetAuthority {
@@ -276,6 +290,7 @@ func TestPinnedOfficialGlabEnsureCreateTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	syntheticToken := strings.Join([]string{"synthetic", "official", "glab", "token"}, "-")
 	controlledEnv := []string{
 		"HOME=" + home,
@@ -388,6 +403,7 @@ func TestPinnedOfficialGlabMRViewTLS(t *testing.T) {
 	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	syntheticToken := strings.Join([]string{"synthetic", "view", "contract", "token"}, "-")
 	client := NewClient(ClientConfig{Path: binary, Env: []string{
 		"HOME=" + home,
@@ -477,6 +493,7 @@ func TestPinnedOfficialGlabMRDiscussionsTLS(t *testing.T) {
 	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	syntheticToken := strings.Join([]string{"synthetic", "discussion", "contract", "token"}, "-")
 	client := NewClient(ClientConfig{Path: binary, Env: []string{
 		"HOME=" + home,
@@ -581,6 +598,7 @@ func TestPinnedOfficialGlabIssueEditTLS(t *testing.T) {
 	if err := os.WriteFile(caBundle, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	syntheticToken := strings.Join([]string{"synthetic", "issue", "edit", "token"}, "-")
 	client := NewClient(ClientConfig{Path: binary, Env: []string{
 		"HOME=" + home,
@@ -691,6 +709,7 @@ func TestPinnedOfficialGlabMRMergeTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	writeOfficialTestCAConfig(t, home, logicalHost, caBundle)
 	syntheticToken := strings.Join([]string{"synthetic", "merge", "contract", "token"}, "-")
 	controlledEnv := []string{
 		"HOME=" + home,

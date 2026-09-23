@@ -394,7 +394,7 @@ symlink/package-managed installs, and Windows self-replacement fail closed.
   over 100 names or 16 KiB while retaining exact byte/count evidence. Text
   hashes cover exact UTF-8 bytes; label hashes cover the compact JSON encoding
   of sorted names.
-- Output is capped at 8 MiB; discussion bodies share a 2 MiB budget, traces are
-  a redacted 256 KiB tail, and diffs are 1 MiB.
+- Shared output bounds and pointers to tighter command-specific budgets are
+  in the [security model](security.md#hard-limits).
 - Errors never include causes, server HTML, headers, cookies, tokens, proxy URLs,
   official config paths, or raw child stderr.

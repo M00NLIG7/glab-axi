@@ -27,7 +27,8 @@ GitLab project (not Rune).
 6. Confirm no token appears in argv, shell history, chat, logs, config output,
    AXI output, or test evidence.
 7. Run auth status, dashboard, issue list/view, MR
-   list/view/checks/diff/discussions, pipeline list/view, job list/view/trace,
+   list/view/checks/diff/discussions, the
+   [product CI reads](../contracts/read-parity/ci-reads.json),
    release list/view, repo list/view, label list, and bounded search against
    synthetic non-secret data. Discussion fixtures must include same-project and
    fork identity, exact base/head binding, multi-page, multi-note, system,

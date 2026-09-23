@@ -45,7 +45,7 @@ gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
-gl-axi pipeline list|view
+gl-axi pipeline list|view|watch
 gl-axi job list|view|trace
 gl-axi job artifacts|download ID ... --auth-source native  # exact job/pipeline/ref/commit
 gl-axi release list|view

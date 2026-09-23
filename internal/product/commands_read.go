@@ -94,10 +94,8 @@ func fetchJobs(ctx context.Context, client delegateClient, target Target, parsed
 	if err != nil || pipelineID < 1 {
 		return nil, listState{}, uxv1.NewError(uxv1.CodeValidation, "--pipeline-id must be a positive integer")
 	}
-	return fetchList(ctx, client, glab.Request{Operation: glab.OpJobList, Host: target.Host, Repo: target.Repo, PipelineID: pipelineID}, parsed.Limit, func(body []byte) ([]Job, bool, error) {
-		items, err := normalizeJobs(body, target.Host, target.Repo)
-		return items, false, err
-	})
+	jobID, _ := ciID(parsed.Values["--job-id"])
+	return fetchSelectedJobs(ctx, client, target, pipelineID, jobID, parsed.Values["--status"], parsed.Limit, nil)
 }
 
 func fetchReleases(ctx context.Context, client delegateClient, target Target, limit int) ([]Release, listState, error) {
@@ -195,20 +193,6 @@ func executeMRDiff(ctx context.Context, client delegateClient, target Target, pa
 	return commandOutput{data: map[string]any{"mr_iid": iid, "diff": diff}, meta: meta}, err
 }
 
-func executePipelineView(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
-	id, err := positivePosition(parsed, "pipeline ID")
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	response, err := client.Do(ctx, glab.Request{Operation: glab.OpPipelineView, Host: target.Host, Repo: target.Repo, ID: id})
-	meta.UpstreamVersion = response.UpstreamVersion
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	pipeline, err := normalizePipelineObject(response.Body, target.Host, target.Repo)
-	return commandOutput{data: map[string]any{"pipeline": pipeline}, meta: meta}, err
-}
-
 func executeJobView(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
 	id, err := positivePosition(parsed, "job ID")
 	if err != nil {
@@ -219,6 +203,14 @@ func executeJobView(ctx context.Context, client delegateClient, target Target, p
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
+	var raw upstreamJob
+	if err := decodeStrict(response.Body, &raw); err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	pipelineID, _ := ciID(parsed.Values["--pipeline-id"])
+	if err := bindJob(raw, target, id, pipelineID, ""); err != nil {
+		return commandOutput{meta: meta}, err
+	}
 	job, err := normalizeJobObject(response.Body, target.Host, target.Repo)
 	return commandOutput{data: map[string]any{"job": job}, meta: meta}, err
 }
@@ -226,6 +218,10 @@ func executeJobView(ctx context.Context, client delegateClient, target Target, p
 func executeJobTrace(ctx context.Context, client delegateClient, target Target, parsed Parsed, meta uxv1.Meta) (commandOutput, error) {
 	id, err := positivePosition(parsed, "job ID")
 	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	pipelineID, _ := ciID(parsed.Values["--pipeline-id"])
+	if _, err := readSelectedJob(ctx, client, target, id, pipelineID, "", nil); err != nil {
 		return commandOutput{meta: meta}, err
 	}
 	response, err := client.Do(ctx, glab.Request{Operation: glab.OpJobTrace, Host: target.Host, Repo: target.Repo, ID: id})
