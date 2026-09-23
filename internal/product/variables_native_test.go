@@ -51,6 +51,7 @@ type nativeVariableFixture struct {
 	state                                                  []map[string]any
 	writes                                                 int
 	mode                                                   string
+	version                                                string
 	redirectCode                                           int
 	redirectURL                                            string
 	cancelOnWrite                                          context.CancelFunc
@@ -70,7 +71,7 @@ func newNativeVariableFixture(t *testing.T, class, mode string, mappedWeb bool) 
 	if err := os.Chmod(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	f := &nativeVariableFixture{host: "gitlab.com", web: "https://gitlab.com", mode: mode}
+	f := &nativeVariableFixture{host: "gitlab.com", web: "https://gitlab.com", mode: mode, version: "17.6.0"}
 	if mappedWeb {
 		f.host = "gitlab.private.example"
 		f.web = "https://web.private.example/gitlab"
@@ -115,11 +116,7 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v4/version":
-		version := "17.6.0"
-		if f.mode == "old-version" {
-			version = "17.5.9"
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"version": version})
+		_ = json.NewEncoder(w).Encode(map[string]string{"version": f.version})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/group/project":
 		f.projectReads++
 		id := 101

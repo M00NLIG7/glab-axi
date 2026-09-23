@@ -4,6 +4,7 @@ go 1.23
 
 require (
 	github.com/creack/pty v1.1.24
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/sys v0.27.0
 	golang.org/x/term v0.26.0

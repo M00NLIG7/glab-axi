@@ -5,7 +5,77 @@ import (
 	"encoding/json"
 	"runtime"
 	"testing"
+
+	"gl-axi/internal/contract/uxv1"
 )
+
+func TestNativeVariableVersionGate(t *testing.T) {
+	for _, version := range []struct {
+		value     string
+		supported bool
+	}{
+		{"17.6.0", true}, {"17.6.0-ee", true}, {"17.6.1-pre", true},
+		{"18.10.0-pre", true}, {"18.10.0", true},
+		{"17.5.9", false}, {"17.5.9-ee", false}, {"17.5.9-pre", false},
+		{"17.6.0-pre", false}, {"16.11.9", false},
+		{"", false}, {"17.6", false}, {"18.10.0-unknown", false},
+		{"999999999999999999999.0.0", false},
+		{"18.999999999999999999999.0", false},
+		{"18.10.999999999999999999999", false},
+	} {
+		for _, group := range []string{"secret", "variable"} {
+			for _, action := range []string{"list", "set", "delete"} {
+				t.Run(version.value+"/"+group+"/"+action, func(t *testing.T) {
+					if runtime.GOOS == "windows" && action != "list" {
+						t.Skip("private mutation ACL boundary remains unavailable")
+					}
+					class := "hidden"
+					if group == "variable" {
+						class = "ordinary"
+					}
+					f := newNativeVariableFixture(t, class, "", false)
+					f.version = version.value
+					stdout, stderr, deps, _, lookups := f.deps(t, false)
+					exit := Run(context.Background(), f.args(group, action, class, "json"), deps)
+					f.assertConfidential(t, stdout.String(), stderr.String())
+					var envelope struct {
+						OK    bool `json:"ok"`
+						Error *struct {
+							Code uxv1.Code `json:"code"`
+						} `json:"error"`
+					}
+					if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+						t.Fatal("invalid version-gate response")
+					}
+					if version.supported {
+						if exit != 0 || !envelope.OK || envelope.Error != nil {
+							t.Fatalf("supported version failed with exit %d", exit)
+						}
+					} else if exit != 2 || envelope.OK || envelope.Error == nil || envelope.Error.Code != uxv1.CodeUnsupported {
+						t.Fatalf("unsupported version returned exit %d", exit)
+					}
+					wantWrites, wantProjectReads, wantInventoryReads := 0, 0, 0
+					if version.supported {
+						wantProjectReads, wantInventoryReads = 2, 1
+						if action != "list" {
+							wantWrites, wantProjectReads, wantInventoryReads = 1, 3, 3
+						}
+					}
+					f.mu.Lock()
+					writes, projectReads, inventoryReads := f.writes, f.projectReads, f.inventoryReads
+					f.mu.Unlock()
+					if writes != wantWrites || projectReads != wantProjectReads || inventoryReads != wantInventoryReads || *lookups != 1 {
+						t.Fatal("version gate bypassed preflight or changed the operation budget or identity")
+					}
+					requests := f.server.Requests()
+					if len(requests) != 1+wantWrites+wantProjectReads+wantInventoryReads || requests[0].URL != "/api/v4/version" {
+						t.Fatal("version was not checked exactly once before project access")
+					}
+				})
+			}
+		}
+	}
+}
 
 func TestNativeVariableTypesAndExactPrestate(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -24,7 +94,6 @@ func TestNativeVariableTypesAndExactPrestate(t *testing.T) {
 		{name: "disable-expansion", action: "set", class: "hidden", rawFalse: true},
 		{name: "wrong-project", action: "delete", class: "hidden", mode: "wrong-project", want: 9},
 		{name: "wrong-host", action: "delete", class: "hidden", mode: "wrong-host", want: 9},
-		{name: "old-version", action: "delete", class: "hidden", mode: "old-version", want: 2},
 		{name: "hidden-value-drift-is-unobservable", action: "delete", class: "hidden", mode: "drift"},
 		{name: "readable-value-drift", action: "delete", class: "masked", mode: "drift", want: 6},
 		{name: "wrong-poststate", action: "set", class: "hidden", mode: "wrong-poststate", want: 6},

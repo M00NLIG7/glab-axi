@@ -172,7 +172,7 @@ func readVariableInput(ctx context.Context, path string, stdin io.Reader) (strin
 	}
 }
 
-var variableVersionPattern = regexp.MustCompile(`^([0-9]+)\.([0-9]+)\.[0-9]+(-ee)?$`)
+var variableVersionPattern = regexp.MustCompile(`^([0-9]+)\.([0-9]+)\.([0-9]+)(-ee|-pre)?$`)
 
 func variableJSON(response productnative.Response, out any) error {
 	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
@@ -197,9 +197,13 @@ func requireVariableVersion(ctx context.Context, c *productnative.Client) error 
 	if match == nil {
 		return uxv1.NewError(uxv1.CodeUnsupported, "GitLab CI variable version capability is unavailable")
 	}
-	major, _ := strconv.Atoi(match[1])
-	minor, _ := strconv.Atoi(match[2])
-	if major < 17 || major == 17 && minor < 6 {
+	major, majorErr := strconv.Atoi(match[1])
+	minor, minorErr := strconv.Atoi(match[2])
+	patch, patchErr := strconv.Atoi(match[3])
+	if majorErr != nil || minorErr != nil || patchErr != nil {
+		return uxv1.NewError(uxv1.CodeUnsupported, "GitLab CI variable version capability is unavailable")
+	}
+	if major < 17 || major == 17 && (minor < 6 || minor == 6 && patch == 0 && match[4] == "-pre") {
 		return uxv1.NewError(uxv1.CodeUnsupported, "CI variable commands require GitLab 17.6 or newer with hidden metadata")
 	}
 	return nil

@@ -34,7 +34,7 @@
             {"$ref": "ux-v1/board-ordering-receipt.schema.json"},
             {
               "$ref": "ux-v1/ci-variable-mutation.schema.json",
-              "properties": {"variable": {"properties": {"outcome": {"enum": ["not_applied", "ambiguous"]}}}}
+              "properties": {"variable": {"properties": {"outcome": {"enum": ["rejected", "ambiguous"]}}}}
             }
           ]
         }
