@@ -46,12 +46,19 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi board issues <board-id> --list-id ID --allow-ordering-initialization --hostname HOST (-R PROJECT | --group GROUP) [global flags]` - List board issues with explicit consent to possible ordering initialization.
 - `glab-axi work-item fields <iid> (-R PROJECT | --group GROUP) [global flags]` - List visible widget types and fixed fields for one work item.
 - `glab-axi work-item hierarchy <iid> (-R PROJECT | --group GROUP) [global flags]` - Read the parent and bounded direct children of one work item.
+- `glab-axi secret list --auth-source native [global flags] --scope SCOPE` - Manage project CI/CD secret metadata with exact-scope guards.
+- `glab-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD secret metadata with exact-scope guards.
+- `glab-axi secret delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD secret metadata with exact-scope guards.
+- `glab-axi variable list --auth-source native [global flags] --scope SCOPE` - Manage project CI/CD variable metadata with exact-scope guards.
+- `glab-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD variable metadata with exact-scope guards.
+- `glab-axi variable delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD variable metadata with exact-scope guards.
 
 ## Safety
 
 - Ask a human to run `glab-axi auth login`; never drive login from an agent or request a token.
 - Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.
-- Do not attempt generic API, direct issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen/delete, label-resource or MR-label mutation, repository/release writes, secrets/variables, or pipeline mutations.
+- Do not attempt generic API, direct issue mutation, alternate merge strategies, approve, comment/note/reply/resolve, issue/MR close/reopen/delete, label-resource or MR-label mutation, repository/release writes or pipeline mutations.
+- CI variable commands require --auth-source native, explicit host/repo and exact scope; set/delete require caller-bound prestate and --confirm. Values enter only via private files or piped stdin and are never displayed. Hidden mutations use exact metadata guards and report unavailable value verification; unhidden mutations require private previous-value checks. Success requires provider acknowledgment and bounded reconciliation. Native and official profiles may be different accounts; no fallback occurs. See docs/ci-variables.md.
 - `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.
 - `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.
 - `board issues` requires `--allow-ordering-initialization` and explicit scope/host. GitLab may initialize issue relative positions and shift sibling positions, including beyond displayed items; receipts never claim changes were measured. Do not use this command when mutation-free reads are required.

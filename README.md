@@ -10,9 +10,9 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Declared download
-  commands explicitly opt into existing native authentication with
-  `--auth-source native`, without an official-profile fallback; and
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads and
+  [guarded project CI variables](docs/ci-variables.md) use
+  [explicit native authentication](docs/authentication.md#explicit-product-native-operations); and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -174,10 +174,20 @@ accepts a custom message. The pinned Firstmate contract is
 under [`contracts/firstmate`](contracts/firstmate/). Agents must not self-assert
 `--authority` or bypass that lifecycle boundary.
 
+Guarded project `secret` and `variable` list/set/delete commands require
+`--auth-source native` for the complete operation; there is no official-profile
+fallback or account-equivalence claim. See [CI variables](docs/ci-variables.md).
+Both lists are metadata-only; set/delete require exact scope, project identity,
+explicit confirmation, and metadata guards. Unhidden entries also require private
+value preconditions; hidden values cannot be verified. Mutation success requires
+provider acknowledgment and bounded reconciliation. GitLab hidden/masked/
+protected semantics are distinct. No actual secret access or live acceptance
+is implied by the isolated tests.
+
 The current denial boundary includes generic API, direct issue editing,
 issue creation, unguarded or alternate merge, approve,
 comment/note/reply/resolve, merge-request and label-resource mutation,
-close/reopen/delete, repository/release writes, secrets/variables, and
+issue/MR close/reopen/delete, repository/release writes, and
 pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
 

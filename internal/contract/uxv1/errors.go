@@ -27,11 +27,13 @@ const (
 	CodeAmbiguousCreate       Code = "ambiguous_create"
 	CodeAmbiguousUpdate       Code = "ambiguous_update"
 	CodeAmbiguousMerge        Code = "ambiguous_merge"
+	CodeAmbiguousVariable     Code = "ambiguous_variable"
 )
 
 // Error is the stable product failure. Cause and StatusCode are retained only
 // for control flow and are never serialized. Receipt is reserved for bounded,
-// product-normalized refusal evidence or disclosed, uncertain ordering effects.
+// product-normalized refusal or mutation-outcome evidence, including disclosed,
+// uncertain ordering effects.
 type Error struct {
 	Code       Code   `json:"code"`
 	Message    string `json:"message"`
@@ -142,7 +144,7 @@ func ExitCode(err error) int {
 		return 4
 	case CodeNotFound:
 		return 5
-	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge:
+	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge, CodeAmbiguousVariable:
 		return 6
 	case CodeRateLimited:
 		return 7

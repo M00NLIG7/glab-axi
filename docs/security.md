@@ -68,8 +68,9 @@ profile or token source.
 
 ## Provider-write boundary
 
-The product provider-write families are MR ensure/create-or-update, pinned
-guarded immediate squash merge, and explicitly opted-in board issue enumeration.
+See the [generated command reference](command-reference.md) for the command
+allowlist. Delegated write controls are described below; guarded native
+project-variable controls are in [CI variables](ci-variables.md).
 
 `board issues` requires `--allow-ordering-initialization`, an explicit host,
 and exact project/group, board and list selectors before any child work. The
@@ -143,7 +144,7 @@ additionally requires:
 
 Generic API, direct issue editing or creation, alternate/unguarded merge,
 approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-close/reopen/delete, repository/release mutation, secrets/variables, and
+issue/MR close/reopen/delete, repository/release mutation, and
 pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview
 changes no issue field or label.
 
@@ -184,6 +185,23 @@ a malicious process with the same OS account can
 modify owned data, and no filesystem API here claims isolation from that
 account's full privileges.
 
+## Project CI variable controls
+
+See [CI variables](ci-variables.md) and `contracts/ci-variables/v1.json` for the
+separate guarded project list/set/delete contract. The complete operation uses
+one explicitly selected native client, without official-profile fallback. Provider
+values/descriptions are removed at each read boundary, never rendered. Both list families expose only
+safe metadata; ordinary variables cannot alias masked, hidden, or protected
+entries. Mutations require explicit host/project/scope, expected numeric project
+identity, confirmation, and exact metadata guards. Unhidden entries also require
+private previous-value checks; hidden values are unavailable and never treated
+as matching. One mutation requires provider acknowledgment plus bounded
+reconciliation for success; lost responses remain ambiguous. Hidden set observes
+metadata, and delete observes exact absence. Receipts disclose unavailable hidden
+value verification and the lack
+of provider CAS and immutable variable identity. Unsupported version/capability,
+incomplete inventories, class transitions, and uncertain outcomes fail closed.
+
 ## Native v1 controls
 
 - exact host/API/web origin and project identity;
@@ -211,7 +229,8 @@ redirects are rejected before forwarding credentials.
 
 Product-native transport and download bounds are owned by the
 [download contract](../contracts/downloads/v1.json), including the client
-lifetime and the shorter download CLI deadline.
+lifetime and the shorter download CLI deadline. CI-variable operation bounds
+are documented in [CI variables](ci-variables.md#outcomes-races-and-bounds).
 
 | Input/output | Limit |
 |---|---:|
@@ -250,7 +269,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate/ambiguous create, update, or merge |
+| 6 | conflict/duplicate, ambiguous MR create/update/merge, or ambiguous CI-variable mutation |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |

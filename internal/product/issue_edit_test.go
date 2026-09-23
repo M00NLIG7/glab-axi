@@ -293,7 +293,7 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
-	if len(variants) != 2 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" {
+	if len(variants) != 3 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }
