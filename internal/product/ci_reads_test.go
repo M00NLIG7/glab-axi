@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
@@ -257,6 +258,99 @@ func TestCIFailedTracesBoundedAndRedacted(t *testing.T) {
 		}
 	}
 }
+
+func TestCITraceRedactionBeforeTailSelection(t *testing.T) {
+	secret := strings.Join([]string{"opaque", "runtime", "trace", "sentinel"}, "-")
+	const lastLine = "last failure\n"
+	const marker = "[trace tail truncated]\n"
+	const redactedHeader = "Authorization: [REDACTED]\n"
+	boundaryTrace := func(offset int) string {
+		padding := limits.MaxTraceBytes - len(secret) + offset - len(lastLine) - 1
+		return strings.Repeat("earlier line\n", 32) + "Authorization: Bearer " + secret + "\n" + strings.Repeat("x", padding) + lastLine
+	}
+	for _, test := range []struct {
+		name, body, want string
+		truncated        bool
+	}{
+		{name: "cut inside header", body: boundaryTrace(-len("Bearer ")), truncated: true},
+		{name: "cut before credential", body: boundaryTrace(0), truncated: true},
+		{name: "cut inside credential", body: boundaryTrace(len(secret) / 2), truncated: true},
+		{name: "multibyte tail", body: strings.Repeat("é", limits.MaxTraceBytes/2) + "x\nAuthorization: Bearer " + secret + "\n" + lastLine, truncated: true},
+		{name: "short trace", body: "Authorization: Bearer " + secret + "\n" + lastLine, want: redactedHeader + lastLine},
+		{name: "redaction shrinks below limit", body: "start\nAuthorization: Bearer " + strings.Repeat(secret, limits.MaxTraceBytes/len(secret)+1) + "\n" + lastLine, want: "start\n" + redactedHeader + lastLine},
+		{name: "redaction expands above limit", body: strings.Repeat("x", limits.MaxTraceBytes-len("\nAuthorization: a\n")-len(lastLine)) + "\nAuthorization: a\n" + lastLine, truncated: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, args := range [][]string{
+				{"pipeline", "view", "55", "--job-id", "9", "--trace"},
+				{"pipeline", "view", "55", "--trace-failed"},
+				{"job", "trace", "9"},
+				{"job", "trace", "9", "--pipeline-id", "55"},
+			} {
+				t.Run(strings.Join(args, " "), func(t *testing.T) {
+					fake := &fakeDelegate{doFunc: func(_ context.Context, r glab.Request) (glab.Response, error, bool) {
+						switch r.Operation {
+						case glab.OpPipelineView:
+							return ciResponse(ciPipeline(55, "failed")), nil, true
+						case glab.OpJobList:
+							return ciResponse([]upstreamJob{ciJob(9, "failed")}), nil, true
+						case glab.OpJobView:
+							return ciResponse(ciJob(9, "failed")), nil, true
+						case glab.OpJobTrace:
+							if r.ID != 9 || len(test.body) > r.MaxResponseBytes {
+								t.Fatal("unexpected trace identity or insufficient response budget")
+							}
+							return glab.Response{Body: []byte(test.body), UpstreamVersion: glab.SupportedVersion}, nil, true
+						default:
+							t.Fatalf("unexpected operation %s", r.Operation)
+							return glab.Response{}, nil, true
+						}
+					}}
+					stdout, stderr, deps := productTestDeps(t, fake)
+					if code := Run(context.Background(), ciArgs(args...), deps); code != 0 || stderr.Len() != 0 {
+						t.Fatalf("trace command failed: code=%d", code)
+					}
+					if strings.Contains(stdout.String()+stderr.String(), secret[len(secret)/2:]) {
+						t.Fatal("opaque credential escaped into output")
+					}
+					env := ciEnvelope(t, stdout.String())
+					wantReason := ""
+					if test.truncated {
+						wantReason = "trace_tail_limit"
+					}
+					if !env.OK || env.Meta.Complete != !test.truncated || env.Meta.Truncated != test.truncated || env.Meta.Reason != wantReason {
+						t.Fatalf("unexpected trace metadata: %#v", env.Meta)
+					}
+					var trace string
+					if args[0] == "pipeline" {
+						var traces []selectedTrace
+						if err := json.Unmarshal(env.Data["traces"], &traces); err != nil {
+							t.Fatal(err)
+						}
+						if len(traces) != 1 || traces[0].JobID != 9 || traces[0].Truncated != test.truncated {
+							t.Fatal("unexpected selected trace identity or truncation")
+						}
+						trace = traces[0].Trace
+					} else {
+						if err := json.Unmarshal(env.Data["trace"], &trace); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if !strings.Contains(trace, "[REDACTED]") || !strings.HasSuffix(trace, lastLine) || !utf8.ValidString(trace) || strings.ContainsRune(trace, utf8.RuneError) {
+						t.Fatal("redaction or UTF-8 tail content lost")
+					}
+					if strings.HasPrefix(trace, marker) != test.truncated || len(strings.TrimPrefix(trace, marker)) > limits.MaxTraceBytes {
+						t.Fatal("trace tail exceeded its bound or misreported truncation")
+					}
+					if test.want != "" && trace != test.want {
+						t.Fatal("untruncated redacted content changed")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCIJobSelectionAndStatusMismatch(t *testing.T) {
 	for _, status := range []string{"failed", "manual", "future_state"} {
 		fake := &fakeDelegate{responses: map[glab.Operation][]glab.Response{glab.OpPipelineView: {ciResponse(ciPipeline(55, "failed"))}, glab.OpJobView: {ciResponse(ciJob(9, status))}}}

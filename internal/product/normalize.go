@@ -849,14 +849,13 @@ func malformed(field string) error {
 }
 
 func redactedTrace(body []byte) (string, bool) {
-	text := strings.ToValidUTF8(string(body), "�")
-	redactor := redact.New()
+	text := redact.New().String(strings.ToValidUTF8(string(body), "�"))
 	if len(text) <= limits.MaxTraceBytes {
-		return redactor.String(text), false
+		return text, false
 	}
 	tail := text[len(text)-limits.MaxTraceBytes:]
 	for len(tail) > 0 && !utf8.RuneStart(tail[0]) {
 		tail = tail[1:]
 	}
-	return "[trace tail truncated]\n" + redactor.String(tail), true
+	return "[trace tail truncated]\n" + tail, true
 }
