@@ -158,6 +158,17 @@ readback requests. Project path selection is bound to a numeric project ID befor
 mutation. No redirect, write retry, local cleanup, broad `--yes`, tag deletion,
 job erasure or child-pipeline deletion is exposed.
 
+Pipeline deletion also requires `--acknowledge-child-cancellation URL` matching
+the exact parent URL on every invocation, separately from parent deletion
+confirmation. Missing or mismatched acknowledgment refuses before credential or
+provider access, including when the reviewed parent status is terminal. GitLab
+cancels cancelable jobs before removal and may cancel surviving child pipelines
+and their jobs, even if parent deletion later fails. No status or child snapshot
+can guarantee absence of that effect across a concurrent change. Receipts record
+this acknowledgment and leave child cancellation unverified after any DELETE
+attempt; they do not report observed child states or counts. No separate child
+cancellation request is issued.
+
 A successful receipt requires the exact DELETE acknowledgment and scoped 404
 readback with an accessible matching parent/account. The release tag must still
 match. Initial 404 and 404 after an unacknowledged write never mean successful

@@ -35,7 +35,13 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 			}
 			for _, item := range deletionCases() {
 				t.Run(item.name, func(t *testing.T) {
-					for _, mode := range []string{"success", "missing-confirmation", "missing-native", "pre-404", "pre-403", "drift", "delete-403", "lost-absence", "redirect-307", "redirect-308"} {
+					modes := []string{"success", "missing-confirmation", "missing-native", "pre-404", "pre-403", "drift", "delete-403", "lost-absence", "redirect-307", "redirect-308"}
+					if item.group == "pipeline" {
+						item.body["status"] = "running"
+						item.expected = deletionReplaceFlag(item.expected, "--expected-status", "running", false)
+						modes = append(modes, "missing-child-acknowledgment", "wrong-child-acknowledgment", "child-canceled-parent-present")
+					}
+					for _, mode := range modes {
 						t.Run(mode, func(t *testing.T) {
 							f := newDeletionFixture(t, item, mode)
 							home := filepath.Dir(f.configPath)
@@ -64,6 +70,12 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 							if mode == "missing-native" {
 								args = deletionReplaceFlag(args, "--auth-source", "", true)
 							}
+							if mode == "missing-child-acknowledgment" {
+								args = deletionReplaceFlag(args, "--acknowledge-child-cancellation", "", true)
+							}
+							if mode == "wrong-child-acknowledgment" {
+								args = deletionReplaceFlag(args, "--acknowledge-child-cancellation", deletionTestWeb+"/group/project/-/pipelines/89", false)
+							}
 							ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 							defer cancel()
 							command := exec.CommandContext(ctx, binary, args...)
@@ -86,7 +98,7 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 							}
 							wantDeletes := 1
 							switch mode {
-							case "missing-confirmation", "missing-native", "pre-404", "pre-403", "drift":
+							case "missing-confirmation", "missing-native", "missing-child-acknowledgment", "wrong-child-acknowledgment", "pre-404", "pre-403", "drift":
 								wantDeletes = 0
 							}
 							f.mu.Lock()
@@ -95,7 +107,7 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 							if deletes != wantDeletes || unexpected != 0 || credential || requests > 12 {
 								t.Fatalf("writes=%d unexpected=%d credential=%v requests=%d", deletes, unexpected, credential, requests)
 							}
-							if mode == "missing-confirmation" || mode == "missing-native" {
+							if mode == "missing-confirmation" || mode == "missing-native" || mode == "missing-child-acknowledgment" || mode == "wrong-child-acknowledgment" {
 								if requests != 0 {
 									t.Fatal("invalid selectors reached provider")
 								}
@@ -103,8 +115,18 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 							if wantSuccess && (out.Data.Deletion.Action != "deleted" || out.Meta.Backend != "native") {
 								t.Fatalf("false receipt: %+v", out.Data.Deletion)
 							}
-							if mode == "lost-absence" && out.Error.Code != "ambiguous_delete" {
+							if (mode == "lost-absence" || mode == "child-canceled-parent-present") && out.Error.Code != "ambiguous_delete" {
 								t.Fatal("absence converted unknown deletion into another outcome")
+							}
+							if item.group == "pipeline" && wantDeletes == 1 {
+								receipt := out.Error.Receipt.Deletion
+								if wantSuccess {
+									receipt = out.Data.Deletion
+								}
+								assertPipelineChildCancellationReceipt(t, receipt, "unverified")
+								if (wantSuccess || mode == "lost-absence" || mode == "child-canceled-parent-present") && f.childPipelineStatus != "canceled" {
+									t.Fatal("synthetic child cancellation was not exercised")
+								}
 							}
 							preserved, err := os.ReadFile(f.unrelated)
 							if err != nil || string(preserved) != "preserve" {

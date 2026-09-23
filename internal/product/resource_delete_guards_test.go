@@ -16,6 +16,9 @@ func TestResourceDeletionExpectedIdentityGuards(t *testing.T) {
 			base := item.args()
 			inputs["other-host"] = deletionReplaceFlag(base, "--hostname", "other.delete.example", false)
 			wrongURL := deletionReplaceFlag(base, "--expected-url", "https://other.example/not-this-resource", false)
+			if item.group == "pipeline" {
+				wrongURL = deletionReplaceFlag(wrongURL, "--acknowledge-child-cancellation", "https://other.example/not-this-resource", false)
+			}
 			inputs["other-url"] = deletionReplaceFlag(wrongURL, item.confirmation, "https://other.example/not-this-resource", false)
 			wrongSelector := append([]string(nil), base...)
 			wrongSelector[2] = "999"

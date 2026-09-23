@@ -13,7 +13,8 @@ func deletionDefinitions() []Definition {
 			deletionFlag("--expected-state", "STATE", "Exact issue state: opened or closed."),
 			deletionFlag("--expected-updated-at", "TIMESTAMP", "Exact RFC 3339 updated_at from the reviewed resource."),
 		}},
-		{"pipeline", "delete", "ID", "Deletes the pipeline and its immediately related builds, logs, artifacts and triggers, and expires its caches. Child pipelines are not recursively deleted. This is not individual job erasure.", false, []FlagDefinition{
+		{"pipeline", "delete", "ID", "Deletes the pipeline and its immediately related builds, logs, artifacts and triggers, and expires its caches. GitLab cancels cancelable jobs before removal and may cancel surviving child pipelines and their jobs, even if parent deletion later fails. Child pipelines are not recursively deleted. Requires a separate --acknowledge-child-cancellation URL equal to --expected-url on every invocation, in addition to parent deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed status. A snapshot cannot guarantee absence of child effects; receipts do not verify child cancellation. This is not individual job erasure.", false, []FlagDefinition{
+			{Name: "--acknowledge-child-cancellation", Value: "URL", Description: "Required per invocation: acknowledge that deleting this exact parent may cancel surviving child pipelines and their jobs; must equal --expected-url."},
 			deletionFlag("--expected-sha", "SHA", "Exact lowercase pipeline commit SHA."),
 			deletionFlag("--expected-ref", "REF", "Exact pipeline Git ref."),
 			deletionFlag("--expected-status", "STATUS", "Exact current pipeline status."),

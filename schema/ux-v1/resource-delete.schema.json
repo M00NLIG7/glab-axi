@@ -38,9 +38,17 @@
         "postcondition": {"enum": ["not_checked", "not_found", "present", "unverified"]},
         "tag_postcondition": {"enum": ["unchanged", "unverified"]},
         "concurrency": {"const": "best_effort_non_atomic"},
+        "child_cancellation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["acknowledged", "outcome"],
+          "properties": {
+            "acknowledged": {"const": true},
+            "outcome": {"enum": ["not_attempted", "unverified"]}
+          }
+        },
         "intended_effects": {
-          "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
-          "items": {"enum": ["delete_issue_not_close", "delete_related_builds_logs_artifacts_triggers", "expire_pipeline_caches", "do_not_recursively_delete_child_pipelines", "delete_release_metadata_only", "retain_tag", "delete_selected_snippet_and_provider_managed_content"]}
+          "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
+          "items": {"enum": ["delete_issue_not_close", "delete_related_builds_logs_artifacts_triggers", "expire_pipeline_caches", "do_not_recursively_delete_child_pipelines", "may_cancel_surviving_child_pipelines", "delete_release_metadata_only", "retain_tag", "delete_selected_snippet_and_provider_managed_content"]}
         }
       },
       "allOf": [
@@ -60,7 +68,17 @@
         },
         {
           "if": {"properties": {"resource": {"const": "pipeline"}}},
-          "then": {"properties": {"expected": {"required": ["sha", "ref", "status", "updated_at"]}}}
+          "then": {
+            "required": ["child_cancellation"],
+            "properties": {
+              "expected": {"required": ["sha", "ref", "status", "updated_at"]},
+              "intended_effects": {"contains": {"const": "may_cancel_surviving_child_pipelines"}}
+            },
+            "if": {"properties": {"delete_attempted": {"const": false}}},
+            "then": {"properties": {"child_cancellation": {"properties": {"outcome": {"const": "not_attempted"}}}}},
+            "else": {"properties": {"child_cancellation": {"properties": {"outcome": {"const": "unverified"}}}}}
+          },
+          "else": {"not": {"required": ["child_cancellation"]}}
         },
         {
           "if": {"properties": {"resource": {"const": "snippet"}}},

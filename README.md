@@ -197,8 +197,13 @@ and `snippet delete-project` require explicit `--auth-source native`, exact
 reviewed identities and operation-specific URL confirmation. No broad `--yes`,
 default project, redirect, retry, official-profile fallback or local cleanup is
 provided. Release deletion retains its tag; pipeline deletion removes related
-builds/logs/artifacts/triggers but not child pipelines. The native account may
-differ from the official profile.
+builds/logs/artifacts/triggers and may cancel surviving child pipelines and their
+jobs, even if parent deletion later fails. It requires a separate per-invocation
+`--acknowledge-child-cancellation URL` matching the parent `--expected-url`, in
+addition to `--confirm-delete-pipeline URL`. Without it, preflight refuses before
+credential or provider access, regardless of observed status. Child pipelines are
+not recursively deleted; their cancellation outcome remains unverified. The native
+account may differ from the official profile.
 
 Preflight/recheck is best-effort, not atomic. Initial absence is not proof of
 prior deletion; an ambiguous response plus absence is not success. Inspect an

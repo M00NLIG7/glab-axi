@@ -575,12 +575,12 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 ## `pipeline delete`
 
 ```text
-gl-axi pipeline delete <ID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-pipeline URL --expected-sha SHA --expected-ref REF --expected-status STATUS --expected-updated-at TIMESTAMP [--format toon|json]
+gl-axi pipeline delete <ID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-pipeline URL --acknowledge-child-cancellation URL --expected-sha SHA --expected-ref REF --expected-status STATUS --expected-updated-at TIMESTAMP [--format toon|json]
 ```
 
 Guardedly delete one exact pipeline.
 
-Deletes the pipeline and its immediately related builds, logs, artifacts and triggers, and expires its caches. Child pipelines are not recursively deleted. This is not individual job erasure.
+Deletes the pipeline and its immediately related builds, logs, artifacts and triggers, and expires its caches. GitLab cancels cancelable jobs before removal and may cancel surviving child pipelines and their jobs, even if parent deletion later fails. Child pipelines are not recursively deleted. Requires a separate --acknowledge-child-cancellation URL equal to --expected-url on every invocation, in addition to parent deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed status. A snapshot cannot guarantee absence of child effects; receipts do not verify child cancellation. This is not individual job erasure.
 Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
 
 Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.

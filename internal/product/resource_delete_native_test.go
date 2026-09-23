@@ -42,7 +42,7 @@ func deletionCases() []deletionCase {
 			expected: []string{"--expected-id", "1001", "--expected-state", "opened", "--expected-updated-at", deletionTestTime},
 			body:     map[string]any{"id": 1001, "iid": 42, "project_id": 101, "state": "opened", "updated_at": deletionTestTime, "title": "synthetic issue"}},
 		{name: "pipeline", group: "pipeline", command: "delete", selector: "88", route: "projects/101/pipelines/88", webPath: "/group/project/-/pipelines/88", confirmation: "--confirm-delete-pipeline",
-			expected: []string{"--expected-sha", deletionTestSHA, "--expected-ref", "main", "--expected-status", "success", "--expected-updated-at", deletionTestTime},
+			expected: []string{"--acknowledge-child-cancellation", deletionTestWeb + "/group/project/-/pipelines/88", "--expected-sha", deletionTestSHA, "--expected-ref", "main", "--expected-status", "success", "--expected-updated-at", deletionTestTime},
 			body:     map[string]any{"id": 88, "project_id": 101, "sha": deletionTestSHA, "ref": "main", "status": "success", "updated_at": deletionTestTime}},
 		{name: "release", group: "release", command: "delete", selector: "v1.0", route: "projects/101/releases/v1.0", webPath: "/group/project/-/releases/v1.0", confirmation: "--confirm-delete-release",
 			expected: []string{"--expected-commit", deletionTestSHA, "--expected-created-at", deletionTestTime},
@@ -83,17 +83,22 @@ func (k *deletionSpyKeyring) Delete(context.Context, string, string) error {
 }
 
 type deletionTestReceipt struct {
-	Action           string         `json:"action"`
-	Resource         string         `json:"resource"`
-	Scope            string         `json:"scope"`
-	URL              string         `json:"url"`
-	DeleteStatus     int            `json:"delete_status"`
-	DeleteAttempted  bool           `json:"delete_attempted"`
-	Acknowledged     bool           `json:"acknowledged"`
-	Postcondition    string         `json:"postcondition"`
-	TagPostcondition string         `json:"tag_postcondition"`
-	Concurrency      string         `json:"concurrency"`
-	Expected         map[string]any `json:"expected"`
+	Action            string         `json:"action"`
+	Resource          string         `json:"resource"`
+	Scope             string         `json:"scope"`
+	URL               string         `json:"url"`
+	DeleteStatus      int            `json:"delete_status"`
+	DeleteAttempted   bool           `json:"delete_attempted"`
+	Acknowledged      bool           `json:"acknowledged"`
+	Postcondition     string         `json:"postcondition"`
+	TagPostcondition  string         `json:"tag_postcondition"`
+	Concurrency       string         `json:"concurrency"`
+	Expected          map[string]any `json:"expected"`
+	IntendedEffects   []string       `json:"intended_effects"`
+	ChildCancellation *struct {
+		Acknowledged bool   `json:"acknowledged"`
+		Outcome      string `json:"outcome"`
+	} `json:"child_cancellation"`
 }
 
 type deletionEnvelope struct {
@@ -103,6 +108,7 @@ type deletionEnvelope struct {
 	} `json:"data"`
 	Error struct {
 		Code      string `json:"code"`
+		Message   string `json:"message"`
 		Retryable bool   `json:"retryable"`
 		Receipt   struct {
 			Deletion deletionTestReceipt `json:"deletion"`
@@ -127,6 +133,7 @@ type deletionFixture struct {
 	mu                       sync.Mutex
 	requests                 []string
 	deletes, reads, tagReads int
+	childPipelineStatus      string
 	forbiddenPaths           int
 	wrongCredential          bool
 	unrelated                string
@@ -142,6 +149,9 @@ func newDeletionFixture(t *testing.T, item deletionCase, mode string) *deletionF
 		t.Skip("persisted native config/self-managed mapping on Windows remains unproven; this feature does not change that boundary")
 	}
 	f := &deletionFixture{t: t, item: item, mode: mode, token: strings.Join([]string{"synthetic", "delete", t.Name()}, "-"), cancelHit: make(chan struct{})}
+	if item.group == "pipeline" {
+		f.childPipelineStatus = "running"
+	}
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	home := t.TempDir()
@@ -211,6 +221,12 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 		if err != nil || len(b) != 0 {
 			f.forbiddenPaths++
 		}
+		if f.item.group == "pipeline" && f.item.body["status"] == "running" {
+			switch f.mode {
+			case "success", "lost-absence", "child-canceled-parent-present":
+				f.childPipelineStatus = "canceled"
+			}
+		}
 		switch f.mode {
 		case "delete-401":
 			w.WriteHeader(401)
@@ -227,7 +243,7 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 		case "delete-429":
 			w.WriteHeader(429)
 			return
-		case "delete-500", "lost-absence":
+		case "delete-500", "lost-absence", "child-canceled-parent-present":
 			w.WriteHeader(500)
 			return
 		case "disconnect":
@@ -297,7 +313,7 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 		case "post-malformed":
 			fmt.Fprint(w, `{"id":`)
 			return
-		case "post-present", "redirect-307", "redirect-308", "redirect-302", "cross-origin":
+		case "post-present", "redirect-307", "redirect-308", "redirect-302", "cross-origin", "child-canceled-parent-present":
 			json.NewEncoder(w).Encode(f.resource())
 			return
 		default:
@@ -424,6 +440,11 @@ func TestNativeResourceDeletionSuccess(t *testing.T) {
 			if !result.Acknowledged || !result.DeleteAttempted || result.Concurrency != "best_effort_non_atomic" {
 				t.Fatalf("incomplete receipt: %+v", result)
 			}
+			if item.group == "pipeline" {
+				assertPipelineChildCancellationReceipt(t, result, "unverified")
+			} else if result.ChildCancellation != nil {
+				t.Fatal("child cancellation acknowledgment escaped pipeline deletion")
+			}
 			if item.group == "release" {
 				if result.Expected["created_at"] != deletionTestTime || result.Expected["sha"] != deletionTestSHA || result.TagPostcondition != "unchanged" {
 					t.Fatalf("lost release expectation: %+v", result)
@@ -501,6 +522,9 @@ func TestNativeResourceDeletionNeverReplaysOrInfersSuccessFromAbsence(t *testing
 				r := out.Error.Receipt.Deletion
 				if !r.DeleteAttempted || r.Action == "deleted" || r.Concurrency != "best_effort_non_atomic" {
 					t.Fatalf("misleading failure receipt: %+v", r)
+				}
+				if item.group == "pipeline" {
+					assertPipelineChildCancellationReceipt(t, r, "unverified")
 				}
 				if strings.HasPrefix(mode, "delete-") && mode != "delete-500" {
 					if r.Action != "rejected" || r.Acknowledged {
