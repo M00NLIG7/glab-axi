@@ -28,7 +28,6 @@
     "concurrency": "No expected revision/state is accepted by the issue update endpoint. Adjacent preflight reads detect observed drift but are not atomic concurrency or an exclusive authorship guarantee.",
     "quick_actions": "Descriptions and comments execute slash commands. Reject every slash-leading line before any child, including in Markdown code fences, rather than trying to emulate the provider parser.",
     "attempts": "One invocation performs at most one mutation delegation, without retry. A new invocation is a new attempt, not a deduplicated replay.",
-    "ambiguity": "Missing, malformed, wrong-target, oversized, canceled or timed-out mutation responses remain ambiguous. Create/comment never reconcile by content search. State readback discloses observed state but cannot prove an unconfirmed mutation's attribution.",
-    "limits": "Private title <=1024 bytes, body <=131072 bytes, JSON response <=2097152 bytes, aggregate <=8388608 bytes; preflight 10s, write 20s, readback 10s, outer write deadline 45s. Fixed reads, no list or pages."
+    "product_policy": "Current product issue-write behavior, receipts and limits are owned by contracts/issue-writes/provider-v1.json."
   }
 }
