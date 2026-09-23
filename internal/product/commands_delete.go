@@ -180,7 +180,11 @@ func selectDeletion(c *productnative.Client, p Parsed) (deletionSelection, error
 		s.expectedURL = web + "/-/pipelines/" + p.Positionals[0]
 	case "release":
 		s.route = base + "/releases/" + url.PathEscape(p.Positionals[0])
-		s.expectedURL = web + "/-/releases/" + url.PathEscape(p.Positionals[0])
+		// Rails web route segments preserve these valid Git tag sub-delimiters.
+		// Keep the API selector escaped and require the one canonical web URL.
+		s.expectedURL = web + "/-/releases/" + strings.NewReplacer(
+			"%21", "!", "%27", "'", "%28", "(", "%29", ")", "%2C", ",", "%3B", ";",
+		).Replace(url.PathEscape(p.Positionals[0]))
 	case "snippet":
 		if p.Definition.Path[1] == "delete" {
 			s.scope = "personal"
@@ -290,7 +294,7 @@ func executeResourceDeletion(ctx context.Context, p Parsed, deps Dependencies, m
 		}
 	}
 	r.Acknowledged = writeErr == nil
-	if rejected := deletionRejection(response.StatusCode); writeErr != nil && rejected != nil {
+	if rejected := deletionRejection(s.resource, response.StatusCode); writeErr != nil && rejected != nil {
 		r.Action = "rejected"
 		return out, rejected
 	}
@@ -505,7 +509,12 @@ func newDeletionReceipt(s deletionSelection, record deletionRecord, actorID int6
 	return r
 }
 
-func deletionRejection(status int) *uxv1.Error {
+func deletionRejection(resource string, status int) *uxv1.Error {
+	// Snippet repository removal can fail after the database deletion commits;
+	// GitLab maps that failure to 400, so only bounded readback is appropriate.
+	if resource == "snippet" && status == 400 {
+		return nil
+	}
 	if status == 412 {
 		return &uxv1.Error{Code: uxv1.CodeConflict, Message: "GitLab rejected the deletion precondition (HTTP 412)", StatusCode: status}
 	}

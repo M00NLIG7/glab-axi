@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,9 +34,29 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 			if output, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v %s", err, output)
 			}
-			for _, item := range deletionCases() {
+			cases := deletionCases()
+			for _, tag := range []struct{ name, value, api, web string }{
+				{"release-parentheses", "v1.0(legacy)", "v1.0%28legacy%29", "v1.0(legacy)"},
+				{"release-punctuation", "v1.0!$&'()+,;=@", "v1.0%21$&%27%28%29+%2C%3B=@", "v1.0!$&'()+,;=@"},
+				{"release-escaped", "series/v1.0(legacy)#café", "series%2Fv1.0%28legacy%29%23caf%C3%A9", "series%2Fv1.0(legacy)%23caf%C3%A9"},
+			} {
+				item := deletionCases()[2]
+				item.name, item.selector = tag.name, tag.value
+				item.route = "projects/101/releases/" + tag.api
+				item.webPath = "/group/project/-/releases/" + tag.web
+				item.expected = deletionReplaceFlag(item.expected, "--acknowledge-catalog-unpublication", deletionTestWeb+item.webPath, false)
+				item.body["tag_name"] = tag.value
+				item.body["tag_path"] = "/gitlab/group/project/-/tags/" + tag.web
+				cases = append(cases, item)
+			}
+			for _, item := range cases {
 				t.Run(item.name, func(t *testing.T) {
 					modes := []string{"success", "missing-confirmation", "missing-native", "pre-404", "pre-403", "drift", "delete-403", "lost-absence", "redirect-307", "redirect-308"}
+					if item.group == "snippet" {
+						modes = append(modes, "snippet-400-absent", "snippet-400-present", "snippet-400-unverified")
+					} else {
+						modes = append(modes, "delete-400")
+					}
 					if item.group == "pipeline" {
 						item.body["status"] = "running"
 						item.expected = deletionReplaceFlag(item.expected, "--expected-status", "running", false)
@@ -43,6 +64,9 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 					}
 					if item.group == "release" {
 						modes = append(modes, "missing-catalog-acknowledgment", "wrong-catalog-acknowledgment", "pre-tag-drift", "tag-drift", "malformed-delete")
+						if item.name != "release" {
+							modes = append(modes, "api-escaped-web-url", "wrong-url", "wrong-id")
+						}
 					}
 					for _, mode := range modes {
 						t.Run(mode, func(t *testing.T) {
@@ -67,6 +91,12 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 								t.Fatal(err)
 							}
 							args := item.args()
+							if mode == "api-escaped-web-url" {
+								apiURL := deletionTestWeb + "/group/project/-/releases/" + strings.TrimPrefix(item.route, "projects/101/releases/")
+								for _, flag := range []string{"--expected-url", item.confirmation, "--acknowledge-catalog-unpublication"} {
+									args = deletionReplaceFlag(args, flag, apiURL, false)
+								}
+							}
 							if mode == "missing-confirmation" {
 								args = deletionReplaceFlag(args, item.confirmation, "", true)
 							}
@@ -107,15 +137,54 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 							}
 							wantDeletes := 1
 							switch mode {
-							case "missing-confirmation", "missing-native", "missing-child-acknowledgment", "wrong-child-acknowledgment", "missing-catalog-acknowledgment", "wrong-catalog-acknowledgment", "pre-404", "pre-403", "pre-tag-drift", "drift":
+							case "missing-confirmation", "missing-native", "missing-child-acknowledgment", "wrong-child-acknowledgment", "missing-catalog-acknowledgment", "wrong-catalog-acknowledgment", "pre-404", "pre-403", "pre-tag-drift", "drift", "api-escaped-web-url", "wrong-url", "wrong-id":
 								wantDeletes = 0
 							}
 							f.mu.Lock()
 							deletes, unexpected, credential, requests := f.deletes, f.forbiddenPaths, f.wrongCredential, len(f.requests)
 							catalogState, catalogVersions, tagReads := f.catalogState, f.catalogVersions, f.tagReads
+							reads, snippetDeleted := f.reads, f.snippetDeleted
 							f.mu.Unlock()
 							if deletes != wantDeletes || unexpected != 0 || credential || requests > 12 {
 								t.Fatalf("writes=%d unexpected=%d credential=%v requests=%d", deletes, unexpected, credential, requests)
+							}
+							if strings.HasPrefix(mode, "snippet-400-") {
+								r := out.Error.Receipt.Deletion
+								wantPostcondition := "not_found"
+								wantRequests := 6
+								if !item.personal {
+									wantRequests = 9
+									if r.Scope != "project" {
+										t.Fatalf("snippet scope=%s", r.Scope)
+									}
+								} else if r.Scope != "personal" {
+									t.Fatalf("snippet scope=%s", r.Scope)
+								}
+								if mode != "snippet-400-absent" {
+									wantRequests--
+									if !item.personal {
+										wantRequests--
+									}
+									wantPostcondition = "present"
+									if mode == "snippet-400-unverified" {
+										wantPostcondition = "unverified"
+									}
+								}
+								if out.Error.Code != "ambiguous_delete" || out.Error.Retryable || r.Action != "ambiguous" || r.Acknowledged || !r.DeleteAttempted || r.DeleteStatus != 400 || r.Postcondition != wantPostcondition || r.URL != deletionTestWeb+item.webPath || reads != 3 || requests != wantRequests || snippetDeleted != (mode != "snippet-400-present") {
+									t.Fatalf("snippet HTTP 400: code=%s receipt=%+v reads=%d requests=%d committed=%v", out.Error.Code, r, reads, requests, snippetDeleted)
+								}
+								if exit, ok := runErr.(*exec.ExitError); !ok || exit.ExitCode() != 6 {
+									t.Fatalf("ambiguous snippet exit=%v", runErr)
+								}
+							}
+							if mode == "delete-400" {
+								r := out.Error.Receipt.Deletion
+								if out.Error.Code != "validation_error" || out.Error.Retryable || r.Action != "rejected" || r.Acknowledged || !r.DeleteAttempted || r.DeleteStatus != 400 || r.Postcondition != "not_checked" || reads != 2 {
+									t.Fatalf("definite rejection changed: code=%s receipt=%+v reads=%d", out.Error.Code, r, reads)
+								}
+							}
+							if mode == "api-escaped-web-url" && (out.Error.Code != "safety_violation" || requests != 0) {
+								t.Fatalf("noncanonical web URL accepted: code=%s requests=%d", out.Error.Code, requests)
 							}
 							if mode == "missing-confirmation" || mode == "missing-native" || mode == "missing-child-acknowledgment" || mode == "wrong-child-acknowledgment" || mode == "missing-catalog-acknowledgment" || mode == "wrong-catalog-acknowledgment" {
 								if requests != 0 {
@@ -142,8 +211,8 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 								receipt := out.Error.Receipt.Deletion
 								if wantSuccess {
 									receipt = out.Data.Deletion
-									if receipt.TagPostcondition != "unchanged" || tagReads != 2 {
-										t.Fatal("release success did not verify the retained tag")
+									if receipt.TagPostcondition != "unchanged" || tagReads != 2 || receipt.URL != deletionTestWeb+item.webPath || receipt.Tag != item.selector || !receipt.Acknowledged || !receipt.DeleteAttempted || receipt.DeleteStatus != 200 || receipt.Postcondition != "not_found" || reads != 3 || requests != 11 {
+										t.Fatalf("release identity, acknowledgment or retained tag lost: receipt=%+v reads=%d requests=%d tagReads=%d", receipt, reads, requests, tagReads)
 									}
 								}
 								if wantDeletes == 1 {

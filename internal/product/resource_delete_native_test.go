@@ -143,6 +143,7 @@ type deletionFixture struct {
 	catalogVersions          int
 	forbiddenPaths           int
 	wrongCredential          bool
+	snippetDeleted           bool
 	unrelated                string
 	redirect                 string
 	cancelHit                chan struct{}
@@ -211,13 +212,13 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"id":101,"path_with_namespace":"group/project","web_url":"`+deletionTestWeb+`/group/project"}`)
 		return
 	}
-	if r.Method == "GET" && path == "projects/101/repository/tags/v1.0" && f.item.group == "release" {
+	if r.Method == "GET" && path == "projects/101/repository/tags/"+strings.TrimPrefix(f.item.route, "projects/101/releases/") && f.item.group == "release" {
 		f.tagReads++
 		sha := deletionTestSHA
 		if f.mode == "pre-tag-drift" || f.mode == "tag-drift" && f.deletes > 0 {
 			sha = strings.Repeat("b", 40)
 		}
-		fmt.Fprint(w, `{"name":"v1.0","commit":{"id":"`+sha+`"}}`)
+		json.NewEncoder(w).Encode(map[string]any{"name": f.item.selector, "commit": map[string]any{"id": sha}})
 		return
 	}
 	if path != f.item.route || r.URL.RawQuery != "" {
@@ -247,6 +248,15 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		switch f.mode {
+		case "snippet-400-absent", "snippet-400-present", "snippet-400-unverified":
+			// Repository removal can fail after the snippet row is committed away.
+			f.snippetDeleted = f.mode != "snippet-400-present"
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"message":"Failed to remove snippet."}`)
+			return
+		case "delete-400":
+			w.WriteHeader(400)
+			return
 		case "delete-401":
 			w.WriteHeader(401)
 			return
@@ -326,8 +336,15 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 	f.reads++
 	if f.deletes > 0 {
 		switch f.mode {
-		case "post-forbidden":
+		case "post-forbidden", "snippet-400-unverified":
 			w.WriteHeader(403)
+			return
+		case "snippet-400-absent", "snippet-400-present":
+			if f.snippetDeleted {
+				w.WriteHeader(404)
+			} else {
+				json.NewEncoder(w).Encode(f.resource())
+			}
 			return
 		case "post-malformed":
 			fmt.Fprint(w, `{"id":`)
