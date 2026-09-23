@@ -129,16 +129,13 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 			receipt.RequestedState = "opened"
 		}
 	}
-	totalBytes := 0
+	var stateBefore issueWriteRecord
 	// Fixed reads only. There is no list/search or pagination to turn somebody
 	// else's issue/comment into evidence of this invocation's write.
 	issuePath := "projects/" + strconv.FormatInt(projectID, 10) + "/issues/" + strconv.FormatInt(iid, 10)
 	read := func(readCtx context.Context, path string) ([]byte, error) {
 		response, err := client.Do(readCtx, productnative.Request{Method: http.MethodGet, Path: path, MaxBytes: limits.MaxJSONPageBytes})
 		if err != nil {
-			return nil, err
-		}
-		if err := addIssueWriteBytes(&totalBytes, response.Body); err != nil {
 			return nil, err
 		}
 		return response.Body, nil
@@ -189,6 +186,18 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		}
 		if stateWrite {
 			receipt.ObservedState = adjacent.State
+			stateBefore = adjacent
+			if adjacent.State != receipt.RequestedState {
+				if before.Title == nil || before.Description == nil || adjacent.Title == nil || adjacent.Description == nil {
+					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeUpstream, "issue state preflight requires existing content evidence")
+				}
+				if !sameIssueWriteContent(before, adjacent) {
+					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "issue content changed during state preflight")
+				}
+				if validateIssueWriteBody(*adjacent.Description) != nil || normalizeIssueWriteBody(*adjacent.Description) != *adjacent.Description {
+					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeSecurityBoundary, "GitLab state updates may rewrite this existing description; refusing the mutation")
+				}
+			}
 		}
 	}
 	if err := readProject(preflight); err != nil {
@@ -230,24 +239,21 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 			return issueWriteFailure(receipt, meta, rejection)
 		}
 	} else {
-		writeErr = addIssueWriteBytes(&totalBytes, response.Body)
-		if writeErr == nil {
-			if action == "comment" {
-				receipt.NoteID, writeErr = validateCreatedIssueNote(response.Body, receipt.Identity, payload.(issueNotePayload).Body)
-			} else {
-				var returned issueWriteRecord
-				returned, writeErr = decodeIssueWriteRecord(response.Body, receipt.Identity)
-				if writeErr == nil && action == "create" {
-					wanted := payload.(issueCreatePayload)
-					if returned.Title == nil || *returned.Title != wanted.Title || returned.Description == nil || *returned.Description != wanted.Description || returned.State != "opened" || returned.IssueType != "issue" {
-						writeErr = uxv1.NewError(uxv1.CodeConflict, "created issue does not prove the requested content and type")
-					} else {
-						receipt.Identity.IssueID, receipt.Identity.IID, receipt.Identity.WebURL = returned.ID, returned.IID, returned.WebURL
-					}
+		if action == "comment" {
+			receipt.NoteID, writeErr = validateCreatedIssueNote(response.Body, receipt.Identity, payload.(issueNotePayload).Body)
+		} else {
+			var returned issueWriteRecord
+			returned, writeErr = decodeIssueWriteRecord(response.Body, receipt.Identity)
+			if writeErr == nil && action == "create" {
+				wanted := payload.(issueCreatePayload)
+				if returned.Title == nil || *returned.Title != wanted.Title || returned.Description == nil || *returned.Description != wanted.Description || returned.State != "opened" || returned.IssueType != "issue" {
+					writeErr = uxv1.NewError(uxv1.CodeConflict, "created issue does not prove the requested content and type")
+				} else {
+					receipt.Identity.IssueID, receipt.Identity.IID, receipt.Identity.WebURL = returned.ID, returned.IID, returned.WebURL
 				}
-				if writeErr == nil && stateWrite && returned.State != receipt.RequestedState {
-					writeErr = uxv1.NewError(uxv1.CodeConflict, "issue response does not prove the requested state")
-				}
+			}
+			if writeErr == nil && stateWrite && (returned.State != receipt.RequestedState || !sameIssueWriteContent(stateBefore, returned)) {
+				writeErr = uxv1.NewError(uxv1.CodeConflict, "issue response does not prove the requested state and unchanged content")
 			}
 		}
 		if writeErr == nil {
@@ -278,9 +284,9 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 	if writeErr != nil || readErr != nil {
 		return issueWriteAmbiguous(receipt, meta, uxv1.CodeAmbiguousUpdate)
 	}
-	if after.State != receipt.RequestedState {
+	if after.State != receipt.RequestedState || !sameIssueWriteContent(stateBefore, after) {
 		receipt.Outcome = "conflict"
-		return issueWriteFailure(receipt, meta, uxv1.NewError(uxv1.CodeConflict, "issue state drifted after the accepted mutation response"))
+		return issueWriteFailure(receipt, meta, uxv1.NewError(uxv1.CodeConflict, "issue state or content drifted after the accepted mutation response"))
 	}
 	receipt.Outcome = "state_observed"
 	return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
@@ -303,7 +309,7 @@ func loadIssueWritePayload(parsed Parsed, action string) (any, error) {
 		if err := validateIssueWriteBody(body); err != nil {
 			return nil, err
 		}
-		return issueCreatePayload{title, body, "issue"}, nil
+		return issueCreatePayload{title, normalizeIssueWriteBody(body), "issue"}, nil
 	case "comment":
 		body, err := privatefile.Read(parsed.Values["--body-file"], limits.MaxDescriptionBytes, false)
 		if err != nil {
@@ -315,18 +321,19 @@ func loadIssueWritePayload(parsed Parsed, action string) (any, error) {
 		if err := validateIssueWriteBody(body); err != nil {
 			return nil, err
 		}
-		return issueNotePayload{body}, nil
+		return issueNotePayload{normalizeIssueWriteBody(body)}, nil
 	default:
 		return issueStatePayload{action}, nil
 	}
 }
 
-func addIssueWriteBytes(total *int, body []byte) error {
-	*total += len(body)
-	if len(body) > limits.MaxJSONPageBytes || *total > limits.MaxOperationBytes {
-		return uxv1.NewError(uxv1.CodeUpstream, "issue write response exceeded the data limit")
-	}
-	return nil
+func normalizeIssueWriteBody(body string) string {
+	return strings.TrimRight(strings.ReplaceAll(body, "\r", ""), " \t\n\v\f\x00")
+}
+
+func sameIssueWriteContent(a, b issueWriteRecord) bool {
+	return a.Title != nil && b.Title != nil && *a.Title == *b.Title &&
+		a.Description != nil && b.Description != nil && *a.Description == *b.Description
 }
 
 func decodeIssueWriteRecord(body []byte, identity issueWriteIdentity) (issueWriteRecord, error) {

@@ -238,7 +238,12 @@ mutation into success. No atomic expected revision or exclusive attribution is
 claimed. Preflight, mutation and readback budgets are 10/20/10 seconds inside the
 45-second write deadline. Fixed reads need no pagination; each response and the
 aggregate retain the standard byte caps. Body quick actions are denied before
-any child, preserving the intended single-operation boundary.
+credential resolution; new bodies are canonicalized using the pinned provider's
+carriage-return/trailing-ASCII-whitespace rules. The shared native client owns
+both response and operation byte budgets. State writes reject observed unsafe
+descriptions and require unchanged content evidence in responses/readback.
+Concurrent description sanitization and blank-create template effects remain
+[unresolved provider blockers](../contracts/issue-writes/review-blockers.md).
 
 ## MR ensure: bounded create/update write
 

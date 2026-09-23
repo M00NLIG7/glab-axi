@@ -1,6 +1,7 @@
 {
   "schema": "glab-axi/issue-write-provider-contract/v1",
   "official_glab": "1.112.0",
+  "usage": "Test-only pinned dependency characterization; no production delegated issue-write capability.",
   "source_commit": "816e3a52411aba73d90237859fdc6ecbc86bd169",
   "api": "GitLab REST v4",
   "evidence_date": "2026-09-21",

@@ -39,8 +39,8 @@ adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
 schema. Exact issue-edit validation pins only project, issue, and label-catalog
 GET routes. No issue content/label PUT is exposed because GitLab accepts no
-expected issue revision and only label names. `issue-writes.json` and its
-fixed argv entries retain characterization evidence, not a supported public
+expected issue revision and only label names. `issue-writes.json` and test-only
+probes retain characterization evidence, not a supported delegated
 issue-write backend: pinned glab follows 301/302/303 to another authority while
 forwarding a synthetic Private-Token. New public issue writes instead require
 explicit native selection under `contracts/issue-writes/`, without changing

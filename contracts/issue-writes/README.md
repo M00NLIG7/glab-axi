@@ -30,6 +30,11 @@ credential resolution. Request JSON stays in memory. Numeric project routes
 prevent a mutable project path from selecting a replacement project; exact
 web URLs are bound to the configured native web origin and path prefix.
 Quick-action-shaped lines are rejected even inside Markdown code fences.
+After the private-file size and quick-action checks, new description/note bodies
+lose carriage returns and trailing ASCII space, tab, newline, vertical tab and
+form feed, matching the pinned provider extractor. Leading/internal whitespace
+and Unicode spaces are preserved. The request hash and exact response comparison
+use this canonical content.
 Labels, assignment, milestone, custom types, attachments, delete/move, lock,
 hierarchy and bundled comment+close are not included.
 
@@ -42,8 +47,12 @@ hierarchy and bundled comment+close are not included.
   observation, not a server-enforced precondition. Two reads detect observed
   drift but cannot prevent another writer in the remaining window. Only
   `state_event` is submitted; there is no atomic expected revision.
+  Before PUT, existing title/description evidence must match across those reads;
+  descriptions with slash-leading lines or provider-sensitive whitespace are
+  refused. Existing content is never resubmitted or normalized by the client.
 - An accepted state response plus exact readback returns `state_observed`, not
-  exclusive authorship. A later different state is `conflict`.
+  exclusive authorship. Response content must match the preflight observation;
+  later different state or content is `conflict`.
 - Matching preflight state returns `unchanged` without a mutation.
 - A definite HTTP rejection reports `rejected`. Otherwise an unconfirmed,
   canceled, oversized, malformed or redirected mutation outcome is ambiguous.
@@ -58,8 +67,11 @@ hierarchy and bundled comment+close are not included.
   reasons. Comments and state events remain separate invocations.
 
 Existing `issue edit` remains validation-only in this increment, including its
-label-name races and missing expected revision. These operations cannot change
-existing issue content or labels. Windows persisted-native-config/self-managed
+label-name races and missing expected revision. Existing-content and label
+changes are outside the authorized issue-write scope. However, raced description
+sanitization (R1) and default-template effects on blank creates (R2) remain
+[unresolved provider blockers](review-blockers.md); observed-content checks do
+not establish absence of collateral effects. Windows persisted-native-config/self-managed
 mapping remains unproven; this increment does not claim or implement general
 Windows authentication support.
 
@@ -76,6 +88,11 @@ Windows authentication support.
   mapping, every redirect and ambiguous state readback.
 - `TestIssueWrite*`, `TestIssueState*` and the provider-field fixture: payload,
   drift, response bounds, cancellation, missing evidence and one-attempt tests.
+- `TestIssueWriteProviderContentNormalization` and
+  `TestIssueStateProviderExistingDescription`: ordinary file normalization and
+  pre-mutation refusal of descriptions that the provider would rewrite.
+- `TestIssueWriteProviderUnresolvedCollateralCharacterization`: negative
+  evidence for the remaining template/concurrent-content blockers, not acceptance.
 - Official-glab fixture tests characterize only the pinned dependency; they do
   not substitute for native product validation.
 

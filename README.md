@@ -204,6 +204,8 @@ comment, attachments, labels, assignees or milestone writes are included.
 All redirects and automatic retries are refused by the shared native boundary.
 Windows persisted-native-config/self-managed mapping remains unproven.
 See [`contracts/issue-writes`](contracts/issue-writes/) and leaf help.
+Provider sanitization of concurrently changed descriptions and default-template
+effects on blank creation remain [release blockers](contracts/issue-writes/review-blockers.md).
 
 The denial boundary includes generic API, existing-issue content/label mutation,
 unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,

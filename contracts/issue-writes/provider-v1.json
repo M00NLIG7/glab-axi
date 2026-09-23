@@ -8,20 +8,24 @@
     "https://docs.gitlab.com/api/issues/#create-an-issue",
     "https://docs.gitlab.com/api/issues/#edit-an-issue",
     "https://docs.gitlab.com/api/notes/#create-an-issue-note",
-    "https://docs.gitlab.com/user/project/quick_actions/"
+    "https://docs.gitlab.com/user/project/quick_actions/",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issuable_base_service.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issues/create_service.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/gitlab/quick_actions/extractor.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/api/issues.rb"
   ],
   "project_id": 101,
   "issue_id": 1001,
   "iid": 42,
   "reads": [
     {"name": "issue-write-project", "method": "GET", "endpoint": "projects/group%2Fproject", "response_fields": ["id", "path_with_namespace", "web_url"]},
-    {"name": "issue-write-view", "method": "GET", "endpoint": "projects/101/issues/42", "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+    {"name": "issue-write-view", "method": "GET", "endpoint": "projects/101/issues/42", "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description"]}
   ],
   "operations": [
     {"name": "issue-create", "method": "POST", "endpoint": "projects/101/issues", "payload": {"title": "new title", "description": "new body", "issue_type": "issue"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description", "issue_type"]},
     {"name": "issue-note-create", "method": "POST", "endpoint": "projects/101/issues/42/notes", "payload": {"body": "new body"}, "response_fields": ["id", "project_id", "noteable_id", "noteable_iid", "noteable_type", "body", "system", "internal"]},
-    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "close"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]},
-    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "reopen"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "close"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description"]},
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "reopen"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description"]}
   ],
   "semantics": {
     "identity": "Caller-supplied numeric project/issue identity and canonical web URLs must match the selected native authority, including configured API/web origins and prefixes. Mutations use the numeric project route.",
@@ -31,6 +35,9 @@
     "note": "Plain non-system non-internal note. Exact direct-response target and content evidence, never latest-note searches.",
     "state": "close/reopen request closed/opened. Expected state is an observation, not atomic compare-and-swap. No GitHub close reason or bundled comment.",
     "quick_actions": "Reject slash-leading description/comment lines before credential resolution, including lines in code fences.",
+    "normalization": "After private-file bounds and quick-action checks, remove carriage returns and trailing ASCII space, tab, newline, vertical tab and form feed from new descriptions/notes. Preserve leading/internal whitespace and Unicode spaces. Hash the canonical submitted JSON and require exact response content.",
+    "state_content": "Before a state mutation require stable observed title/description and reject slash-leading or normalization-sensitive existing descriptions. Mutation response and readback must preserve observed content. No content is resubmitted or normalized on existing issues; these checks cannot prevent collateral edits to concurrently changed descriptions.",
+    "unresolved_provider_boundary": "R1 concurrent-description sanitization and R2 default-template effects on blank creation remain unresolved; see review-blockers.md. Passing characterization tests demonstrate these incompatibilities, not acceptance of their side effects.",
     "ambiguity": "Unconfirmed mutation outcomes remain ambiguous even if state readback matches. Attempts count intended native transfers, not proof of transmission or provider application.",
     "limits": "Private title <=1024 bytes; body <=131072 bytes; each JSON response <=2097152 bytes; aggregate <=8388608 bytes. Preflight/write/readback 10/20/10 seconds inside the 45-second operation lifetime. Fixed reads, no pagination.",
     "platform_limit": "Windows persisted-native-config/self-managed mapping behavior is unproven; this contract does not expand general Windows authentication support."

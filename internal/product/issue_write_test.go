@@ -64,11 +64,11 @@ func issueWriteDelegate(action string) *fakeDelegate {
 		return glab.Response{Body: body, Write: true, UpstreamVersion: glab.SupportedVersion}
 	}
 	project := response([]byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`))
-	d.responses[glab.OpIssueWriteProject] = []glab.Response{project, project}
-	d.responses[glab.OpIssueWriteView] = []glab.Response{response(issueWriteBody(before)), response(issueWriteBody(before)), response(issueWriteBody(after))}
-	d.responses[glab.OpIssueCreate] = []glab.Response{response(issueWriteBody("opened"))}
-	d.responses[glab.OpIssueNoteCreate] = []glab.Response{response(issueNoteBody())}
-	d.responses[glab.OpIssueState] = []glab.Response{response(issueWriteBody(after))}
+	d.responses[issueWriteProjectOperation] = []glab.Response{project, project}
+	d.responses[issueWriteViewOperation] = []glab.Response{response(issueWriteBody(before)), response(issueWriteBody(before)), response(issueWriteBody(after))}
+	d.responses[issueCreateOperation] = []glab.Response{response(issueWriteBody("opened"))}
+	d.responses[issueNoteCreateOperation] = []glab.Response{response(issueNoteBody())}
+	d.responses[issueStateOperation] = []glab.Response{response(issueWriteBody(after))}
 	return d
 }
 
@@ -128,7 +128,7 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 				t.Fatalf("payload=%v want=%v", got, want)
 			}
 			for _, req := range d.requests {
-				if req.Host != "gitlab.com" || req.Repo != "group/project" || req.ProjectID != 101 {
+				if req.Host != "gitlab.com" || req.Repo != "group/project" {
 					t.Fatalf("request=%+v", req)
 				}
 				if req.InputFile != "" {
@@ -144,11 +144,11 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 		for _, failure := range []string{"timeout", "unframed rejection", "malformed", "wrong identity", "oversized", "missing identity", "duplicate identity", "wrong body", "non-UTF-8"} {
 			t.Run(action+"/"+failure, func(t *testing.T) {
 				d := issueWriteDelegate(action)
-				op := glab.OpIssueCreate
+				op := issueCreateOperation
 				if action == "comment" {
-					op = glab.OpIssueNoteCreate
+					op = issueNoteCreateOperation
 				} else if action == "close" || action == "reopen" {
-					op = glab.OpIssueState
+					op = issueStateOperation
 				}
 				switch failure {
 				case "timeout":
@@ -166,7 +166,7 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 				case "duplicate identity":
 					d.responses[op][0].Body = []byte(strings.Replace(string(d.responses[op][0].Body), `{`, `{"id":999,`, 1))
 				case "wrong body":
-					if op == glab.OpIssueState {
+					if op == issueStateOperation {
 						d.responses[op][0].Body = issueWriteBody("unexpected")
 					} else {
 						d.responses[op][0].Body = []byte(strings.ReplaceAll(string(d.responses[op][0].Body), "new body", "other body"))
@@ -191,7 +191,7 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 				} else if action != "create" {
 					wantReads = 3
 				}
-				if countOperation(d.requests, glab.OpIssueWriteView) != wantReads || len(d.requests) != 3+wantReads {
+				if countOperation(d.requests, issueWriteViewOperation) != wantReads || len(d.requests) != 3+wantReads {
 					t.Fatalf("unexpected reconciliation: %+v", d.requests)
 				}
 			})
@@ -204,12 +204,12 @@ func TestIssueWriteDefiniteRejection(t *testing.T) {
 		for _, status := range []int{400, 401, 403, 404, 409, 422, 429} {
 			t.Run(action+"/"+strconv.Itoa(status), func(t *testing.T) {
 				d := issueWriteDelegate(action)
-				op := glab.OpIssueState
+				op := issueStateOperation
 				if action == "create" {
-					op = glab.OpIssueCreate
+					op = issueCreateOperation
 				}
 				if action == "comment" {
-					op = glab.OpIssueNoteCreate
+					op = issueNoteCreateOperation
 				}
 				rejection, _ := uxv1.NewHTTPRejection(status)
 				d.errors[op] = []error{rejection}
@@ -218,7 +218,7 @@ func TestIssueWriteDefiniteRejection(t *testing.T) {
 					t.Fatal("accepted rejection")
 				}
 				_, code, r := decodeIssueWriteEnvelope(t, out.Bytes())
-				if code != rejection.Code || r.Outcome != "rejected" || r.MutationResponse != "rejected" || len(d.inputBodies) != 1 || countOperation(d.requests, glab.OpIssueWriteView) > 2 {
+				if code != rejection.Code || r.Outcome != "rejected" || r.MutationResponse != "rejected" || len(d.inputBodies) != 1 || countOperation(d.requests, issueWriteViewOperation) > 2 {
 					t.Fatalf("receipt=%+v code=%s", r, code)
 				}
 			})
@@ -235,22 +235,22 @@ func TestIssueStateNoopAndDrift(t *testing.T) {
 			switch scenario {
 			case "noop":
 				args = replaceIssueWriteArg(args, "--expected-state", "closed")
-				for i := range d.responses[glab.OpIssueWriteView] {
-					d.responses[glab.OpIssueWriteView][i].Body = issueWriteBody("closed")
+				for i := range d.responses[issueWriteViewOperation] {
+					d.responses[issueWriteViewOperation][i].Body = issueWriteBody("closed")
 				}
 				wantExit = 0
 			case "expected mismatch":
 				args = replaceIssueWriteArg(args, "--expected-state", "closed")
 			case "adjacent drift":
-				d.responses[glab.OpIssueWriteView][1].Body = issueWriteBody("closed")
+				d.responses[issueWriteViewOperation][1].Body = issueWriteBody("closed")
 			case "post drift":
-				d.responses[glab.OpIssueWriteView][2].Body = issueWriteBody("opened")
+				d.responses[issueWriteViewOperation][2].Body = issueWriteBody("opened")
 				wantWrites = 1
 			case "unreadable post":
-				d.errors[glab.OpIssueWriteView] = []error{nil, nil, errors.New("untrusted-provider-detail")}
+				d.errors[issueWriteViewOperation] = []error{nil, nil, errors.New("untrusted-provider-detail")}
 				wantWrites = 1
 			case "wrong post identity":
-				d.responses[glab.OpIssueWriteView][2].Body = []byte(strings.ReplaceAll(string(issueWriteBody("closed")), `"id":1001`, `"id":1002`))
+				d.responses[issueWriteViewOperation][2].Body = []byte(strings.ReplaceAll(string(issueWriteBody("closed")), `"id":1001`, `"id":1002`))
 				wantWrites = 1
 			}
 			out, _, deps := issueWriteTestDeps(t, d)
@@ -377,29 +377,29 @@ func TestIssueWriteTargetMismatchAndCancellation(t *testing.T) {
 			d := issueWriteDelegate("comment")
 			switch scenario {
 			case "project ID":
-				d.responses[glab.OpIssueWriteProject][0].Body = []byte(`{"id":999}`)
+				d.responses[issueWriteProjectOperation][0].Body = []byte(`{"id":999}`)
 			case "project URL":
-				d.responses[glab.OpIssueWriteProject][0].Body = []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://other.example/group/project"}`)
+				d.responses[issueWriteProjectOperation][0].Body = []byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://other.example/group/project"}`)
 			case "project path":
-				d.responses[glab.OpIssueWriteProject][0].Body = []byte(`{"id":101,"path_with_namespace":"other/project","web_url":"https://gitlab.com/group/project"}`)
+				d.responses[issueWriteProjectOperation][0].Body = []byte(`{"id":101,"path_with_namespace":"other/project","web_url":"https://gitlab.com/group/project"}`)
 			case "project drift":
-				d.responses[glab.OpIssueWriteProject][1].Body = []byte(`{"id":999}`)
+				d.responses[issueWriteProjectOperation][1].Body = []byte(`{"id":999}`)
 			case "issue ID":
-				d.responses[glab.OpIssueWriteView][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"id":1001`, `"id":1002`))
+				d.responses[issueWriteViewOperation][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"id":1001`, `"id":1002`))
 			case "issue IID":
-				d.responses[glab.OpIssueWriteView][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"iid":42`, `"iid":43`))
+				d.responses[issueWriteViewOperation][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"iid":42`, `"iid":43`))
 			case "issue project":
-				d.responses[glab.OpIssueWriteView][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"project_id":101`, `"project_id":102`))
+				d.responses[issueWriteViewOperation][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), `"project_id":101`, `"project_id":102`))
 			case "issue URL":
-				d.responses[glab.OpIssueWriteView][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), "gitlab.com", "other.example"))
+				d.responses[issueWriteViewOperation][0].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), "gitlab.com", "other.example"))
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if strings.HasPrefix(scenario, "canceled") {
 				d.doFunc = func(ctx context.Context, r glab.Request) (glab.Response, error, bool) {
-					if scenario == "canceled preflight" || r.Operation == glab.OpIssueNoteCreate {
+					if scenario == "canceled preflight" || r.Operation == issueNoteCreateOperation {
 						cancel()
-						return glab.Response{Write: r.Operation == glab.OpIssueNoteCreate}, uxv1.NewError(uxv1.CodeCanceled, "canceled"), true
+						return glab.Response{Write: r.Operation == issueNoteCreateOperation}, uxv1.NewError(uxv1.CodeCanceled, "canceled"), true
 					}
 					return glab.Response{}, nil, false
 				}

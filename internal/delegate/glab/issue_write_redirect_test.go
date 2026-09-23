@@ -31,7 +31,7 @@ func TestPinnedOfficialGlabIssueWritesRedirectCharacterization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, op := range []Operation{OpIssueCreate, OpIssueNoteCreate, OpIssueState} {
+	for _, op := range []Operation{"issue-create", "issue-note-create", "issue-state"} {
 		for _, status := range []int{301, 302, 303, 307, 308} {
 			t.Run(string(op)+"/"+strconv.Itoa(status), func(t *testing.T) {
 				token := strings.Join([]string{"synthetic", "issue", "redirect", "only"}, "-")
@@ -103,10 +103,10 @@ func TestPinnedOfficialGlabIssueWritesRedirectCharacterization(t *testing.T) {
 				method := "POST"
 				endpoint := "/api/v4/projects/101/issues/42/notes"
 				switch op {
-				case OpIssueCreate:
+				case "issue-create":
 					body = `{"title":"ordinary issue","description":"plain body","issue_type":"issue"}`
 					endpoint = "/api/v4/projects/101/issues"
-				case OpIssueState:
+				case "issue-state":
 					body = `{"state_event":"close"}`
 					method = "PUT"
 					endpoint = "/api/v4/projects/101/issues/42"
@@ -117,7 +117,7 @@ func TestPinnedOfficialGlabIssueWritesRedirectCharacterization(t *testing.T) {
 				client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + config, "GITLAB_TOKEN=" + token, "PATH=/usr/bin:/bin", "HTTPS_PROXY=" + proxy.URL, "NO_PROXY="}})
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				response, requestErr := client.Do(ctx, Request{Operation: op, Host: sourceHost, Repo: "group/project", ProjectID: 101, IID: 42, InputFile: input})
+				response, requestErr := runIssueWriteProbe(ctx, client, sourceHost, method, strings.TrimPrefix(endpoint, "/api/v4/"), input)
 				select {
 				case got := <-original:
 					if got.Method != method || got.Path != endpoint || !got.HasSyntheticToken || got.BodyBytes != len(body) {

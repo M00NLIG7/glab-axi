@@ -82,7 +82,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 					body = strings.Replace(body, `/issues/42`, `/issues/`+strconv.Itoa(42+attempt), 1)
 					d.responses[c.Provider][0].Body = []byte(body)
 				}
-				if c.Provider == glab.OpIssueNoteCreate {
+				if c.Provider == issueNoteCreateOperation {
 					d.responses[c.Provider][0].Body = []byte(strings.Replace(string(d.responses[c.Provider][0].Body), `"id":3001`, `"id":`+strconv.Itoa(3001+attempt), 1))
 				}
 				if attempt == 0 {
@@ -100,7 +100,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 				if attempt > 0 && c.Action == "create" && receipt.Identity.IssueID != int64(1001+attempt) {
 					t.Fatalf("new invocation reused earlier issue identity: %+v", receipt)
 				}
-				if attempt > 0 && c.Provider == glab.OpIssueNoteCreate && receipt.NoteID != int64(3001+attempt) {
+				if attempt > 0 && c.Provider == issueNoteCreateOperation && receipt.NoteID != int64(3001+attempt) {
 					t.Fatalf("new invocation reused earlier note identity: %+v", receipt)
 				}
 			}

@@ -94,12 +94,18 @@ project routes, preventing a project-path rename from redirecting a write to a
 replacement project. Private descriptor-validated content is bounded before
 credential resolution, and request JSON remains in memory. Slash-leading description/comment lines are denied even inside code
 fences because GitLab quick actions can perform additional mutations.
+New bodies are then canonicalized by removing carriage returns and trailing
+ASCII whitespace, preserving leading/internal whitespace and Unicode spaces.
+Exact response comparisons and request hashes use the canonical submitted body.
 
 There is one mutation attempt per invocation, without retry. No latest-note or
 title search can establish write authorship. Create/note success requires the
 direct response's exact identity and content. State commands validate two
 preflight observations and make one state-event PUT, followed by one exact
-readback. These are observations, NOT an atomic expected-revision guarantee or
+readback. A state mutation requires stable observed title/description and refuses
+existing descriptions with slash-leading lines or normalization-sensitive
+whitespace. Response and readback content must match the observation. These are
+observations, NOT an atomic expected-revision guarantee or
 exclusive authorship. An unconfirmed mutation remains ambiguous even if the
 state readback matches. A confirmed response followed by state drift is a
 conflict. Already-matching bound states return a no-write receipt. Error receipts
@@ -107,6 +113,10 @@ disclose attempt count, response evidence and observed state without raw provide
 errors. `retry_safe` and `atomic_precondition` are always false. Reinvoking create
 or comment can duplicate the resource. No comments are bundled with state changes,
 and GitHub close reasons are not translated into invented GitLab properties.
+Concurrent description sanitization and default-template quick actions for blank
+creation remain [provider blockers](../contracts/issue-writes/review-blockers.md).
+The snapshot checks cannot prove absence of collateral effects, and this scope
+does not authorize those effects.
 
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds

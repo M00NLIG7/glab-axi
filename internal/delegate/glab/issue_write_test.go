@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -52,93 +51,14 @@ func loadIssueWriteFixture(t *testing.T) issueWriteFixture {
 	return fixture
 }
 
-func TestIssueWritesPinnedProviderBuilders(t *testing.T) {
-	fixture := loadIssueWriteFixture(t)
-	input := filepath.Join(t.TempDir(), "private.json")
-	for _, op := range fixture.Operations {
-		request := Request{Operation: op.Name, Host: "gitlab.example.invalid", Repo: "group/project", ProjectID: fixture.ProjectID, IID: fixture.IID, InputFile: input}
-		invocation, err := build(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := []string{"api", "--method", op.Method, "--hostname", request.Host, op.Endpoint, "--input", input, "--header", "Content-Type: application/json"}
-		if !reflect.DeepEqual(invocation.args, want) || !invocation.write || invocation.maxStdout != limits.MaxJSONPageBytes {
-			t.Fatalf("invocation=%+v", invocation)
-		}
-		for _, invalid := range []string{"project ID", "IID", "file", "host", "repo"} {
-			bad := request
-			switch invalid {
-			case "project ID":
-				bad.ProjectID = 0
-			case "IID":
-				if op.Name == OpIssueCreate {
-					continue
-				}
-				bad.IID = 0
-			case "file":
-				bad.InputFile = "relative"
-			case "host":
-				bad.Host = "https://gitlab.com"
-			case "repo":
-				bad.Repo = "a/../b"
-			}
-			if _, err := build(bad); err == nil {
-				t.Fatalf("accepted invalid request=%+v", bad)
-			}
-		}
-	}
-	// Consume the authoritative argv manifest, including the fixed preflight and
-	// numeric-ID view reads, rather than treating source text as evidence.
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "official-glab", "v1.112.0", "capabilities.json"))
+func runIssueWriteProbe(ctx context.Context, client *Client, host, method, endpoint, input string) (Response, error) {
+	version, err := client.Version(ctx)
 	if err != nil {
-		t.Fatal(err)
+		return Response{}, err
 	}
-	var manifest struct {
-		Operations []struct {
-			Name        Operation `json:"name"`
-			Argv        []string  `json:"argv"`
-			InputFields []string  `json:"input_fields"`
-		} `json:"operations"`
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	seen := map[Operation]bool{}
-	replacer := strings.NewReplacer("{host}", "gitlab.com", "{escaped_repo}", "group%2Fproject", "{project_id}", "101", "{iid}", "42", "{private_json_file}", input)
-	for _, operation := range manifest.Operations {
-		switch operation.Name {
-		case OpIssueWriteProject, OpIssueWriteView, OpIssueCreate, OpIssueNoteCreate, OpIssueState:
-		default:
-			continue
-		}
-		inv, err := build(Request{Operation: operation.Name, Host: "gitlab.com", Repo: "group/project", ProjectID: 101, IID: 42, InputFile: input})
-		if err != nil {
-			t.Fatal(err)
-		}
-		args := append([]string{}, operation.Argv...)
-		for i := range args {
-			args[i] = replacer.Replace(args[i])
-		}
-		if !reflect.DeepEqual(args, inv.args) {
-			t.Fatalf("manifest does not match executable %s: %v vs %v", operation.Name, args, inv.args)
-		}
-		for _, op := range fixture.Operations {
-			if op.Name == operation.Name {
-				if len(op.Payload) != len(operation.InputFields) {
-					t.Fatal("input field count mismatch")
-				}
-				for _, field := range operation.InputFields {
-					if _, ok := op.Payload[field]; !ok {
-						t.Fatalf("unproven input field %s", field)
-					}
-				}
-			}
-		}
-		seen[operation.Name] = true
-	}
-	if len(seen) != 5 {
-		t.Fatalf("missing issue-write operations: %v", seen)
-	}
+	args := []string{"api", "--method", method, "--hostname", host, endpoint, "--input", input, "--header", "Content-Type: application/json"}
+	body, err := client.runCapture(ctx, args, host, limits.MaxJSONPageBytes, true, false, "")
+	return Response{Body: body, UpstreamVersion: version, Write: true}, err
 }
 
 // Actual pinned glab, local TLS and a runtime synthetic credential. Every
@@ -231,7 +151,7 @@ func TestPinnedOfficialGlabIssueWritesTLS(t *testing.T) {
 							}
 						}()
 					}
-					response, err := client.Do(ctx, Request{Operation: operation.Name, Host: host, Repo: "group/project", ProjectID: fixture.ProjectID, IID: fixture.IID, InputFile: input})
+					response, err := runIssueWriteProbe(ctx, client, host, operation.Method, operation.Endpoint, input)
 					if !response.Write {
 						t.Fatalf("mutation not delegated: %v", err)
 					}

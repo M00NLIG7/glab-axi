@@ -32,10 +32,10 @@ func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
 	}
 	for _, operation := range fixture.Operations {
 		action := "create"
-		if operation.Name == glab.OpIssueNoteCreate {
+		if operation.Name == issueNoteCreateOperation {
 			action = "comment"
 		}
-		if operation.Name == glab.OpIssueState {
+		if operation.Name == issueStateOperation {
 			action = operation.Payload["state_event"]
 		}
 		for _, field := range operation.Fields {
@@ -82,7 +82,7 @@ func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
 			}
 			d := issueWriteDelegate("create")
 			var response map[string]any
-			if err := json.Unmarshal(d.responses[glab.OpIssueCreate][0].Body, &response); err != nil {
+			if err := json.Unmarshal(d.responses[issueCreateOperation][0].Body, &response); err != nil {
 				t.Fatal(err)
 			}
 			response["title"], response["description"] = title, description
@@ -93,7 +93,7 @@ func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			d.responses[glab.OpIssueCreate][0].Body = encoded
+			d.responses[issueCreateOperation][0].Body = encoded
 			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), args, deps); code != 0 {
 				t.Fatalf("exit=%d %s", code, out)
@@ -113,7 +113,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 		pad := func(body []byte) []byte {
 			return append(body, []byte(strings.Repeat(" ", limits.MaxJSONPageBytes-len(body)))...)
 		}
-		for _, op := range []glab.Operation{glab.OpIssueWriteProject, glab.OpIssueWriteView} {
+		for _, op := range []glab.Operation{issueWriteProjectOperation, issueWriteViewOperation} {
 			for i := range d.responses[op] {
 				d.responses[op][i].Body = pad(d.responses[op][i].Body)
 			}
@@ -136,13 +136,13 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 				if !ok || time.Until(deadline) > limits.WriteOperation {
 					t.Fatal("missing bounded phase deadline")
 				}
-				if r.Operation == glab.OpIssueWriteView {
+				if r.Operation == issueWriteViewOperation {
 					views++
 				}
-				block := phase == "preflight" || phase == "mutation" && r.Operation == glab.OpIssueState || phase == "readback" && views == 3
+				block := phase == "preflight" || phase == "mutation" && r.Operation == issueStateOperation || phase == "readback" && views == 3
 				if block {
 					<-ctx.Done()
-					return glab.Response{Write: r.Operation == glab.OpIssueState}, uxv1.Wrap(uxv1.CodeCanceled, "controlled", ctx.Err()), true
+					return glab.Response{Write: r.Operation == issueStateOperation}, uxv1.Wrap(uxv1.CodeCanceled, "controlled", ctx.Err()), true
 				}
 				return glab.Response{}, nil, false
 			}
@@ -189,7 +189,7 @@ func TestIssueNoteRejectsTransformedOrSystemResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			d.responses[glab.OpIssueNoteCreate][0].Body = encoded
+			d.responses[issueNoteCreateOperation][0].Body = encoded
 			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), issueWriteArgs(t, "comment"), deps); code != 6 {
 				t.Fatalf("exit=%d %s", code, out)
