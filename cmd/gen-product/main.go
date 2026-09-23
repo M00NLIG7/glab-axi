@@ -1,5 +1,5 @@
-// Command gen-product writes public docs and Agent Skill assets from the
-// executable product registry.
+// Command gen-product writes registry-owned public docs and Agent Skill assets,
+// plus product-owned schemas.
 package main
 
 import (

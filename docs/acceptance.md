@@ -60,10 +60,9 @@ GitLab project (not Rune).
     retargeting, stale-head, red/no CI, unresolved, conflict,
     malformed-response, and ambiguous transport cases; every preflight denial
     has zero PUT, and uncertainty never retries or accepts branch drift.
-12. Run denied generic API, unguarded issue update, alternate merge
-    (`--rebase`), approval, comment/reply/resolve, MR-label mutation, close,
-    pipeline retry, repo create, release create, and label-resource delete while
-    auditing child/network execution; each exits 2 with no child/request.
+12. Exercise the [parser-level command denials](../internal/product/parser.go)
+    and alternate merge strategy (`--rebase`) while auditing child/network
+    execution; each exits 2 with no child/request.
 13. Validate TOON and JSON against `glab-axi/ux-v1`, exits, no ANSI/pager/editor,
     completeness metadata, bounded discussions/trace/diff, canonical setup
     idempotence, compatibility-hook preservation, both signed update manifests,

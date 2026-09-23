@@ -15,6 +15,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
           |    -> feature-owned download / issue-write / CI-variable / deletion handlers
+          |    -> exact identities; downloads use safedownload publication
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
@@ -47,7 +48,7 @@ schema, and write classification. Top/parent/leaf help, the Agent Skill, and
 Parsing is command-first and fail-closed. Only declared global flags are
 accepted; `-R`, `--repo`, and long flags support space or equals forms. Duplicate
 aliases, unknown flags, NUL/newline values, excess positionals, and undeclared
-subcommands fail before target resolution. Permanent denial names have a
+subcommands fail before target resolution. Denied command names have a
 separate `security_boundary` error and never construct a child process.
 
 Common target selection is documented in
@@ -66,13 +67,13 @@ complete operation, using existing native configuration, credential resolution
 and TLS patterns. The client owns the selected authority/credential, refuses
 all redirects and automatic retries, uses fresh HTTP/1.1 connections to avoid
 HTTP/2 refused-stream replay, and bounds requests, responses and lifetime.
-The [download contract](../contracts/downloads/v1.json) owns transport and
-download bounds, including the shorter outer download deadline applied by the
-product dispatcher. [CI variables](ci-variables.md#outcomes-races-and-bounds)
-describes the variable-operation limits.
-The [resource-deletion contract](../contracts/resource-delete/v1.md) owns
-deletion-specific authority, request bounds and reconciliation rules.
-Feature handlers retain their own route/identity/expected-state authority.
+[`internal/productnative/client.go`](../internal/productnative/client.go) owns
+the shared transport limits. Feature handlers retain their own route, identity,
+expected-state authority and operation budgets, pinned in the
+[download contract](../contracts/downloads/v1.json),
+[issue-write contract](../contracts/issue-writes/provider-v1.json),
+[resource-deletion contract](../contracts/resource-delete/v1.md), and
+[CI-variable documentation](ci-variables.md#outcomes-races-and-bounds).
 This internal request interface does not expose generic user HTTP authority.
 
 `internal/safedownload` pins destination-parent directory descriptors and uses
@@ -335,9 +336,9 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. For the current provider-write boundary, see the
-[generated command reference](command-reference.md#current-undeclared-operations)
-and its referenced feature contracts.
+modify or integrate Firstmate. See the
+[provider-write boundary](security.md#provider-write-boundary) for the supported
+write families and denials.
 
 [CI-variable operations](ci-variables.md) require explicit native selection and use one shared
 `productnative.Client` for their complete operation. Feature-owned numeric-project

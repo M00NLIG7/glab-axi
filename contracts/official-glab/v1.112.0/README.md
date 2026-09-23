@@ -51,9 +51,9 @@ four-key JSON file, is invoked once, and is never delegated through interactive
 
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
-ensure, exact-MR-view normalization, read-only issue-edit validation, typed
-issue writes and guarded-merge requests with synthetic credentials; it never contacts a live
-GitLab API.
+ensure, exact-MR-view normalization, read-only issue-edit validation, test-only
+issue-write characterization and guarded-merge requests with synthetic
+credentials; it never contacts a live GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter
 tests before changing the runtime pin.

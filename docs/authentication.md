@@ -55,9 +55,10 @@ config, asks official glab to print a token, parses a credential source, or
 copies a value into its native store.
 
 A profile configured independently by a human with official `glab` is an
-external trust decision. Product operations use it as official glab normally
-would. `gl-axi auth status` delegates without `--show-token`, discards all child
-text, and returns only normalized authentication state/host/backend metadata.
+external trust decision. Delegated product operations use it as official glab
+normally would. `gl-axi auth status` delegates without `--show-token`, discards
+all child text, and returns only normalized authentication state/host/backend
+metadata.
 
 ### Headless product operations
 
@@ -76,9 +77,9 @@ credentials in argv, shell history, chat, fixtures, or logs.
 Issue-edit validation and guarded `mr merge` use this same opaque official-glab
 profile/environment lane. Neither asks official glab to print a token, reads its
 config, or falls back to the native v1 keyring. MR request bodies contain no
-credential and pass through private mode-0600 files. Proposed issue title and
-description enter only through descriptor-validated private files, but no issue
-mutation body or PUT is constructed.
+credential and pass through private mode-0600 files. Issue-edit proposals use
+descriptor-validated private title/description files; that command constructs
+no mutation body or PUT.
 
 ### OAuth/device and private-host limitations
 
@@ -98,17 +99,16 @@ below.
 
 ## Explicit product-native operations
 
-[Download commands](../README.md#safe-downloads),
-[guarded resource deletion](../contracts/resource-delete/v1.md), and
-[project CI-variable commands](ci-variables.md) require `--auth-source native`.
-The selector is not a global authentication switch: existing commands/defaults
-and frozen native-v1 remain unchanged. Native selection requires explicit
-`--hostname` and, for project-scoped commands, explicit `--repo`.
-Missing/invalid selectors fail before credential resolution or networking.
+The [generated command reference](command-reference.md) identifies the commands
+that require `--auth-source native`. The selector is not a global authentication
+switch: existing commands/defaults and frozen native-v1 remain unchanged.
+Native selection requires explicit `--hostname` and, for project-scoped commands,
+explicit `--repo`. Missing/invalid selectors fail before credential resolution
+or networking.
 
 One operation resolves the existing native authority and credential once and
-uses them for all preflights, pages, byte requests, mutations and reconciliation.
-It never reads the official profile, exports its token, invokes a glab child, or
+uses them for all preflights, pages, transfers, mutations and rechecks. It
+never reads the official profile, exports its token, invokes a glab child, or
 falls back after failure. The native account may differ from official glab;
 no identity equivalence is inferred. Native configuration below applies,
 including private-host API/web mapping and CA/proxy settings.

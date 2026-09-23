@@ -19,7 +19,7 @@ native HTTP transport.
 - regular executable resolution and no shell interpolation;
 - operation enum with fixed argv builders—no public/raw argv or API method/path;
 - strict command/flag/positional parsing before target, credentials, or child;
-- permanent denied-command classification with zero child/request tests;
+- denied-command classification with zero child/request tests;
 - closed stdin plus prompt/pager/editor/browser/debug/update suppression for
   data commands;
 - three terminal-file checks plus a non-secret secure-store probe for human login;
