@@ -300,7 +300,11 @@ func newIssueEditNativeFixture(t *testing.T) *issueEditNativeFixture {
 	t.Cleanup(f.server.Close)
 	cfg := config.New()
 	cfg.Hosts[f.host] = config.Host{GitHosts: []string{f.host}, APIBase: f.server.URL + "/gitlab/api/v4", WebBase: f.webBase, ProxyDisabled: true}
-	f.configPath = filepath.Join(t.TempDir(), "config.json")
+	configDir := t.TempDir()
+	if err := os.Chmod(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f.configPath = filepath.Join(configDir, "config.json")
 	if err := config.Save(f.configPath, cfg); err != nil {
 		t.Fatal(err)
 	}
