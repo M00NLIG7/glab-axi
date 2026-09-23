@@ -403,11 +403,9 @@ make build
 ```
 
 CI additionally downloads without installing the checksum-pinned official
-`glab` package and executes its version/help contract plus isolated TLS
-fake-server ensure, exact-MR-view normalization, read-only issue-edit
-validation, and guarded-merge contracts.
-The authoritative evidence and MIT license are under
-[`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
+`glab` package and runs the
+[offline dependency contracts](contracts/official-glab/v1.112.0/).
+That directory owns the versioned evidence and MIT license.
 
 ## Distribution and updates
 

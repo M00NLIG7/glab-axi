@@ -120,9 +120,22 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			t.Fatalf("receipt=%+v", r)
 		}
 	})
+	t.Run("expired-caller", func(t *testing.T) {
+		d := issueWriteDelegate("comment")
+		out, _, deps := issueWriteTestDeps(t, d)
+		args := issueWriteArgs(t, "comment")
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		if code := Run(ctx, args, deps); code != 8 || len(d.requests) != 0 || len(d.inputBodies) != 0 {
+			t.Fatalf("expired caller: exit=%d requests=%d writes=%d output=%s", code, len(d.requests), len(d.inputBodies), out)
+		}
+	})
 	for _, phase := range []string{"preflight", "mutation"} {
 		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			d := issueWriteDelegate("comment")
+			phaseReached := false
 			d.doFunc = func(ctx context.Context, r glab.Request) (glab.Response, error, bool) {
 				deadline, ok := ctx.Deadline()
 				if !ok || time.Until(deadline) > limits.WriteOperation {
@@ -130,29 +143,35 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 				}
 				block := phase == "preflight" || phase == "mutation" && r.Operation == issueNoteCreateOperation
 				if block {
+					phaseReached = true
+					cancel()
 					<-ctx.Done()
+					if ctx.Err() != context.Canceled {
+						t.Fatal("request did not observe caller cancellation")
+					}
 					return glab.Response{Write: r.Operation == issueNoteCreateOperation}, uxv1.Wrap(uxv1.CodeCanceled, "controlled", ctx.Err()), true
 				}
 				return glab.Response{}, nil, false
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-			defer cancel()
 			out, _, deps := issueWriteTestDeps(t, d)
-			start := time.Now()
 			code := Run(ctx, issueWriteArgs(t, "comment"), deps)
-			if time.Since(start) > time.Second {
-				t.Fatal("caller deadline ignored")
+			if !phaseReached {
+				t.Fatalf("selected cancellation phase was not reached: exit=%d output=%s", code, out)
 			}
 			want := 6
 			if phase == "preflight" {
-				want = 8 // caller deadline, distinct from explicit cancellation
+				want = 130 // explicit cancellation, distinct from an expired caller deadline
 			}
 			if code != want {
 				t.Fatalf("exit=%d %s", code, out)
 			}
-			if phase != "preflight" {
+			if phase == "preflight" {
+				if len(d.inputBodies) != 0 {
+					t.Fatalf("canceled preflight attempted %d writes", len(d.inputBodies))
+				}
+			} else {
 				_, _, r := decodeIssueWriteEnvelope(t, out.Bytes())
-				if r.Outcome != "ambiguous" || r.MutationAttempts != 1 {
+				if r.Outcome != "ambiguous" || r.MutationAttempts != 1 || len(d.inputBodies) != 1 {
 					t.Fatalf("receipt=%+v", r)
 				}
 			}
