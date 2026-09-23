@@ -1,0 +1,33 @@
+{
+  "schema": "glab-axi/issue-write-provider-contract/v1",
+  "official_glab": "1.112.0",
+  "usage": "Test-only pinned dependency characterization; no production delegated issue-write capability.",
+  "source_commit": "816e3a52411aba73d90237859fdc6ecbc86bd169",
+  "api": "GitLab REST v4",
+  "evidence_date": "2026-09-21",
+  "sources": [
+    "https://docs.gitlab.com/api/issues/#create-an-issue",
+    "https://docs.gitlab.com/api/issues/#edit-an-issue",
+    "https://docs.gitlab.com/api/notes/#create-an-issue-note",
+    "https://docs.gitlab.com/user/project/quick_actions/"
+  ],
+  "project_id": 101,
+  "issue_id": 1001,
+  "iid": 42,
+  "operations": [
+    {"name": "issue-create", "method": "POST", "endpoint": "projects/101/issues", "payload": {"title": "new title", "description": "new body", "issue_type": "issue"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description", "issue_type"]},
+    {"name": "issue-note-create", "method": "POST", "endpoint": "projects/101/issues/42/notes", "payload": {"body": "new body"}, "response_fields": ["id", "project_id", "noteable_id", "noteable_iid", "noteable_type", "body", "system", "internal"]},
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "close"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]},
+    {"name": "issue-state", "method": "PUT", "endpoint": "projects/101/issues/42", "payload": {"state_event": "reopen"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+  ],
+  "semantics": {
+    "identity": "Project path and exact HTTPS URL must resolve to caller-supplied numeric project ID; issue mutations use that numeric project ID and canonical IID and validate caller-supplied global issue ID.",
+    "type": "Create explicitly sends issue_type=issue. An explicit null response description represents empty content; a missing description field is unproven. No custom type, imported timestamp, assignment, labels, milestone, confidential flag, discussion resolution or attachment fields.",
+    "note": "Plain non-system non-internal note. Direct response must bind the exact note ID, project and issue and preserve the requested body. No list/latest-note reconciliation.",
+    "state_event": "close and reopen request GitLab states closed and opened. There is no GitHub completed/not_planned close-reason field and no bundled comment.",
+    "concurrency": "No expected revision/state is accepted by the issue update endpoint. Adjacent preflight reads detect observed drift but are not atomic concurrency or an exclusive authorship guarantee.",
+    "quick_actions": "Descriptions and comments execute slash commands. Reject every slash-leading line before any child, including in Markdown code fences, rather than trying to emulate the provider parser.",
+    "attempts": "One invocation performs at most one mutation delegation, without retry. A new invocation is a new attempt, not a deduplicated replay.",
+    "product_policy": "Current product issue-write behavior, receipts and limits are owned by contracts/issue-writes/provider-v1.json."
+  }
+}

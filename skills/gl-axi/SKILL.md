@@ -1,6 +1,6 @@
 ---
 name: gl-axi
-description: Use bounded GitLab reads, exact-identity issue-edit preview, idempotent MR ensure, and guarded exact-head squash merge without generic API authority.
+description: Use bounded GitLab reads, typed nonblank issue creation/notes/state observations, issue-edit preview, MR ensure, and guarded exact-head squash merge without generic API authority.
 ---
 
 # gl-axi
@@ -9,6 +9,11 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 
 ## Commands
 
+- `gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE --auth-source native [--format toon|json]` - Create one ordinary issue from private title and nonblank description files.
+- `gl-axi issue comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]` - Create one plain issue note (comment and note are aliases).
+- `gl-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]` - Create one plain issue note (comment and note are aliases).
+- `gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
+- `gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]` - Observe an already-matching issue state; transitions are temporarily refused.
 - `gl-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `gl-axi issue list [global flags]` - List project issues.
 - `gl-axi issue view <iid> [global flags]` - View one project issue.
@@ -59,10 +64,11 @@ Use `gl-axi` rather than official `glab` directly when operating as an agent. Hu
 ## Safety
 
 - Ask a human to run `gl-axi auth login`; never drive login from an agent or request a token.
-- Use explicit `-R namespace/project --hostname host` for issue-edit preview and guarded merge.
+- Use explicit `-R namespace/project --hostname host` for issue writes, issue-edit preview and guarded merge.
 - Guarded deletion requires explicit native auth, exact reviewed identities and the leaf-specific URL confirmation. Personal snippets use `snippet delete`; project snippets use `snippet delete-project`. Release deletion retains its tag and may unpublish the project's CI/CD Catalog resource when its last catalog version is removed. It requires separate per-invocation `--acknowledge-catalog-unpublication URL` matching the release URL as well as release deletion confirmation, regardless of observed catalog state or version count. Snapshots cannot guarantee absence of catalog effects; receipts leave catalog unpublication unverified after any DELETE attempt, including ambiguous responses. Pipeline deletion removes related builds/logs/artifacts and may cancel surviving child pipelines and their jobs, even if parent deletion later fails. Pipeline deletion requires separate per-invocation `--acknowledge-child-cancellation URL` matching the parent URL as well as parent deletion confirmation, regardless of observed status. Child pipelines are not recursively deleted, and receipts do not verify child cancellation. Read leaf help for consequences and `contracts/resource-delete/v1.md` for races/receipts. Never blindly retry an ambiguous delete.
-- Do not attempt generic API, undeclared issue/MR mutations, alternate merge strategies, approve, comment/note/reply/resolve, close/reopen, label-resource or MR-label mutation, repository writes, or other release/pipeline/job writes. Label deletion remains disabled pending an ID-exclusive provider capability.
+- Do not attempt generic API, existing-issue content/label mutation, alternate merge strategies, approve, MR comment/note/reply/resolve/close/reopen, MR delete, label-resource or MR-label mutation, repository writes, or other release/pipeline/job writes. Label deletion remains disabled pending an ID-exclusive provider capability.
 - CI variable commands require --auth-source native, explicit host/repo and exact scope; set/delete require caller-bound prestate and --confirm. Values enter only via private files or piped stdin and are never displayed. Hidden mutations use exact metadata guards and report unavailable value verification; unhidden mutations require private previous-value checks. Success requires provider acknowledgment and bounded reconciliation. Native and official profiles may be different accounts; no fallback occurs. See docs/ci-variables.md.
+- Issue create/comment/close/reopen require `--auth-source native`, caller-bound numeric project/issue identity and the configured canonical URL. One native environment/keyring identity handles the whole operation; no official-profile fallback or redirects. Content uses private files; quick-action-shaped lines are refused. No blind retries, deduplication, atomic state precondition, GitHub close reason, or bundled comment. Blank creation is temporarily refused before credentials or HTTP. Close/reopen transitions return unsupported with zero mutation attempts; already-matching states return read-only observations. Existing descriptions are not filtered. These temporary gaps do not establish full issue parity.
 - `issue edit` requires exact URL/state/updated-at evidence and private content files. Use `--dry-run` for a validated preview; a non-no-op live request returns `safety_violation` with no PUT because GitLab has no enforceable issue revision.
 - `mr ensure` / `mr create-or-update` accepts private title/description files. `mr merge` requires the exact URL, source branch, target branch, reviewed head, authority class, provider-enforced green policy, and `--squash`.
 - `board issues` requires `--allow-ordering-initialization` and explicit scope/host. GitLab may initialize issue relative positions and shift sibling positions, including beyond displayed items; receipts never claim changes were measured. Do not use this command when mutation-free reads are required.

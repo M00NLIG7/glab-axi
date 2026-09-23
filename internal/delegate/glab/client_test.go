@@ -614,7 +614,7 @@ func TestLoginOutputFailureTerminatesDelegatedPTYChild(t *testing.T) {
 			overflow := filepath.Join(t.TempDir(), "overflow")
 			if test.mode == "login-overflow" {
 				// Keep shell-side payload generation out of the termination deadline.
-				if err := os.WriteFile(overflow, bytes.Repeat([]byte{'x'}, 9<<20), 0o600); err != nil {
+				if err := os.WriteFile(overflow, bytes.Repeat([]byte{'x'}, 8<<20), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -630,15 +630,26 @@ func TestLoginOutputFailureTerminatesDelegatedPTYChild(t *testing.T) {
 				Stdin: terminals.stdin.slave, Stdout: terminals.stdout.slave, Stderr: terminals.stderr.slave,
 				IsTerminal: func() bool { return true }, Keyring: &probeKeyring{},
 			})
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			// The overflow case must relay 8 MiB through a PTY before it can
-			// detect failure. Timing from Login includes version/setup and that
-			// throughput, especially under -race and parallel package builds.
-			// Require monitor-driven termination before the outer deadline;
-			// TestLoginMonitorRejectsMalformedAndOversizedOutput separately proves
-			// cancellation at the exact byte boundary.
-			_, loginErr := client.Login(ctx, "gitlab.com")
+			loginDone := make(chan error, 1)
+			go func() {
+				_, err := client.Login(ctx, "gitlab.com")
+				loginDone <- err
+			}()
+			// The overflow fixture first transfers exactly the allowed 8 MiB.
+			// Measure teardown from the violating byte, not bulk PTY throughput,
+			// version startup or test-terminal draining under the race detector.
+			waitForFakeGlabReady(t, ready, 10*time.Second)
+			if _, err := terminals.stdin.master.Write([]byte("emit violation\n")); err != nil {
+				t.Fatal(err)
+			}
+			var loginErr error
+			select {
+			case loginErr = <-loginDone:
+			case <-time.After(5 * time.Second):
+				t.Fatal("output failure did not terminate the child promptly")
+			}
 			terminals.close()
 			if loginErr == nil || uxv1.AsError(loginErr).Code != uxv1.CodeUpstream || !strings.Contains(loginErr.Error(), test.message) {
 				t.Fatalf("login error=%v", loginErr)
@@ -883,16 +894,19 @@ if [ "${1:-}" = "auth" ] && [ "${2:-}" = "login" ]; then
     IFS= read -r _ignored
   fi
   if [ "${GLAB_AXI_FAKE_MODE:-}" = "login-overflow" ]; then
+    cat "${GLAB_AXI_FAKE_OUTPUT_FILE}"
     if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
       : > "${GLAB_AXI_FAKE_READY}"
     fi
-    cat "${GLAB_AXI_FAKE_OUTPUT_FILE}"
+    IFS= read -r _ignored
+    printf x
     IFS= read -r _ignored
   fi
   if [ "${GLAB_AXI_FAKE_MODE:-}" = "login-malformed" ]; then
     if [ -n "${GLAB_AXI_FAKE_READY:-}" ]; then
       : > "${GLAB_AXI_FAKE_READY}"
     fi
+    IFS= read -r _ignored
     printf '\377'
     IFS= read -r _ignored
   fi

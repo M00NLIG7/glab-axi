@@ -1,0 +1,45 @@
+{
+  "schema": "glab-axi/issue-write-provider-contract/v1",
+  "backend": "native",
+  "transport_owner": "internal/productnative",
+  "api": "GitLab REST v4",
+  "evidence_date": "2026-09-23",
+  "sources": [
+    "https://docs.gitlab.com/api/issues/#create-an-issue",
+    "https://docs.gitlab.com/api/issues/#edit-an-issue",
+    "https://docs.gitlab.com/api/notes/#create-an-issue-note",
+    "https://docs.gitlab.com/user/project/quick_actions/",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issuable_base_service.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issues/create_service.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/gitlab/quick_actions/extractor.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/api/issues.rb",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/models/concerns/issuable.rb#L140",
+    "https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/models/concerns/strip_attribute.rb#L29",
+    "https://docs.ruby-lang.org/en/3.4/String.html#method-i-strip"
+  ],
+  "project_id": 101,
+  "issue_id": 1001,
+  "iid": 42,
+  "reads": [
+    {"name": "issue-write-project", "method": "GET", "endpoint": "projects/group%2Fproject", "response_fields": ["id", "path_with_namespace", "web_url"]},
+    {"name": "issue-write-view", "method": "GET", "endpoint": "projects/101/issues/42", "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at"]}
+  ],
+  "operations": [
+    {"name": "issue-create", "method": "POST", "endpoint": "projects/101/issues", "payload": {"title": "new title", "description": "new body", "issue_type": "issue"}, "response_fields": ["id", "iid", "project_id", "web_url", "state", "updated_at", "title", "description", "issue_type"]},
+    {"name": "issue-note-create", "method": "POST", "endpoint": "projects/101/issues/42/notes", "payload": {"body": "new body"}, "response_fields": ["id", "project_id", "noteable_id", "noteable_iid", "noteable_type", "body", "system", "internal"]}
+  ],
+  "semantics": {
+    "identity": "Caller-supplied numeric project/issue identity and canonical web URLs must match the selected native authority, including configured API/web origins and prefixes. Mutations use the numeric project route.",
+    "authentication": "One explicitly selected existing-native environment/keyring identity for all reads and any mutation. No official profile, account-equivalence assumption, new store or credential export.",
+    "redirects": "No redirects or automatic retries, including same-origin cross-path replay; shared productnative owns enforcement.",
+    "type": "Create sends issue_type=issue and a nonblank description. No additional metadata fields. A missing, null or transformed response description cannot prove the requested content.",
+    "note": "Plain non-system non-internal note. Exact direct-response target and content evidence, never latest-note searches.",
+    "state": "Close/reopen transitions are temporarily unavailable: return unsupported with a refused receipt and zero mutation attempts. Already-matching bound state returns unchanged as a read-only preflight observation, never an atomic precondition or exclusive authorship claim. Existing content is not filtered or resubmitted.",
+    "quick_actions": "Reject slash-leading description/comment lines before credential resolution, including lines in code fences.",
+    "normalization": "Enforce original private-file bounds first. Strip surrounding ASCII space, tab, newline, carriage return, vertical tab and form feed from titles; preserve internal and Unicode whitespace. After quick-action checks, remove carriage returns and trailing ASCII whitespace from new descriptions/notes. Preserve leading/internal whitespace and Unicode spaces in bodies. Hash canonical request JSON and require exact response content. State hashes represent requested intent only; nothing is submitted.",
+    "temporary_parity_gaps": "No close/reopen mutation dispatch and no title-only or normalized-blank creation. Blank descriptions, including whitespace-only content, return unsupported before credentials or HTTP. No filler, compensation, snapshot-based permission or quick-action authority; see review-blockers.md.",
+    "ambiguity": "Unconfirmed create/note outcomes remain ambiguous without search or replay. Attempts count intended native transfers, not proof of transmission or provider application.",
+    "limits": "Private title <=1024 bytes; body <=131072 bytes; each JSON response <=2097152 bytes; aggregate <=8388608 bytes. Preflight/mutation 10/20 seconds inside the 45-second operation lifetime. Fixed reads, no pagination.",
+    "platform_limit": "Windows persisted-native-config/self-managed mapping behavior is unproven; this contract does not expand general Windows authentication support."
+  }
+}

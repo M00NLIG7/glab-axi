@@ -25,7 +25,7 @@ type ParseResult struct {
 }
 
 var deniedTop = map[string]string{
-	"api":      "generic API authority is permanently outside gl-axi",
+	"api":      "generic API authority is not exposed by this release",
 	"workflow": "GitLab uses pipelines and jobs; workflow is not a safe GitLab alias",
 }
 
@@ -40,8 +40,7 @@ var deniedNested = map[string]map[string]string{
 		"close": "closing", "reopen": "reopening", "delete": "deletion",
 	},
 	"issue": {
-		"create": "issue creation", "update": "unguarded issue editing", "comment": "commenting",
-		"note": "commenting", "close": "closing", "reopen": "reopening",
+		"update": "unguarded issue editing",
 	},
 	"pipeline": {
 		"run": "pipeline triggering", "trigger": "pipeline triggering", "retry": "pipeline retry",

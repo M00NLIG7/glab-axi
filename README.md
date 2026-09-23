@@ -10,11 +10,11 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads,
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, typed issue writes,
   [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
-  without an official-profile fallback; and
+  with `--auth-source native`, without an official-profile fallback; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -39,6 +39,7 @@ gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
 gl-axi issue list|view
+gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
 gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # dry-run preview; live changes fail closed
 gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
@@ -161,7 +162,8 @@ label names, so it cannot atomically bind the validated issue and label
 identities. Consequently,
 every non-no-op live request returns `safety_violation` with a deterministic
 `refused`/`not_applied` receipt under `error.receipt` before any PUT. The
-approved issue-edit surface and exclusions are pinned under
+issue-edit command exposes no content/label write operation. Its approved surface
+and exclusions are pinned under
 [`contracts/issue-edit`](contracts/issue-edit/).
 
 Guarded merge requires an explicit host, nested project, canonical MR URL,
@@ -186,11 +188,37 @@ provider acknowledgment and bounded reconciliation. GitLab hidden/masked/
 protected semantics are distinct. No actual secret access or live acceptance
 is implied by the isolated tests.
 
-The current denial boundary includes generic API, direct issue editing,
-issue creation, unguarded or alternate merge, approve,
-comment/note/reply/resolve, merge-request and label-resource mutation,
-close/reopen, repository writes, and other release/pipeline/job writes.
-`issue edit --dry-run` is validation-only and changes no labels or issue fields.
+Typed `issue create` and `issue comment` (`note` alias) allow at most one
+mutation per invocation and require `--auth-source native`. One existing-native
+environment/keyring identity handles the complete operation; no official profile
+is used, and the two accounts need not be equivalent. Explicit host, project,
+numeric project identity and canonical URL bind the configured native web
+authority; existing issues also require their global ID and IID.
+
+Create takes private title and nonblank description files; comments take private
+body files. Original input limits apply before normalization. Titles strip
+surrounding ASCII whitespace; bodies remove carriage returns and trailing ASCII
+whitespace. Direct response content must match exactly. New quick-action-shaped
+lines are refused before credential resolution. Lost responses remain ambiguous;
+another invocation can create a duplicate. Redirects and automatic retries are
+refused by the shared native boundary.
+
+Two temporary parity gaps prevent unauthorized provider effects: blank or
+title-only creation returns `unsupported` before credentials or HTTP, and
+`issue close`/`issue reopen` refuse actual transitions with zero mutation attempts.
+Already-matching caller-bound states return `unchanged`, a read-only preflight
+observation. Existing descriptions, including fenced code, are not filtered or
+resubmitted. No atomic revision, GitHub close reason, bundled comment, attachments,
+labels, assignees or milestone writes are included. Windows persisted-native-config/
+self-managed mapping remains unproven. See
+[`contracts/issue-writes`](contracts/issue-writes/) and the
+[temporary parity gaps](contracts/issue-writes/review-blockers.md).
+
+The denial boundary includes generic API, existing-issue content/label mutation,
+unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,
+merge-request and label-resource mutation, MR delete, repository writes,
+and other release/pipeline/job writes. `issue edit --dry-run` is validation-only and changes no
+labels or issue fields.
 
 ### Guarded native resource deletion
 
@@ -375,11 +403,9 @@ make build
 ```
 
 CI additionally downloads without installing the checksum-pinned official
-`glab` package and executes its version/help contract plus isolated TLS
-fake-server ensure, exact-MR-view normalization, read-only issue-edit
-validation, and guarded-merge contracts.
-The authoritative evidence and MIT license are under
-[`contracts/official-glab/v1.112.0`](contracts/official-glab/v1.112.0/).
+`glab` package and runs the
+[offline dependency contracts](contracts/official-glab/v1.112.0/).
+That directory owns the versioned evidence and MIT license.
 
 ## Distribution and updates
 

@@ -19,7 +19,7 @@ native HTTP transport.
 - regular executable resolution and no shell interpolation;
 - operation enum with fixed argv builders—no public/raw argv or API method/path;
 - strict command/flag/positional parsing before target, credentials, or child;
-- permanent denied-command classification with zero child/request tests;
+- denied-command classification with zero child/request tests;
 - closed stdin plus prompt/pager/editor/browser/debug/update suppression for
   data commands;
 - three terminal-file checks plus a non-secret secure-store probe for human login;
@@ -83,6 +83,43 @@ is attempted. Default `board list` and `board view` never select issues; all
 query documents and tier differences are pinned in
 `contracts/gitlab-planning/v19.3.0/`.
 
+Issue create/note and state observations require `--auth-source native` and are
+pinned in `contracts/issue-writes/v1.json` and `provider-v1.json`. One native client
+and credential handles every request; no official-profile fallback or account
+equivalence is assumed. The shared boundary refuses all redirects before a second
+request. Caller-bound numeric project and issue identities must match canonical
+HTTPS URLs under the configured native web authority, including API/web mappings.
+Create/note mutations use numeric project routes. Private descriptor-validated
+content is bounded before credential resolution, and request JSON stays in memory.
+
+New slash-leading description/comment lines are denied even inside code fences.
+After original input bounds, title normalization strips only surrounding ASCII
+whitespace. New bodies remove carriage returns and trailing ASCII whitespace;
+leading/internal body whitespace and Unicode spaces remain unchanged. Hashes and
+exact direct response checks use the canonical request. Normalized-empty and
+whitespace-only create descriptions return `unsupported` before credentials or
+HTTP, preventing default-template quick actions without filler or compensation.
+This temporarily excludes title-only and blank creation, even without a template.
+
+Create/note allow at most one mutation attempt without retry or reconciliation
+searches. Their direct responses must prove exact identity and content. Unconfirmed
+outcomes remain ambiguous, and another invocation can duplicate the resource.
+Close/reopen send no PUT: an actual transition returns `unsupported` with a
+`refused` receipt, zero attempts and `mutation_response=not_attempted`.
+Already-matching bound states return `unchanged` with `postcondition=preflight`.
+Those reads establish observations only, never an atomic precondition or exclusive
+authorship. Existing descriptions are not filtered, normalized or resubmitted;
+fenced content does not prevent a read-only no-op. Snapshot checks cannot prevent
+concurrent content sanitization by GitLab, so no state mutation path remains.
+
+Receipts disclose attempts, response evidence and observed state without private
+content or raw provider errors. For refused/no-op state requests, `requested_sha256`
+hashes intent only, not a transmitted payload. `retry_safe` and
+`atomic_precondition` remain false. No GitHub close reasons or bundled comments
+are supported. The [temporary parity gaps](../contracts/issue-writes/review-blockers.md)
+remain explicit; the increment does not claim full issue parity or authorize
+collateral content/quick-action effects.
+
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
 project ID, full path, and URL plus issue global/project IDs. Title and
@@ -100,7 +137,7 @@ GitLab's issue PUT accepts no expected issue revision and only label names, so
 it cannot atomically bind the validated issue and requested numeric label
 identities. A non-no-op live request therefore
 returns `safety_violation` with a deterministic `refused`/`not_applied` receipt
-under `error.receipt` before mutation. The adapter has no issue PUT operation,
+under `error.receipt` before mutation. Issue edit has no content/label PUT operation,
 creates no mutation body, performs no post-write reconciliation, and cannot
 expose residual TOCTOU
 as a supported write.
@@ -143,10 +180,11 @@ additionally requires:
   preserves only a recognized framed rejection, and otherwise
   `ambiguous_merge` prevents a blind retry.
 
-Generic API, direct issue editing or creation, alternate/unguarded merge,
-approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-close/reopen, repository mutation, and other release/pipeline/job writes remain
-denied. Issue-edit preview changes no issue field or label. The exact native
+Generic API, existing-issue content/label mutation, alternate/unguarded merge,
+approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
+mutation, MR delete, repository mutation, and other release/pipeline/job writes
+remain denied. Issue-edit preview
+changes no issue field or label. The exact native
 deletion exception below grants no broader write authority.
 
 ## Guarded native resource deletion

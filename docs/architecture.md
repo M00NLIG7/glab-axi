@@ -14,7 +14,8 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> local help/setup/signed update
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> feature-owned download / CI-variable / deletion handlers
+          |    -> feature-owned download / issue-write / CI-variable / deletion handlers
+          |    -> exact identities; downloads use safedownload publication
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
@@ -47,7 +48,7 @@ schema, and write classification. Top/parent/leaf help, the Agent Skill, and
 Parsing is command-first and fail-closed. Only declared global flags are
 accepted; `-R`, `--repo`, and long flags support space or equals forms. Duplicate
 aliases, unknown flags, NUL/newline values, excess positionals, and undeclared
-subcommands fail before target resolution. Permanent denial names have a
+subcommands fail before target resolution. Denied command names have a
 separate `security_boundary` error and never construct a child process.
 
 Common target selection is documented in
@@ -66,13 +67,13 @@ complete operation, using existing native configuration, credential resolution
 and TLS patterns. The client owns the selected authority/credential, refuses
 all redirects and automatic retries, uses fresh HTTP/1.1 connections to avoid
 HTTP/2 refused-stream replay, and bounds requests, responses and lifetime.
-The [download contract](../contracts/downloads/v1.json) owns transport and
-download bounds, including the shorter outer download deadline applied by the
-product dispatcher. [CI variables](ci-variables.md#outcomes-races-and-bounds)
-describes the variable-operation limits.
-The [resource-deletion contract](../contracts/resource-delete/v1.md) owns
-deletion-specific authority, request bounds and reconciliation rules.
-Feature handlers retain their own route/identity/expected-state authority.
+[`internal/productnative/client.go`](../internal/productnative/client.go) owns
+the shared transport limits. Feature handlers retain their own route, identity,
+expected-state authority and operation budgets, pinned in the
+[download contract](../contracts/downloads/v1.json),
+[issue-write contract](../contracts/issue-writes/provider-v1.json),
+[resource-deletion contract](../contracts/resource-delete/v1.md), and
+[CI-variable documentation](ci-variables.md#outcomes-races-and-bounds).
 This internal request interface does not expose generic user HTTP authority.
 
 `internal/safedownload` pins destination-parent directory descriptors and uses
@@ -213,7 +214,7 @@ The state machine is:
 GitLab's issue PUT accepts no expected issue revision and only label names, so
 it cannot atomically bind the validated issue and requested numeric label
 identities. Any sequence of separate reads leaves a TOCTOU window, so the
-official-glab adapter exposes no issue PUT. Refusals carry the same bounded
+issue-edit command exposes no content/label PUT. Refusals carry the same bounded
 receipt shape under `error.receipt`. Receipts include canonical project/issue
 identity, caller evidence, ordered proposed fields, before/after values or
 SHA-256 evidence at output bounds, label IDs, observed `updated_at`,
@@ -222,6 +223,41 @@ action, outcome, and a machine-readable refusal reason. Validation has a
 approved v1 surface is pinned in `contracts/issue-edit/v1.json`; creation,
 comments, state changes, assignment, milestones, hierarchy, boards, approvals,
 credentials, and pipelines remain outside it.
+
+## Typed issue creation, notes and state observations
+
+`contracts/issue-writes/v1.json` is separate from issue-edit concurrency guarantees.
+`commands_issue_write.go` requires explicit native opt-in and validates private
+content before opening one shared native client. Nonblank create and plain notes
+send one fixed in-memory payload after caller-bound numeric identity and configured
+web-URL validation. The same credential serves all requests, without official-profile
+fallback or account-equivalence assumptions. Create and note never search for
+reconciliation or retry automatically. Direct response identity and content must
+match exactly; unconfirmed writes remain ambiguous.
+
+State actions retain identity and expected-state preflight observations but have
+no mutation dispatch or readback path. Already-matching states return `unchanged`;
+actual transitions return `unsupported` with a `refused` receipt and zero attempts.
+Existing descriptions are not inspected for slash lines or normalization. This
+prevents provider content sanitization even when a concurrent writer changes the
+description after preflight. It does not provide state-transition parity or an
+atomic precondition. Blank and whitespace-only create descriptions are also
+temporarily refused before credential resolution because default templates can
+execute unrequested quick actions. See the
+[temporary parity gaps](../contracts/issue-writes/review-blockers.md).
+
+Original private-file bounds precede normalization. Titles strip surrounding ASCII
+whitespace; new descriptions/notes remove carriage returns and trailing ASCII
+whitespace. New quick-action-shaped lines are denied before credential resolution.
+Canonical request hashes and exact response comparisons retain ordinary newline
+files without weakening provider evidence. State hashes represent requested intent
+only. The receipt schema is owned by `IssueWriteSchema` and emitted alongside help
+and skills by `cmd/gen-product`.
+
+Preflight/mutation budgets remain 10/20 seconds inside the 45-second operation
+lifetime. Fixed reads need no pagination. The shared native client owns both the
+2 MiB response bound and 8 MiB aggregate budget. Receipts keep
+`atomic_precondition=false` and `retry_safe=false`.
 
 ## MR ensure: bounded create/update write
 
@@ -300,9 +336,9 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. For the current provider-write boundary, see the
-[generated command reference](command-reference.md#current-undeclared-operations)
-and its referenced feature contracts.
+modify or integrate Firstmate. See the
+[provider-write boundary](security.md#provider-write-boundary) for the supported
+write families and denials.
 
 [CI-variable operations](ci-variables.md) require explicit native selection and use one shared
 `productnative.Client` for their complete operation. Feature-owned numeric-project

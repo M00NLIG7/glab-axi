@@ -1,5 +1,5 @@
-// Command gen-product writes public docs and Agent Skill assets from the
-// executable product registry.
+// Command gen-product writes registry-owned public docs and Agent Skill assets,
+// plus product-owned schemas.
 package main
 
 import (
@@ -18,9 +18,10 @@ func main() {
 		fail("unexpected positional arguments")
 	}
 	files := map[string]string{
-		filepath.Join("skills", "gl-axi", "SKILL.md"):   product.SkillMarkdown(),
-		filepath.Join("skills", "glab-axi", "SKILL.md"): product.LegacySkillMarkdown(),
-		filepath.Join("docs", "command-reference.md"):   product.CommandReferenceMarkdown(),
+		filepath.Join("schema", "ux-v1", "issue-write.schema.json"): product.IssueWriteSchema(),
+		filepath.Join("skills", "gl-axi", "SKILL.md"):               product.SkillMarkdown(),
+		filepath.Join("skills", "glab-axi", "SKILL.md"):             product.LegacySkillMarkdown(),
+		filepath.Join("docs", "command-reference.md"):               product.CommandReferenceMarkdown(),
 	}
 	for name, content := range product.PlanningSchemas() {
 		files[filepath.Join("schema", "ux-v1", name)] = content

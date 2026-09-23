@@ -2,6 +2,100 @@
 
 This file is generated from the executable command registry.
 
+## `issue create`
+
+```text
+gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE --auth-source native [--format toon|json]
+```
+
+Create one ordinary issue from private title and nonblank description files.
+
+At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Blank descriptions and title-only creation are temporarily refused before credentials or HTTP because default templates may execute quick actions.
+Titles strip surrounding ASCII whitespace after the original file limit is enforced; internal and Unicode whitespace remain unchanged.
+No title search or replay inference: a lost response is ambiguous, and another invocation can create a duplicate.
+New quick-action-shaped lines (including in code blocks) are rejected before credential resolution. No attachments or secondary writes.
+New descriptions and notes remove carriage returns and trailing ASCII whitespace before hashing and submission; direct response content must match exactly.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
+
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue comment`
+
+```text
+gl-axi issue comment <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]
+```
+
+Create one plain issue note (comment and note are aliases).
+
+At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Only the direct create response can identify this note. Never searches the latest comment as proof.
+A lost response is ambiguous; another invocation can create a duplicate.
+New quick-action-shaped lines (including in code blocks) are rejected before credential resolution. No attachments or secondary writes.
+New descriptions and notes remove carriage returns and trailing ASCII whitespace before hashing and submission; direct response content must match exactly.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
+
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue note`
+
+```text
+gl-axi issue note <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --body-file FILE --auth-source native [--format toon|json]
+```
+
+Create one plain issue note (comment and note are aliases).
+
+At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Only the direct create response can identify this note. Never searches the latest comment as proof.
+A lost response is ambiguous; another invocation can create a duplicate.
+New quick-action-shaped lines (including in code blocks) are rejected before credential resolution. No attachments or secondary writes.
+New descriptions and notes remove carriage returns and trailing ASCII whitespace before hashing and submission; direct response content must match exactly.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
+
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue close`
+
+```text
+gl-axi issue close <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]
+```
+
+Observe an already-matching issue state; transitions are temporarily refused.
+
+At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Returns unchanged only if the bound preflight state already matches. This is a read-only observation.
+Otherwise returns unsupported with a refused receipt and zero mutation attempts: GitLab state updates can rewrite existing content.
+Existing descriptions, including fenced code, are not filtered. No PUT, GitHub close reason or bundled comment.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
+
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
+## `issue reopen`
+
+```text
+gl-axi issue reopen <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL --expected-state opened|closed --auth-source native [--format toon|json]
+```
+
+Observe an already-matching issue state; transitions are temporarily refused.
+
+At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.
+Numeric identities and canonical URLs are required. All reads/writes are bounded.
+GitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap.
+Returns unchanged only if the bound preflight state already matches. This is a read-only observation.
+Otherwise returns unsupported with a refused receipt and zero mutation attempts: GitLab state updates can rewrite existing content.
+Existing descriptions, including fenced code, are not filtered. No PUT, GitHub close reason or bundled comment.
+Native opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven.
+
+Backend: `native`. Schema: `schema/ux-v1/issue-write.schema.json`.
+
 ## Dashboard
 
 ```text
@@ -626,4 +720,4 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, issue creation/editing/state/comment mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

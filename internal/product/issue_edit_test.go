@@ -293,7 +293,7 @@ func TestIssueEditSchemasPinStructuredSafetyRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
-	if len(variants) != 4 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" {
+	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || variants[0].Properties.Edit.Properties.Action.Const != "refused" || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
 	}
 }
@@ -336,7 +336,7 @@ func TestIssueEditParserRefusalsConstructNoDelegate(t *testing.T) {
 		{name: "state mutation denied", args: appendCopy(base, "--state-event", "close")},
 		{name: "assignee mutation denied", args: appendCopy(base, "--assignee-id", "7")},
 		{name: "unguarded update alias", args: []string{"issue", "update", "42"}},
-		{name: "close remains denied", args: []string{"issue", "close", "42"}},
+		{name: "unbound close remains denied", args: []string{"issue", "close", "42"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

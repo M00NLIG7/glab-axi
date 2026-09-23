@@ -1,0 +1,86 @@
+package product
+
+func IssueWriteSchema() string {
+	return `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/issue-write.schema.json",
+  "title": "Typed issue create, note and state observation receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["write"],
+  "properties": {
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "outcome", "identity", "mutation_attempts", "mutation_response", "postcondition", "atomic_precondition", "retry_safe", "requested_sha256"],
+      "properties": {
+        "operation": {"enum": ["create", "comment", "close", "reopen"]},
+        "outcome": {"enum": ["created", "commented", "unchanged", "refused", "rejected", "ambiguous"]},
+        "identity": {
+          "type": "object", "additionalProperties": false,
+          "required": ["host", "project_id", "project_full_path", "project_web_url"],
+          "properties": {
+            "host": {"type": "string", "minLength": 1, "maxLength": 253},
+            "project_id": {"type": "integer", "minimum": 1},
+            "project_full_path": {"type": "string", "minLength": 3, "maxLength": 1024},
+            "project_web_url": {"type": "string", "format": "uri", "maxLength": 2048},
+            "issue_id": {"type": "integer", "minimum": 1},
+            "iid": {"type": "integer", "minimum": 1},
+            "web_url": {"type": "string", "format": "uri", "maxLength": 2048}
+          }
+        },
+        "mutation_attempts": {"type": "integer", "minimum": 0, "maximum": 1},
+        "mutation_response": {"enum": ["not_attempted", "accepted", "rejected", "unconfirmed"]},
+        "postcondition": {"enum": ["not_checked", "preflight", "response"]},
+        "atomic_precondition": {"const": false},
+        "retry_safe": {"const": false},
+        "requested_sha256": {"description": "SHA-256 of canonical requested JSON; state refusals and no-ops do not submit it.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "expected_state": {"enum": ["opened", "closed"]},
+        "requested_state": {"enum": ["opened", "closed"]},
+        "observed_state": {"enum": ["opened", "closed"]},
+        "note_id": {"type": "integer", "minimum": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"enum": ["comment", "close", "reopen"]}}},
+          "then": {"properties": {"identity": {"required": ["issue_id", "iid", "web_url"]}}}
+        },
+        {
+          "if": {"properties": {"operation": {"enum": ["close", "reopen"]}}},
+          "then": {"required": ["expected_state", "requested_state", "observed_state"], "properties": {"outcome": {"enum": ["unchanged", "refused"]}}}
+        },
+        {
+          "if": {"properties": {"operation": {"const": "close"}}},
+          "then": {"properties": {"requested_state": {"const": "closed"}}}
+        },
+        {
+          "if": {"properties": {"operation": {"const": "reopen"}}},
+          "then": {"properties": {"requested_state": {"const": "opened"}}}
+        },
+        {
+          "if": {"properties": {"outcome": {"enum": ["unchanged", "refused"]}}},
+          "then": {"properties": {"operation": {"enum": ["close", "reopen"]}, "mutation_attempts": {"const": 0}, "mutation_response": {"const": "not_attempted"}, "postcondition": {"const": "preflight"}}, "required": ["observed_state"]},
+          "else": {"properties": {"mutation_attempts": {"const": 1}}}
+        },
+        {
+          "if": {"properties": {"outcome": {"const": "created"}}},
+          "then": {"properties": {"operation": {"const": "create"}, "identity": {"required": ["issue_id", "iid", "web_url"]}, "mutation_response": {"const": "accepted"}, "postcondition": {"const": "response"}}}
+        },
+        {
+          "if": {"properties": {"outcome": {"const": "commented"}}},
+          "then": {"required": ["note_id"], "properties": {"operation": {"const": "comment"}, "mutation_response": {"const": "accepted"}, "postcondition": {"const": "response"}}}
+        },
+        {
+          "if": {"properties": {"outcome": {"const": "rejected"}}},
+          "then": {"properties": {"mutation_response": {"const": "rejected"}, "postcondition": {"const": "not_checked"}}}
+        },
+        {
+          "if": {"properties": {"outcome": {"const": "ambiguous"}}},
+          "then": {"properties": {"mutation_response": {"const": "unconfirmed"}}}
+        }
+      ]
+    }
+  }
+}
+`
+}
