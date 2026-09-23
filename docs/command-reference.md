@@ -588,12 +588,12 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 ## `release delete`
 
 ```text
-gl-axi release delete <TAG> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-release URL --expected-commit SHA --expected-created-at TIMESTAMP [--format toon|json]
+gl-axi release delete <TAG> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-release URL --acknowledge-catalog-unpublication URL --expected-commit SHA --expected-created-at TIMESTAMP [--format toon|json]
 ```
 
 Guardedly delete one exact release.
 
-Deletes only release metadata. The tag is never deleted; its exact name and commit are checked before and after. Concurrent tag movement or release recreation cannot be made atomic with this operation.
+Deletes the selected release and may unpublish the project's CI/CD Catalog resource when its last catalog version is removed. Requires a separate --acknowledge-catalog-unpublication URL equal to --expected-url on every invocation, in addition to release deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed catalog state or version count. A snapshot cannot guarantee absence of catalog effects; receipts do not verify catalog unpublication, including after an ambiguous response. The tag is never deleted; its exact name and commit are checked before and after. Concurrent tag movement or release recreation cannot be made atomic with this operation.
 Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
 
 Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.

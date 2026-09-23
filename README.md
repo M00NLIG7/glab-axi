@@ -196,7 +196,16 @@ close/reopen, repository writes, and other release/pipeline/job writes.
 and `snippet delete-project` require explicit `--auth-source native`, exact
 reviewed identities and operation-specific URL confirmation. No broad `--yes`,
 default project, redirect, retry, official-profile fallback or local cleanup is
-provided. Release deletion retains its tag; pipeline deletion removes related
+provided. Release deletion retains its tag and may unpublish the project's CI/CD
+Catalog resource when its last catalog version is removed. It requires separate
+per-invocation `--acknowledge-catalog-unpublication URL` matching the release
+`--expected-url`, in addition to `--confirm-delete-release URL`. Without it,
+preflight refuses before credential or provider access, regardless of observed
+catalog state or version count. Catalog unpublication remains unverified in
+receipts, including after an ambiguous response; snapshots cannot guarantee
+absence of catalog effects.
+
+Pipeline deletion removes related
 builds/logs/artifacts/triggers and may cancel surviving child pipelines and their
 jobs, even if parent deletion later fails. It requires a separate per-invocation
 `--acknowledge-child-cancellation URL` matching the parent `--expected-url`, in

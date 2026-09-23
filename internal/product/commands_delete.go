@@ -71,6 +71,9 @@ func validateDeletionParsed(p Parsed) error {
 	if group == "pipeline" && p.Values["--acknowledge-child-cancellation"] != raw {
 		return uxv1.NewError(uxv1.CodeSafety, "deleting this exact parent may cancel surviving child pipelines and their jobs, even if parent deletion later fails; --acknowledge-child-cancellation must equal --expected-url on every invocation in addition to --confirm-delete-pipeline; a snapshot cannot guarantee absence of child effects")
 	}
+	if group == "release" && p.Values["--acknowledge-catalog-unpublication"] != raw {
+		return uxv1.NewError(uxv1.CodeSafety, "deleting this exact release may unpublish the project's CI/CD Catalog resource when its last catalog version is removed; --acknowledge-catalog-unpublication must equal --expected-url on every invocation in addition to --confirm-delete-release; a snapshot cannot guarantee absence of catalog effects, including after an ambiguous response")
+	}
 	return nil
 }
 
@@ -127,27 +130,28 @@ type deletionExpected struct {
 }
 
 type deletionReceipt struct {
-	Action            string                     `json:"action"`
-	Resource          string                     `json:"resource"`
-	Scope             string                     `json:"scope"`
-	URL               string                     `json:"url"`
-	ProjectID         int64                      `json:"project_id,omitempty"`
-	ID                int64                      `json:"id,omitempty"`
-	IID               int64                      `json:"iid,omitempty"`
-	Tag               string                     `json:"tag,omitempty"`
-	ActorID           int64                      `json:"actor_id"`
-	Expected          deletionExpected           `json:"expected"`
-	DeleteAttempted   bool                       `json:"delete_attempted"`
-	DeleteStatus      int                        `json:"delete_status,omitempty"`
-	Acknowledged      bool                       `json:"acknowledged"`
-	Postcondition     string                     `json:"postcondition"`
-	TagPostcondition  string                     `json:"tag_postcondition,omitempty"`
-	Concurrency       string                     `json:"concurrency"`
-	IntendedEffects   []string                   `json:"intended_effects"`
-	ChildCancellation *deletionChildCancellation `json:"child_cancellation,omitempty"`
+	Action               string                        `json:"action"`
+	Resource             string                        `json:"resource"`
+	Scope                string                        `json:"scope"`
+	URL                  string                        `json:"url"`
+	ProjectID            int64                         `json:"project_id,omitempty"`
+	ID                   int64                         `json:"id,omitempty"`
+	IID                  int64                         `json:"iid,omitempty"`
+	Tag                  string                        `json:"tag,omitempty"`
+	ActorID              int64                         `json:"actor_id"`
+	Expected             deletionExpected              `json:"expected"`
+	DeleteAttempted      bool                          `json:"delete_attempted"`
+	DeleteStatus         int                           `json:"delete_status,omitempty"`
+	Acknowledged         bool                          `json:"acknowledged"`
+	Postcondition        string                        `json:"postcondition"`
+	TagPostcondition     string                        `json:"tag_postcondition,omitempty"`
+	Concurrency          string                        `json:"concurrency"`
+	IntendedEffects      []string                      `json:"intended_effects"`
+	ChildCancellation    *deletionEffectAcknowledgment `json:"child_cancellation,omitempty"`
+	CatalogUnpublication *deletionEffectAcknowledgment `json:"catalog_unpublication,omitempty"`
 }
 
-type deletionChildCancellation struct {
+type deletionEffectAcknowledgment struct {
 	Acknowledged bool   `json:"acknowledged"`
 	Outcome      string `json:"outcome"`
 }
@@ -266,6 +270,9 @@ func executeResourceDeletion(ctx context.Context, p Parsed, deps Dependencies, m
 	r.DeleteAttempted = true
 	if r.ChildCancellation != nil {
 		r.ChildCancellation.Outcome = "unverified"
+	}
+	if r.CatalogUnpublication != nil {
+		r.CatalogUnpublication.Outcome = "unverified"
 	}
 	mutation, cancelMutation := context.WithTimeout(ctx, 10*time.Second)
 	response, writeErr := c.Do(mutation, productnative.Request{Method: "DELETE", Path: s.route, MaxBytes: limits.MaxJSONPageBytes})
@@ -483,11 +490,12 @@ func newDeletionReceipt(s deletionSelection, record deletionRecord, actorID int6
 		r.ID = record.ID
 		r.Expected = deletionExpected{SHA: record.SHA, Ref: record.Ref, Status: record.Status, UpdatedAt: record.UpdatedAt}
 		r.IntendedEffects = []string{"delete_related_builds_logs_artifacts_triggers", "expire_pipeline_caches", "do_not_recursively_delete_child_pipelines", "may_cancel_surviving_child_pipelines"}
-		r.ChildCancellation = &deletionChildCancellation{Acknowledged: true, Outcome: "not_attempted"}
+		r.ChildCancellation = &deletionEffectAcknowledgment{Acknowledged: true, Outcome: "not_attempted"}
 	case "release":
 		r.Tag = record.Tag
 		r.Expected = deletionExpected{SHA: record.Commit.ID, CreatedAt: record.CreatedAt}
-		r.IntendedEffects = []string{"delete_release_metadata_only", "retain_tag"}
+		r.IntendedEffects = []string{"delete_release", "may_unpublish_catalog_resource", "retain_tag"}
+		r.CatalogUnpublication = &deletionEffectAcknowledgment{Acknowledged: true, Outcome: "not_attempted"}
 		r.TagPostcondition = "unverified"
 	case "snippet":
 		r.ID = record.ID

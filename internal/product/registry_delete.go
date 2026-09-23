@@ -20,7 +20,8 @@ func deletionDefinitions() []Definition {
 			deletionFlag("--expected-status", "STATUS", "Exact current pipeline status."),
 			deletionFlag("--expected-updated-at", "TIMESTAMP", "Exact RFC 3339 updated_at from the reviewed resource."),
 		}},
-		{"release", "delete", "TAG", "Deletes only release metadata. The tag is never deleted; its exact name and commit are checked before and after. Concurrent tag movement or release recreation cannot be made atomic with this operation.", false, []FlagDefinition{
+		{"release", "delete", "TAG", "Deletes the selected release and may unpublish the project's CI/CD Catalog resource when its last catalog version is removed. Requires a separate --acknowledge-catalog-unpublication URL equal to --expected-url on every invocation, in addition to release deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed catalog state or version count. A snapshot cannot guarantee absence of catalog effects; receipts do not verify catalog unpublication, including after an ambiguous response. The tag is never deleted; its exact name and commit are checked before and after. Concurrent tag movement or release recreation cannot be made atomic with this operation.", false, []FlagDefinition{
+			{Name: "--acknowledge-catalog-unpublication", Value: "URL", Description: "Required per invocation: acknowledge that deleting this exact release may unpublish the project's CI/CD Catalog resource; must equal --expected-url."},
 			deletionFlag("--expected-commit", "SHA", "Exact lowercase commit of the release and retained tag."),
 			deletionFlag("--expected-created-at", "TIMESTAMP", "Exact release created_at, to detect replacement before deletion."),
 		}},

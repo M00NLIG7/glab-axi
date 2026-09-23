@@ -45,7 +45,7 @@ func deletionCases() []deletionCase {
 			expected: []string{"--acknowledge-child-cancellation", deletionTestWeb + "/group/project/-/pipelines/88", "--expected-sha", deletionTestSHA, "--expected-ref", "main", "--expected-status", "success", "--expected-updated-at", deletionTestTime},
 			body:     map[string]any{"id": 88, "project_id": 101, "sha": deletionTestSHA, "ref": "main", "status": "success", "updated_at": deletionTestTime}},
 		{name: "release", group: "release", command: "delete", selector: "v1.0", route: "projects/101/releases/v1.0", webPath: "/group/project/-/releases/v1.0", confirmation: "--confirm-delete-release",
-			expected: []string{"--expected-commit", deletionTestSHA, "--expected-created-at", deletionTestTime},
+			expected: []string{"--acknowledge-catalog-unpublication", deletionTestWeb + "/group/project/-/releases/v1.0", "--expected-commit", deletionTestSHA, "--expected-created-at", deletionTestTime},
 			body:     map[string]any{"tag_name": "v1.0", "name": "release", "created_at": deletionTestTime, "released_at": deletionTestTime, "commit": map[string]any{"id": deletionTestSHA}, "tag_path": "/gitlab/group/project/-/tags/v1.0"}},
 		// Distinct leaves make personal scope explicitly repo-less; project deletion
 		// requires -R. Neither scope is inferred from cwd or from a failed lookup.
@@ -87,6 +87,7 @@ type deletionTestReceipt struct {
 	Resource          string         `json:"resource"`
 	Scope             string         `json:"scope"`
 	URL               string         `json:"url"`
+	Tag               string         `json:"tag"`
 	DeleteStatus      int            `json:"delete_status"`
 	DeleteAttempted   bool           `json:"delete_attempted"`
 	Acknowledged      bool           `json:"acknowledged"`
@@ -99,6 +100,10 @@ type deletionTestReceipt struct {
 		Acknowledged bool   `json:"acknowledged"`
 		Outcome      string `json:"outcome"`
 	} `json:"child_cancellation"`
+	CatalogUnpublication *struct {
+		Acknowledged bool   `json:"acknowledged"`
+		Outcome      string `json:"outcome"`
+	} `json:"catalog_unpublication"`
 }
 
 type deletionEnvelope struct {
@@ -134,6 +139,8 @@ type deletionFixture struct {
 	requests                 []string
 	deletes, reads, tagReads int
 	childPipelineStatus      string
+	catalogState             string
+	catalogVersions          int
 	forbiddenPaths           int
 	wrongCredential          bool
 	unrelated                string
@@ -151,6 +158,9 @@ func newDeletionFixture(t *testing.T, item deletionCase, mode string) *deletionF
 	f := &deletionFixture{t: t, item: item, mode: mode, token: strings.Join([]string{"synthetic", "delete", t.Name()}, "-"), cancelHit: make(chan struct{})}
 	if item.group == "pipeline" {
 		f.childPipelineStatus = "running"
+	}
+	if item.group == "release" {
+		f.catalogState, f.catalogVersions = "published", 1
 	}
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
@@ -204,7 +214,7 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && path == "projects/101/repository/tags/v1.0" && f.item.group == "release" {
 		f.tagReads++
 		sha := deletionTestSHA
-		if f.mode == "tag-drift" && f.deletes > 0 {
+		if f.mode == "pre-tag-drift" || f.mode == "tag-drift" && f.deletes > 0 {
 			sha = strings.Repeat("b", 40)
 		}
 		fmt.Fprint(w, `{"name":"v1.0","commit":{"id":"`+sha+`"}}`)
@@ -225,6 +235,15 @@ func (f *deletionFixture) serve(w http.ResponseWriter, r *http.Request) {
 			switch f.mode {
 			case "success", "lost-absence", "child-canceled-parent-present":
 				f.childPipelineStatus = "canceled"
+			}
+		}
+		if f.item.group == "release" {
+			switch f.mode {
+			case "success", "lost-absence", "malformed-delete", "wrong-delete-identity", "tag-drift":
+				f.catalogVersions--
+				if f.catalogVersions == 0 {
+					f.catalogState = "unpublished"
+				}
 			}
 		}
 		switch f.mode {
@@ -446,11 +465,15 @@ func TestNativeResourceDeletionSuccess(t *testing.T) {
 				t.Fatal("child cancellation acknowledgment escaped pipeline deletion")
 			}
 			if item.group == "release" {
+				assertReleaseCatalogUnpublicationReceipt(t, result, "unverified")
 				if result.Expected["created_at"] != deletionTestTime || result.Expected["sha"] != deletionTestSHA || result.TagPostcondition != "unchanged" {
 					t.Fatalf("lost release expectation: %+v", result)
 				}
 			} else if result.Expected["updated_at"] != deletionTestTime {
 				t.Fatalf("lost reviewed revision: %+v", result)
+			}
+			if item.group != "release" && result.CatalogUnpublication != nil {
+				t.Fatal("catalog unpublication acknowledgment escaped release deletion")
 			}
 			scope := "project"
 			if item.personal {
@@ -525,6 +548,9 @@ func TestNativeResourceDeletionNeverReplaysOrInfersSuccessFromAbsence(t *testing
 				}
 				if item.group == "pipeline" {
 					assertPipelineChildCancellationReceipt(t, r, "unverified")
+				}
+				if item.group == "release" {
+					assertReleaseCatalogUnpublicationReceipt(t, r, "unverified")
 				}
 				if strings.HasPrefix(mode, "delete-") && mode != "delete-500" {
 					if r.Action != "rejected" || r.Acknowledged {

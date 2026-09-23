@@ -169,6 +169,17 @@ this acknowledgment and leave child cancellation unverified after any DELETE
 attempt; they do not report observed child states or counts. No separate child
 cancellation request is issued.
 
+Release deletion also requires `--acknowledge-catalog-unpublication URL` matching
+the exact release URL on every invocation, separately from release deletion
+confirmation. Missing or mismatched acknowledgment refuses before credential or
+provider access. Deleting the last catalog version may unpublish the project's
+surviving CI/CD Catalog resource. No catalog-state or version-count snapshot
+guarantees absence of that effect across a concurrent change or waives consent.
+Receipts record this acknowledgment and leave catalog unpublication unverified
+after any DELETE attempt, including ambiguous responses. No separate catalog
+mutation request is issued. The release tag and its commit remain independently
+checked before and after deletion; tag deletion is never requested.
+
 A successful receipt requires the exact DELETE acknowledgment and scoped 404
 readback with an accessible matching parent/account. The release tag must still
 match. Initial 404 and 404 after an unacknowledged write never mean successful
