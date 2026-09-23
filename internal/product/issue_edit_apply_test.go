@@ -287,6 +287,8 @@ func assertIssueEditAmbiguous(t *testing.T, code int, output []byte) {
 			Retryable bool            `json:"retryable"`
 			Receipt   issueEditOutput `json:"receipt"`
 		} `json:"error"`
+		Help []string  `json:"help"`
+		Meta uxv1.Meta `json:"meta"`
 	}
 	if err := json.Unmarshal(output, &envelope); err != nil {
 		t.Fatal(err)
@@ -295,4 +297,8 @@ func assertIssueEditAmbiguous(t *testing.T, code int, output []byte) {
 	if code == 0 || envelope.OK || envelope.Error.Code != uxv1.CodeAmbiguousUpdate || envelope.Error.Retryable || edit.Action != "ambiguous" || edit.Outcome != "unknown" || edit.ResultingUpdatedAt != "" || edit.Warning != issueEditRaceWarning || strings.Contains(string(output), `"data":`) {
 		t.Fatalf("exit=%d output=%s", code, output)
 	}
+	if !reflect.DeepEqual(envelope.Help, []string{"refresh and inspect the exact selected GitLab resource before retrying"}) {
+		t.Fatalf("unexpected issue recovery guidance: %v", envelope.Help)
+	}
+	assertIssueEditBackendSchema(t, envelope.Meta.Backend)
 }

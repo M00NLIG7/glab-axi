@@ -656,13 +656,14 @@ func buildIssueEditPlan(record upstreamIssue, requested issueEditRequested, add,
 	// On scoped-label tiers, adding key::value replaces any other key label.
 	// Require that removal explicitly rather than silently widen this request.
 	for _, label := range actualAdd {
-		scope, _, scoped := strings.Cut(label.Name, "::")
-		if !scoped {
+		scopeEnd := strings.LastIndex(label.Name, "::")
+		if scopeEnd < 0 {
 			continue
 		}
+		scope := label.Name[:scopeEnd]
 		for name := range desired {
-			other, _, scoped := strings.Cut(name, "::")
-			if name != label.Name && scoped && strings.EqualFold(scope, other) {
+			otherScopeEnd := strings.LastIndex(name, "::")
+			if name != label.Name && otherScopeEnd >= 0 && strings.EqualFold(scope, name[:otherScopeEnd]) {
 				return issueEditPlan{}, uxv1.NewError(uxv1.CodeConflict, "scoped label addition requires explicit removal of the existing same-scope label")
 			}
 		}

@@ -59,9 +59,9 @@ func helpFor(code Code) []string {
 		return []string{"ask a human to run gl-axi auth login, or use an approved GitLab token environment variable"}
 	case CodeForbidden:
 		return []string{"verify the official-glab profile's project role without broadening gl-axi"}
-	case CodeConflict:
+	case CodeConflict, CodeAmbiguousUpdate:
 		return []string{"refresh and inspect the exact selected GitLab resource before retrying"}
-	case CodeAmbiguousCreate, CodeAmbiguousUpdate:
+	case CodeAmbiguousCreate:
 		return []string{"inspect exact matching merge requests before retrying"}
 	case CodeAmbiguousVariable:
 		return []string{"inspect the exact project, key, environment scope, and private prestate before any retry"}

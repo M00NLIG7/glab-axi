@@ -46,6 +46,7 @@ func TestIssueEditNativeFullSequenceUsesOneCredentialAndAuthority(t *testing.T) 
 			if envelope.Data.Edit.Action != "updated" || envelope.Data.Edit.Outcome != "observed_applied" || envelope.Data.Edit.Warning != issueEditRaceWarning || envelope.Data.Edit.Identity.Host != f.host || envelope.Data.Edit.Identity.WebURL != f.before.WebURL || envelope.Meta.Backend != "native" || envelope.Meta.UpstreamVersion != "" || envelope.Meta.Host != f.host {
 				t.Fatalf("unexpected native receipt: %s", stdout)
 			}
+			assertIssueEditBackendSchema(t, envelope.Meta.Backend)
 			f.assertRequests(t, 8, 1)
 			if f.keyring.reads != 1 {
 				t.Fatalf("credential resolutions=%d", f.keyring.reads)

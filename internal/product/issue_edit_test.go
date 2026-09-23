@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,7 @@ func TestIssueEditFieldCombinationsPreviewWithDeterministicReceipt(t *testing.T)
 			if envelope.Meta.Backend != "official-glab" || envelope.Meta.Host != "gitlab.com" || envelope.Meta.Repo != "group/project" || !envelope.Meta.Complete || envelope.Meta.Reason != "" || envelope.Meta.UpstreamVersion != glab.SupportedVersion {
 				t.Fatalf("unexpected refusal metadata: %#v", envelope.Meta)
 			}
+			assertIssueEditBackendSchema(t, envelope.Meta.Backend)
 			if test.name == "labels only" || test.name == "combined" {
 				if edit.Changes.Labels == nil || edit.Changes.Labels.Before.Values == nil || edit.Changes.Labels.After.Values == nil || fmt.Sprint(*edit.Changes.Labels.Before.Values) != fmt.Sprint([]string{"bug", "keep"}) || fmt.Sprint(*edit.Changes.Labels.After.Values) != fmt.Sprint([]string{"keep", "triage"}) {
 					t.Fatalf("unrelated labels were not evidenced as preserved: %#v", edit.Changes.Labels)
@@ -286,6 +288,36 @@ func TestIssueEditSchemasPinStructuredAmbiguity(t *testing.T) {
 	variants := envelopeSchema.Properties.Error.Properties.Receipt.OneOf
 	if len(variants) != 5 || variants[0].Ref != "ux-v1/issue-edit.schema.json" || !reflect.DeepEqual(variants[0].Properties.Edit.Properties.Action.Enum, []string{"ambiguous", "refused"}) || variants[1].Ref != "ux-v1/board-ordering-receipt.schema.json" || variants[2].Ref != "ux-v1/ci-variable-mutation.schema.json" || variants[3].Ref != "ux-v1/resource-delete.schema.json" || variants[4].Ref != "ux-v1/issue-write.schema.json" {
 		t.Fatalf("unexpected refusal receipt schema reference: %#v", envelopeSchema)
+	}
+}
+
+func assertIssueEditBackendSchema(t *testing.T, backend string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "glab-axi-ux-v1.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties struct {
+			Meta struct {
+				Properties struct {
+					Backend struct {
+						Enum []string `json:"enum"`
+					} `json:"backend"`
+				} `json:"properties"`
+			} `json:"meta"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	backends := schema.Properties.Meta.Properties.Backend.Enum
+	if !slices.Contains(backends, backend) {
+		t.Fatalf("published envelope schema rejects emitted backend %q: %v", backend, backends)
+	}
+	slices.Sort(backends)
+	if !slices.Equal(backends, []string{"local", "native", "native-v1", "official-glab"}) {
+		t.Fatalf("unexpected envelope backend contract: %v", backends)
 	}
 }
 

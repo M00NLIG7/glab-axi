@@ -3,6 +3,7 @@ package uxv1
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -35,6 +36,26 @@ func TestAmbiguousUpdateSerializesOnlyExplicitReceipt(t *testing.T) {
 	}
 	if ExitCode(err) != 6 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"ambiguous","outcome":"unknown"}`) {
 		t.Fatalf("safety refusal envelope=%s exit=%d", encoded, ExitCode(err))
+	}
+}
+
+func TestAmbiguousMutationRecoveryGuidance(t *testing.T) {
+	for _, test := range []struct {
+		code Code
+		help string
+	}{
+		{CodeAmbiguousCreate, "inspect exact matching merge requests before retrying"},
+		{CodeAmbiguousUpdate, "refresh and inspect the exact selected GitLab resource before retrying"},
+		{CodeAmbiguousMerge, "inspect the exact merge request URL and expected head before any retry"},
+	} {
+		for _, backend := range []string{"official-glab", "native-v1", "native"} {
+			t.Run(string(test.code)+"/"+backend, func(t *testing.T) {
+				envelope := Failure(NewError(test.code, "mutation outcome is unknown"), Meta{Backend: backend})
+				if envelope.OK || envelope.Error.Retryable || !reflect.DeepEqual(envelope.Help, []string{test.help}) {
+					t.Fatalf("unexpected recovery envelope: %#v", envelope)
+				}
+			})
+		}
 	}
 }
 
