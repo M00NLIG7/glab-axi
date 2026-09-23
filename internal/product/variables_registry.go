@@ -24,6 +24,7 @@ func variableDefinitions() []Definition {
 					FlagDefinition{Name: "--expected-value-file", Value: "FILE", Description: "Required only for existing unhidden entries; private absolute file containing the exact previous value. Forbidden for hidden entries."},
 					FlagDefinition{Name: "--confirm", Boolean: true, Required: true, Description: "Explicitly authorize this exact guarded mutation."})
 				if action == "set" {
+					d.Usage = "gl-axi " + group + " set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]"
 					flags = append(flags,
 						FlagDefinition{Name: "--value-file", Value: "FILE|-", Description: "Private absolute file or piped stdin; UTF-8, no NUL, 1..10000 bytes, no newline trimming.", Required: true},
 						FlagDefinition{Name: "--type", Value: "TYPE", Description: "env_var or file. Existing type must be preserved.", Required: true},

@@ -467,7 +467,7 @@ Backend: `native`. Schema: `schema/ux-v1/ci-variable-list.schema.json`.
 ## `secret set`
 
 ```text
-gl-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+gl-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
 ```
 
 Manage project CI/CD secret metadata with exact-scope guards.
@@ -522,7 +522,7 @@ Backend: `native`. Schema: `schema/ux-v1/ci-variable-list.schema.json`.
 ## `variable set`
 
 ```text
-gl-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
+gl-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]
 ```
 
 Manage project CI/CD variable metadata with exact-scope guards.

@@ -47,10 +47,10 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi work-item fields <iid> (-R PROJECT | --group GROUP) [global flags]` - List visible widget types and fixed fields for one work item.
 - `glab-axi work-item hierarchy <iid> (-R PROJECT | --group GROUP) [global flags]` - Read the parent and bounded direct children of one work item.
 - `glab-axi secret list --auth-source native [global flags] --scope SCOPE` - Manage project CI/CD secret metadata with exact-scope guards.
-- `glab-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD secret metadata with exact-scope guards.
+- `glab-axi secret set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD secret metadata with exact-scope guards.
 - `glab-axi secret delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD secret metadata with exact-scope guards.
 - `glab-axi variable list --auth-source native [global flags] --scope SCOPE` - Manage project CI/CD variable metadata with exact-scope guards.
-- `glab-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD variable metadata with exact-scope guards.
+- `glab-axi variable set KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --value-file FILE|- --type TYPE --protected BOOL --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD variable metadata with exact-scope guards.
 - `glab-axi variable delete KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]` - Manage project CI/CD variable metadata with exact-scope guards.
 
 ## Safety
