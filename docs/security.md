@@ -68,9 +68,10 @@ profile or token source.
 
 ## Provider-write boundary
 
-See the [generated command reference](command-reference.md) for the command
-allowlist. Delegated write controls are described below; guarded native
-project-variable controls are in [CI variables](ci-variables.md).
+The executable command registry owns the provider-write allowlist; see the
+[generated command reference](command-reference.md) for declared operations and
+feature-contract pointers. Guarded native project-variable controls are in
+[CI variables](ci-variables.md).
 
 `board issues` requires `--allow-ordering-initialization`, an explicit host,
 and exact project/group, board and list selectors before any child work. The
@@ -144,9 +145,55 @@ additionally requires:
 
 Generic API, direct issue editing or creation, alternate/unguarded merge,
 approval, comment/note/reply/resolve, merge-request or label-resource mutation,
-issue/MR close/reopen/delete, repository/release mutation, and
-pipeline/job trigger/retry/cancel/delete remain denied. Issue-edit preview
-changes no issue field or label.
+close/reopen, repository mutation, and other release/pipeline/job writes remain
+denied. Issue-edit preview changes no issue field or label. The exact native
+deletion exception below grants no broader write authority.
+
+## Guarded native resource deletion
+
+Only the issue, pipeline, release and separately scoped personal/project snippet
+delete leaves are enabled. They require explicit native auth, host/project
+selectors, caller-reviewed identities/revisions and operation-specific URL
+confirmation. A single native client covers all preflight, recheck, DELETE and
+readback requests. Project path selection is bound to a numeric project ID before
+mutation. No redirect, write retry, local cleanup, broad `--yes`, tag deletion,
+job erasure or child-pipeline deletion is exposed.
+
+Pipeline deletion also requires `--acknowledge-child-cancellation URL` matching
+the exact parent URL on every invocation, separately from parent deletion
+confirmation. Missing or mismatched acknowledgment refuses before credential or
+provider access, including when the reviewed parent status is terminal. GitLab
+cancels cancelable jobs before removal and may cancel surviving child pipelines
+and their jobs, even if parent deletion later fails. No status or child snapshot
+can guarantee absence of that effect across a concurrent change. Receipts record
+this acknowledgment and leave child cancellation unverified after any DELETE
+attempt; they do not report observed child states or counts. No separate child
+cancellation request is issued.
+
+Release deletion also requires `--acknowledge-catalog-unpublication URL` matching
+the exact release URL on every invocation, separately from release deletion
+confirmation. Missing or mismatched acknowledgment refuses before credential or
+provider access. Deleting the last catalog version may unpublish the project's
+surviving CI/CD Catalog resource. No catalog-state or version-count snapshot
+guarantees absence of that effect across a concurrent change or waives consent.
+Receipts record this acknowledgment and leave catalog unpublication unverified
+after any DELETE attempt, including ambiguous responses. No separate catalog
+mutation request is issued. The release tag and its commit remain independently
+checked before and after deletion; tag deletion is never requested.
+
+A successful receipt requires the exact DELETE acknowledgment and scoped 404
+readback with an accessible matching parent/account. The release tag must still
+match. Initial 404 and 404 after an unacknowledged write never mean successful
+deletion. 401/403/network/malformed errors never substitute for not-found. Errors
+after the first exact preflight carry bounded non-retryable receipts; intended
+effects are not represented as observed effects. Preflight is not atomic with
+concurrent updates, permission changes or release/tag recreation, and no undelete
+is promised. Label deletion stays disabled because the provider's numeric-ID to
+name fallback can target a different label after the selected label disappears.
+
+The pinned routes, status semantics, bounds and temporary label gap live in
+[`contracts/resource-delete/v1.md`](../contracts/resource-delete/v1.md). The
+Windows persisted-native-config/self-managed mapping limitation is retained.
 
 ## Explicit product-native downloads
 
@@ -231,6 +278,8 @@ Product-native transport and download bounds are owned by the
 [download contract](../contracts/downloads/v1.json), including the client
 lifetime and the shorter download CLI deadline. CI-variable operation bounds
 are documented in [CI variables](ci-variables.md#outcomes-races-and-bounds).
+Deletion-specific request, phase and response bounds live in the
+[resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
 
 | Input/output | Limit |
 |---|---:|
@@ -269,7 +318,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate, ambiguous MR create/update/merge, or ambiguous CI-variable mutation |
+| 6 | conflict/duplicate, ambiguous MR create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |

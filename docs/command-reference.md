@@ -559,6 +559,71 @@ secret set creates hidden+masked entries or rotates existing hidden entries, nev
 
 Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
 
+## `issue delete`
+
+```text
+gl-axi issue delete <IID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-issue URL --expected-id ID --expected-state STATE --expected-updated-at TIMESTAMP [--format toon|json]
+```
+
+Guardedly delete one exact issue.
+
+Permanently deletes the selected issue, not merely its open/closed state.
+Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
+
+Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
+
+## `pipeline delete`
+
+```text
+gl-axi pipeline delete <ID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-pipeline URL --acknowledge-child-cancellation URL --expected-sha SHA --expected-ref REF --expected-status STATUS --expected-updated-at TIMESTAMP [--format toon|json]
+```
+
+Guardedly delete one exact pipeline.
+
+Deletes the pipeline and its immediately related builds, logs, artifacts and triggers, and expires its caches. GitLab cancels cancelable jobs before removal and may cancel surviving child pipelines and their jobs, even if parent deletion later fails. Child pipelines are not recursively deleted. Requires a separate --acknowledge-child-cancellation URL equal to --expected-url on every invocation, in addition to parent deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed status. A snapshot cannot guarantee absence of child effects; receipts do not verify child cancellation. This is not individual job erasure.
+Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
+
+Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
+
+## `release delete`
+
+```text
+gl-axi release delete <TAG> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-release URL --acknowledge-catalog-unpublication URL --expected-commit SHA --expected-created-at TIMESTAMP [--format toon|json]
+```
+
+Guardedly delete one exact release.
+
+Deletes the selected release and may unpublish the project's CI/CD Catalog resource when its last catalog version is removed. Requires a separate --acknowledge-catalog-unpublication URL equal to --expected-url on every invocation, in addition to release deletion confirmation. Without it, preflight refuses before credential or provider access, regardless of observed catalog state or version count. A snapshot cannot guarantee absence of catalog effects; receipts do not verify catalog unpublication, including after an ambiguous response. The tag is never deleted; its exact name and commit are checked before and after. Concurrent tag movement or release recreation cannot be made atomic with this operation.
+Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
+
+Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
+
+## `snippet delete`
+
+```text
+gl-axi snippet delete <ID> --auth-source native --hostname HOST --expected-url URL --confirm-delete-snippet URL --expected-author-id ID --expected-updated-at TIMESTAMP [--format toon|json]
+```
+
+Guardedly delete one exact snippet.
+
+Deletes one personal snippet and its provider-managed content. Requires a null project_id and the authenticated author. No project selector is accepted; project snippets use snippet delete-project.
+Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
+
+Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
+
+## `snippet delete-project`
+
+```text
+gl-axi snippet delete-project <ID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-snippet URL --expected-author-id ID --expected-updated-at TIMESTAMP [--format toon|json]
+```
+
+Guardedly delete one exact snippet.
+
+Deletes one project snippet and its provider-managed content. The returned project_id, author and URL must match; never falls back to personal scope.
+Requires explicit --auth-source native and operation-specific URL confirmation. The native identity may differ from the official profile; there is no fallback. Rechecks exact identity before one DELETE and reads back the result. No redirect, retry, local cleanup, atomic revision guarantee or undelete. An initial 404 is not proof of prior deletion. Unknown outcomes return a non-retryable ambiguity receipt. See contracts/resource-delete/v1.md.
+
+Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
+
 ## Current undeclared operations
 
-Generic API, direct issue mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, issue/MR close/reopen/delete, repository mutation, release mutation, and pipeline/job mutation are denied. CI variable set/delete are separately guarded native-only operations. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, issue creation/editing/state/comment mutation, unguarded or alternate-strategy merge, approve, comment/note/reply/resolve, merge-request or label-resource mutation, close/reopen, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

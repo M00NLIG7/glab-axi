@@ -20,7 +20,7 @@
             "interactive_required", "dependency_missing", "dependency_unsupported",
             "authentication_error", "forbidden", "not_found", "conflict",
             "rate_limited", "upstream_error", "safety_violation", "canceled",
-            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge", "ambiguous_variable"
+            "internal_error", "ambiguous_create", "ambiguous_update", "ambiguous_merge", "ambiguous_variable", "ambiguous_delete"
           ]
         },
         "message": {"type": "string", "maxLength": 4096},
@@ -35,6 +35,10 @@
             {
               "$ref": "ux-v1/ci-variable-mutation.schema.json",
               "properties": {"variable": {"properties": {"outcome": {"enum": ["rejected", "ambiguous"]}}}}
+            },
+            {
+              "$ref": "ux-v1/resource-delete.schema.json",
+              "properties": {"deletion": {"properties": {"action": {"enum": ["not_applied", "rejected", "ambiguous"]}}}}
             }
           ]
         }

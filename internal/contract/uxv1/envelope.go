@@ -67,6 +67,8 @@ func helpFor(code Code) []string {
 		return []string{"inspect the exact project, key, environment scope, and private prestate before any retry"}
 	case CodeAmbiguousMerge:
 		return []string{"inspect the exact merge request URL and expected head before any retry"}
+	case CodeAmbiguousDelete:
+		return []string{"inspect the exact native resource and deletion receipt; absence alone cannot prove deletion and must not trigger a blind retry"}
 	case CodeRateLimited:
 		return []string{"retry after the provider rate limit resets"}
 	case CodeSafety:

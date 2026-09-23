@@ -98,7 +98,8 @@ below.
 
 ## Explicit product-native operations
 
-[Download commands](../README.md#safe-downloads) and
+[Download commands](../README.md#safe-downloads),
+[guarded resource deletion](../contracts/resource-delete/v1.md), and
 [project CI-variable commands](ci-variables.md) require `--auth-source native`.
 The selector is not a global authentication switch: existing commands/defaults
 and frozen native-v1 remain unchanged. Native selection requires explicit

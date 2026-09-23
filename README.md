@@ -10,9 +10,11 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads and
-  [guarded project CI variables](docs/ci-variables.md) use
-  [explicit native authentication](docs/authentication.md#explicit-product-native-operations); and
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads,
+  [guarded project CI variables](docs/ci-variables.md), and
+  [guarded resource deletion](#guarded-native-resource-deletion) use
+  [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
+  without an official-profile fallback; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -55,8 +57,8 @@ gl-axi setup hooks
 gl-axi update [--check]
 ```
 
-For board and work-item commands, see
-[GitLab-native planning](#gitlab-native-planning).
+For additional commands, see [GitLab-native planning](#gitlab-native-planning)
+and [guarded native resource deletion](#guarded-native-resource-deletion).
 
 Commands that permit inferred targets use current Git context or command-first
 `-R/--repo namespace/project` and `--hostname host`; space and equals forms are
@@ -187,9 +189,40 @@ is implied by the isolated tests.
 The current denial boundary includes generic API, direct issue editing,
 issue creation, unguarded or alternate merge, approve,
 comment/note/reply/resolve, merge-request and label-resource mutation,
-issue/MR close/reopen/delete, repository/release writes, and
-pipeline/job mutation. `issue edit --dry-run` is validation-only and changes no
-labels or issue fields.
+close/reopen, repository writes, and other release/pipeline/job writes.
+`issue edit --dry-run` is validation-only and changes no labels or issue fields.
+
+### Guarded native resource deletion
+
+`issue delete`, `pipeline delete`, `release delete`, `snippet delete` (personal),
+and `snippet delete-project` require explicit `--auth-source native`, exact
+reviewed identities and operation-specific URL confirmation. No broad `--yes`,
+default project, redirect, retry, official-profile fallback or local cleanup is
+provided. Release deletion retains its tag and may unpublish the project's CI/CD
+Catalog resource when its last catalog version is removed. It requires separate
+per-invocation `--acknowledge-catalog-unpublication URL` matching the release
+`--expected-url`, in addition to `--confirm-delete-release URL`. Without it,
+preflight refuses before credential or provider access, regardless of observed
+catalog state or version count. Catalog unpublication remains unverified in
+receipts, including after an ambiguous response; snapshots cannot guarantee
+absence of catalog effects.
+
+Pipeline deletion removes related
+builds/logs/artifacts/triggers and may cancel surviving child pipelines and their
+jobs, even if parent deletion later fails. It requires a separate per-invocation
+`--acknowledge-child-cancellation URL` matching the parent `--expected-url`, in
+addition to `--confirm-delete-pipeline URL`. Without it, preflight refuses before
+credential or provider access, regardless of observed status. Child pipelines are
+not recursively deleted; their cancellation outcome remains unverified. The native
+account may differ from the official profile.
+
+Preflight/recheck is best-effort, not atomic. Initial absence is not proof of
+prior deletion; an ambiguous response plus absence is not success. Inspect an
+`ambiguous_delete` receipt before any fresh decision, never blindly retry.
+Label deletion remains a temporary gap because GitLab ID-or-title fallback can
+select the wrong label in a race. See the [deletion contract](contracts/resource-delete/v1.md)
+and leaf help for all required expectations, consequences and response bounds.
+Persisted native configuration/self-managed mapping on Windows remains unproven.
 
 ## GitLab-native planning
 

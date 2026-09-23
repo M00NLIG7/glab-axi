@@ -28,12 +28,13 @@ const (
 	CodeAmbiguousUpdate       Code = "ambiguous_update"
 	CodeAmbiguousMerge        Code = "ambiguous_merge"
 	CodeAmbiguousVariable     Code = "ambiguous_variable"
+	CodeAmbiguousDelete       Code = "ambiguous_delete"
 )
 
 // Error is the stable product failure. Cause and StatusCode are retained only
 // for control flow and are never serialized. Receipt is reserved for bounded,
-// product-normalized refusal or mutation-outcome evidence, including disclosed,
-// uncertain ordering effects.
+// product-normalized refusal or mutation-outcome evidence, including explicitly
+// unknown outcomes and uncertain ordering effects.
 type Error struct {
 	Code       Code   `json:"code"`
 	Message    string `json:"message"`
@@ -60,9 +61,10 @@ func Wrap(code Code, message string, cause error) *Error {
 	return &Error{Code: code, Message: message, Cause: cause}
 }
 
-// NewHTTPRejection returns a bounded product error for HTTP statuses that
-// prove the provider returned a definite rejection. Provider response text is
-// deliberately excluded.
+// NewHTTPRejection maps recognized HTTP statuses to bounded product errors.
+// Callers must establish whether the status proves rejection for their operation;
+// a status alone need not prove that no mutation occurred. Provider response text
+// is deliberately excluded.
 func NewHTTPRejection(status int) (*Error, bool) {
 	var code Code
 	var message string
@@ -144,7 +146,7 @@ func ExitCode(err error) int {
 		return 4
 	case CodeNotFound:
 		return 5
-	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge, CodeAmbiguousVariable:
+	case CodeConflict, CodeAmbiguousCreate, CodeAmbiguousUpdate, CodeAmbiguousMerge, CodeAmbiguousVariable, CodeAmbiguousDelete:
 		return 6
 	case CodeRateLimited:
 		return 7
