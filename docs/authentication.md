@@ -98,15 +98,16 @@ below.
 
 ## Explicit product-native operations
 
-Declared download leaves require `--auth-source native`. The selector is not a
-global authentication switch: existing commands/defaults and frozen native-v1
-remain unchanged. Native selection requires explicit `--hostname` and, for
-project-scoped commands, explicit `--repo`. Missing/invalid selectors fail
-before credential resolution or networking.
+[Download commands](../README.md#safe-downloads) and
+[project CI-variable commands](ci-variables.md) require `--auth-source native`.
+The selector is not a global authentication switch: existing commands/defaults
+and frozen native-v1 remain unchanged. Native selection requires explicit
+`--hostname` and, for project-scoped commands, explicit `--repo`.
+Missing/invalid selectors fail before credential resolution or networking.
 
 One operation resolves the existing native authority and credential once and
-uses them for all preflights, pages, byte requests, rechecks and receipts. It
-never reads the official profile, exports its token, invokes a glab child, or
+uses them for all preflights, pages, byte requests, mutations and reconciliation.
+It never reads the official profile, exports its token, invokes a glab child, or
 falls back after failure. The native account may differ from official glab;
 no identity equivalence is inferred. Native configuration below applies,
 including private-host API/web mapping and CA/proxy settings.

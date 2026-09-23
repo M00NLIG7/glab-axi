@@ -51,6 +51,9 @@ Project variables are available on Free, Premium, and Ultimate. GitLab 17.4
 introduced hidden variables behind a feature flag; 17.6 made them generally
 available. These commands require a successful authenticated version read of
 17.6.0 or newer and explicit `hidden`, `masked`, `protected`, and `raw` metadata.
+Recognized version strings are `MAJOR.MINOR.PATCH`, optionally suffixed by
+`-ee` or `-pre`. Newer prereleases such as `18.10.0-pre` are accepted;
+`17.6.0-pre` is below the minimum.
 Older/unknown versions, missing metadata, unavailable routes, and insufficient
 permissions fail without a capability fallback. Ordinary variables have the
 same floor so an older response cannot misclassify a hidden secret.

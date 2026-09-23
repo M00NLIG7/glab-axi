@@ -12,9 +12,9 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
      |
      `-> product registry and strict parser
           |-> local help/setup/signed update
-          |-> declared --auth-source native download operations
+          |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> exact identities + safedownload transactional publication
+          |    -> feature-owned download / CI-variable handlers
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
@@ -66,8 +66,10 @@ complete operation, using existing native configuration, credential resolution
 and TLS patterns. The client owns the selected authority/credential, refuses
 all redirects and automatic retries, uses fresh HTTP/1.1 connections to avoid
 HTTP/2 refused-stream replay, and bounds requests, responses and lifetime.
-The [download contract](../contracts/downloads/v1.json) owns these bounds,
-including the shorter outer deadline applied by the product dispatcher.
+The [download contract](../contracts/downloads/v1.json) owns transport and
+download bounds, including the shorter outer download deadline applied by the
+product dispatcher. [CI variables](ci-variables.md#outcomes-races-and-bounds)
+describes the variable-operation limits.
 Feature handlers retain their own route/identity/expected-state authority.
 This internal request interface does not expose generic user HTTP authority.
 

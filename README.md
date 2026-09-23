@@ -10,9 +10,9 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Declared download
-  commands explicitly opt into existing native authentication with
-  `--auth-source native`, without an official-profile fallback; and
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads and
+  [guarded project CI variables](docs/ci-variables.md) use
+  [explicit native authentication](docs/authentication.md#explicit-product-native-operations); and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
