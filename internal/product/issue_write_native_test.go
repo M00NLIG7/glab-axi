@@ -186,12 +186,19 @@ func TestIssueWritesNativeContractFullSequence(t *testing.T) {
 				code := Run(context.Background(), args, deps)
 				requests := server.Requests()
 				assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), requests, token)
-				if code != 0 {
+				wantExit, wantAttempts := 0, 1
+				if action == "close" || action == "reopen" {
+					wantExit, wantAttempts = 2, 0
+				}
+				if code != wantExit {
 					t.Fatalf("native sequence exit=%d output=%s", code, out)
 				}
-				ok, _, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-				if !ok || receipt.MutationAttempts != 1 || receipt.Identity.Host != issueNativeHost || receipt.Identity.ProjectWebURL != issueNativeWeb+"/group/project" || receipt.Identity.WebURL != issueNativeWeb+"/group/project/-/issues/42" {
+				ok, errCode, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
+				if ok != (wantExit == 0) || receipt.MutationAttempts != wantAttempts || receipt.Identity.Host != issueNativeHost || receipt.Identity.ProjectWebURL != issueNativeWeb+"/group/project" || receipt.Identity.WebURL != issueNativeWeb+"/group/project/-/issues/42" {
 					t.Fatalf("receipt=%+v", receipt)
+				}
+				if wantExit == 2 && (errCode != uxv1.CodeUnsupported || receipt.Outcome != "refused" || receipt.MutationResponse != "not_attempted" || receipt.Postcondition != "preflight") {
+					t.Fatalf("refusal receipt=%+v code=%s", receipt, errCode)
 				}
 				var envelope struct {
 					Meta uxv1.Meta `json:"meta"`
@@ -226,10 +233,6 @@ func TestIssueWritesNativeContractFullSequence(t *testing.T) {
 							if len(payload) != 1 || payload["body"] != "new body" {
 								t.Fatal("native note payload changed")
 							}
-						default:
-							if len(payload) != 1 || payload["state_event"] != action {
-								t.Fatal("native state payload changed")
-							}
 						}
 					}
 				}
@@ -238,9 +241,9 @@ func TestIssueWritesNativeContractFullSequence(t *testing.T) {
 					expectedRequests = 3
 				}
 				if action == "close" || action == "reopen" {
-					expectedRequests = 6
+					expectedRequests = 4
 				}
-				if mutations != 1 || len(requests) != expectedRequests {
+				if mutations != wantAttempts || len(requests) != expectedRequests {
 					t.Fatalf("requests=%d mutations=%d", len(requests), mutations)
 				}
 			})
@@ -346,7 +349,7 @@ func TestIssueWritesNativeContractUnavailableDoesNotFallback(t *testing.T) {
 }
 
 func TestIssueWritesNativeContractRedirectsNeverLeaveSelectedRoute(t *testing.T) {
-	for _, action := range []string{"create", "comment", "close", "reopen"} {
+	for _, action := range []string{"create", "comment"} {
 		for _, sameOrigin := range []bool{false, true} {
 			for _, status := range []int{301, 302, 303, 307, 308} {
 				t.Run(fmt.Sprintf("%s/same-origin-%t/%d", action, sameOrigin, status), func(t *testing.T) {
@@ -383,33 +386,12 @@ func TestIssueWritesNativeContractRedirectsNeverLeaveSelectedRoute(t *testing.T)
 						t.Fatalf("mutation attempts=%d credential selections=%d", mutations, keyring.reads())
 					}
 					_, errCode, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-					if code != 6 || receipt.Outcome != "ambiguous" || receipt.MutationAttempts != 1 || (errCode != uxv1.CodeAmbiguousCreate && errCode != uxv1.CodeAmbiguousUpdate) {
+					if code != 6 || receipt.Outcome != "ambiguous" || receipt.MutationAttempts != 1 || errCode != uxv1.CodeAmbiguousCreate {
 						t.Fatalf("redirect was not truthfully ambiguous: exit=%d receipt=%+v", code, receipt)
 					}
 				})
 			}
 		}
-	}
-}
-
-func TestIssueWritesNativeContractAmbiguousStateReadbackKeepsOneCredential(t *testing.T) {
-	token := strings.Join([]string{"synthetic", "native", "state", "readback"}, "-")
-	server := testgitlab.New(issueNativeHandler(t, "close", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(500)
-		_, _ = w.Write([]byte(`{"message":"untrusted provider detail"}`))
-	}))
-	defer server.Close()
-	keyring := &issueNativeKeyring{token: token}
-	out, stderr, deps := issueNativeDeps(t, server, "", keyring)
-	code := Run(context.Background(), issueNativeArgs(t, "close"), deps)
-	requests := server.Requests()
-	assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), requests, token)
-	if code != 6 || len(requests) != 6 || keyring.reads() != 1 {
-		t.Fatalf("ambiguous native readback: exit=%d requests=%d resolutions=%d", code, len(requests), keyring.reads())
-	}
-	_, _, r := decodeIssueWriteEnvelope(t, out.Bytes())
-	if r.Outcome != "ambiguous" || r.ObservedState != "opened" || r.MutationAttempts != 1 || strings.Contains(out.String(), "untrusted provider detail") {
-		t.Fatal("ambiguous native state evidence was not preserved safely")
 	}
 }
 
@@ -435,16 +417,13 @@ func TestIssueWritesNativeContractProviderFixture(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.Schema != "glab-axi/issue-write-provider-contract/v1" || fixture.Backend != "native" || len(fixture.Operations) != 4 || len(fixture.Reads) != 2 {
+	if fixture.Schema != "glab-axi/issue-write-provider-contract/v1" || fixture.Backend != "native" || len(fixture.Operations) != 2 || len(fixture.Reads) != 2 {
 		t.Fatal("incomplete native issue provider fixture")
 	}
 	for _, operation := range fixture.Operations {
 		action := "create"
 		if operation.Name == "issue-note-create" {
 			action = "comment"
-		}
-		if operation.Name == "issue-state" {
-			action = operation.Payload["state_event"]
 		}
 		t.Run(action, func(t *testing.T) {
 			server := testgitlab.New(issueNativeHandler(t, action, nil))

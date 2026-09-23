@@ -21,27 +21,27 @@ func issueWriteDefinitions() []Definition {
 		d.Flags = append([]FlagDefinition{}, existing...)
 		d.Positionals, d.MaxPositions = 1, 1
 		d.Usage = "gl-axi issue " + action + " <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-issue-id ID --expected-url URL"
-		d.Details = "One mutation attempt per invocation; no blind retry or cross-invocation deduplication.\nNumeric identities and canonical URLs are required. All reads/writes are bounded.\nGitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap."
+		d.Details = "At most one mutation attempt per invocation; no blind retry or cross-invocation deduplication.\nNumeric identities and canonical URLs are required. All reads/writes are bounded.\nGitLab supplies no atomic expected revision: preflight checks are observations, not compare-and-swap."
 		switch action {
 		case "create":
 			d.Positionals, d.MaxPositions = 0, 0
-			d.Summary = "Create one ordinary issue from private title and description files."
-			d.Flags = append(append([]FlagDefinition{}, common...), FlagDefinition{Name: "--title-file", Value: "FILE", Description: "Absolute private UTF-8 title file (at most 1024 bytes).", Required: true}, FlagDefinition{Name: "--description-file", Value: "FILE", Description: "Absolute private UTF-8 description file (at most 131072 bytes).", Required: true})
+			d.Summary = "Create one ordinary issue from private title and nonblank description files."
+			d.Flags = append(append([]FlagDefinition{}, common...), FlagDefinition{Name: "--title-file", Value: "FILE", Description: "Absolute private UTF-8 title file (at most 1024 bytes).", Required: true}, FlagDefinition{Name: "--description-file", Value: "FILE", Description: "Absolute private UTF-8 nonblank description file (at most 131072 bytes).", Required: true})
 			d.Usage = "gl-axi issue create -R NAMESPACE/PROJECT --hostname HOST --expected-project-id ID --expected-url PROJECT_URL --title-file FILE --description-file FILE"
-			d.Details += "\nNo title search or replay inference: a lost response is ambiguous, and another invocation can create a duplicate."
+			d.Details += "\nBlank descriptions and title-only creation are temporarily refused before credentials or HTTP because default templates may execute quick actions.\nTitles strip surrounding ASCII whitespace after the original file limit is enforced; internal and Unicode whitespace remain unchanged.\nNo title search or replay inference: a lost response is ambiguous, and another invocation can create a duplicate."
 		case "comment", "note":
 			d.Summary = "Create one plain issue note (comment and note are aliases)."
 			d.Flags = append(d.Flags, FlagDefinition{Name: "--body-file", Value: "FILE", Description: "Absolute private UTF-8 nonempty body file (at most 131072 bytes).", Required: true})
 			d.Usage += " --body-file FILE"
 			d.Details += "\nOnly the direct create response can identify this note. Never searches the latest comment as proof.\nA lost response is ambiguous; another invocation can create a duplicate."
 		case "close", "reopen":
-			d.Summary = "Request one reversible GitLab issue state transition."
+			d.Summary = "Observe an already-matching issue state; transitions are temporarily refused."
 			d.Flags = append(d.Flags, FlagDefinition{Name: "--expected-state", Value: "STATE", Description: "Observed preflight state: opened or closed; NOT a server-side precondition.", Required: true})
 			d.Usage += " --expected-state opened|closed"
-			d.Details += "\nReturns unchanged only if the bound preflight state already matches.\nSuccess reports the desired state observed after an accepted response, not exclusive authorship.\nNo GitHub close reason and no bundled comment. A lost response stays ambiguous even when the desired state is observed."
+			d.Details += "\nReturns unchanged only if the bound preflight state already matches. This is a read-only observation.\nOtherwise returns unsupported with a refused receipt and zero mutation attempts: GitLab state updates can rewrite existing content.\nExisting descriptions, including fenced code, are not filtered. No PUT, GitHub close reason or bundled comment."
 		}
 		if action == "create" || action == "comment" || action == "note" {
-			d.Details += "\nQuick-action-shaped lines (including in code blocks) are rejected before child work, not executed. No attachments or secondary writes."
+			d.Details += "\nNew quick-action-shaped lines (including in code blocks) are rejected before credential resolution. No attachments or secondary writes.\nNew descriptions and notes remove carriage returns and trailing ASCII whitespace before hashing and submission; direct response content must match exactly."
 		}
 		d.Usage += " --auth-source native [--format toon|json]"
 		d.Details += "\nNative opt-in uses the existing environment/keyring identity for the full operation, never the official profile. The accounts may differ. Native persisted-config/self-managed mapping on Windows remains unproven."

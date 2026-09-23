@@ -20,7 +20,6 @@ import (
 const (
 	issueWritePreflight = 10 * time.Second
 	issueWriteAttempt   = 20 * time.Second
-	issueWriteReadback  = 10 * time.Second
 )
 
 type issueWriteIdentity struct {
@@ -92,7 +91,6 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeInternal, "cannot encode issue request")
 	}
 	// Resolve one native identity only after all private content is validated.
-	// The same client owns every preflight, mutation and readback request.
 	client, err := openNative(ctx, parsed, deps)
 	if err != nil {
 		return commandOutput{meta: meta}, err
@@ -121,15 +119,14 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		receipt.Identity.IID = iid
 		receipt.Identity.WebURL = parsed.Values["--expected-url"]
 	}
-	stateWrite := action == "close" || action == "reopen"
-	if stateWrite {
+	stateAction := action == "close" || action == "reopen"
+	if stateAction {
 		receipt.ExpectedState = parsed.Values["--expected-state"]
 		receipt.RequestedState = "closed"
 		if action == "reopen" {
 			receipt.RequestedState = "opened"
 		}
 	}
-	var stateBefore issueWriteRecord
 	// Fixed reads only. There is no list/search or pagination to turn somebody
 	// else's issue/comment into evidence of this invocation's write.
 	issuePath := "projects/" + strconv.FormatInt(projectID, 10) + "/issues/" + strconv.FormatInt(iid, 10)
@@ -174,7 +171,7 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		if err != nil {
 			return commandOutput{meta: meta}, err
 		}
-		if stateWrite && before.State != receipt.ExpectedState {
+		if stateAction && before.State != receipt.ExpectedState {
 			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "issue state does not match --expected-state")
 		}
 		adjacent, err := readIssue(preflight)
@@ -184,20 +181,8 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		if before.State != adjacent.State || !before.UpdatedAt.Equal(*adjacent.UpdatedAt) {
 			return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "issue changed during write preflight")
 		}
-		if stateWrite {
+		if stateAction {
 			receipt.ObservedState = adjacent.State
-			stateBefore = adjacent
-			if adjacent.State != receipt.RequestedState {
-				if before.Title == nil || before.Description == nil || adjacent.Title == nil || adjacent.Description == nil {
-					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeUpstream, "issue state preflight requires existing content evidence")
-				}
-				if !sameIssueWriteContent(before, adjacent) {
-					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeConflict, "issue content changed during state preflight")
-				}
-				if validateIssueWriteBody(*adjacent.Description) != nil || normalizeIssueWriteBody(*adjacent.Description) != *adjacent.Description {
-					return commandOutput{meta: meta}, uxv1.NewError(uxv1.CodeSecurityBoundary, "GitLab state updates may rewrite this existing description; refusing the mutation")
-				}
-			}
 		}
 	}
 	if err := readProject(preflight); err != nil {
@@ -207,23 +192,25 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		return commandOutput{meta: meta}, issueWriteContextError(err)
 	}
 	cancel()
-	if stateWrite && receipt.ObservedState == receipt.RequestedState {
-		receipt.Outcome = "unchanged"
+	if stateAction {
 		receipt.Postcondition = "preflight"
-		return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
+		if receipt.ObservedState == receipt.RequestedState {
+			receipt.Outcome = "unchanged"
+			return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
+		}
+		receipt.Outcome = "refused"
+		return issueWriteFailure(receipt, meta, uxv1.NewError(uxv1.CodeUnsupported, "issue close/reopen mutations are temporarily unavailable because GitLab cannot prevent collateral content edits"))
 	}
 	if err := ctx.Err(); err != nil {
 		return commandOutput{meta: meta}, issueWriteContextError(err)
 	}
-	method, path := http.MethodPost, "projects/"+strconv.FormatInt(projectID, 10)+"/issues"
+	path := "projects/" + strconv.FormatInt(projectID, 10) + "/issues"
 	if action == "comment" {
 		path = issuePath + "/notes"
-	} else if stateWrite {
-		method, path = http.MethodPut, issuePath
 	}
 	writeCtx, cancelWrite := context.WithTimeout(ctx, issueWriteAttempt)
 	response, writeErr := client.Do(writeCtx, productnative.Request{
-		Method: method, Path: path, Body: encoded, MaxBytes: limits.MaxJSONPageBytes,
+		Method: http.MethodPost, Path: path, Body: encoded, MaxBytes: limits.MaxJSONPageBytes,
 		Headers: http.Header{"Content-Type": {"application/json"}},
 	})
 	cancelWrite()
@@ -244,7 +231,7 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 		} else {
 			var returned issueWriteRecord
 			returned, writeErr = decodeIssueWriteRecord(response.Body, receipt.Identity)
-			if writeErr == nil && action == "create" {
+			if writeErr == nil {
 				wanted := payload.(issueCreatePayload)
 				if returned.Title == nil || *returned.Title != wanted.Title || returned.Description == nil || *returned.Description != wanted.Description || returned.State != "opened" || returned.IssueType != "issue" {
 					writeErr = uxv1.NewError(uxv1.CodeConflict, "created issue does not prove the requested content and type")
@@ -252,43 +239,19 @@ func executeIssueWrite(ctx context.Context, target Target, parsed Parsed, deps D
 					receipt.Identity.IssueID, receipt.Identity.IID, receipt.Identity.WebURL = returned.ID, returned.IID, returned.WebURL
 				}
 			}
-			if writeErr == nil && stateWrite && (returned.State != receipt.RequestedState || !sameIssueWriteContent(stateBefore, returned)) {
-				writeErr = uxv1.NewError(uxv1.CodeConflict, "issue response does not prove the requested state and unchanged content")
-			}
 		}
 		if writeErr == nil {
 			receipt.MutationResponse = "accepted"
 			receipt.Postcondition = "response"
 		}
 	}
-	if !stateWrite {
-		if writeErr != nil {
-			return issueWriteAmbiguous(receipt, meta, uxv1.CodeAmbiguousCreate)
-		}
-		receipt.Outcome = "created"
-		if action == "comment" {
-			receipt.Outcome = "commented"
-		}
-		return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
+	if writeErr != nil {
+		return issueWriteAmbiguous(receipt, meta, uxv1.CodeAmbiguousCreate)
 	}
-	// State readback is an observation only, never proof of write authorship.
-	// It cannot promote a lost/malformed mutation response into success.
-	receipt.ObservedState = ""
-	readback, cancelRead := context.WithTimeout(ctx, issueWriteReadback)
-	defer cancelRead()
-	after, readErr := readIssue(readback)
-	if readErr == nil {
-		receipt.ObservedState = after.State
-		receipt.Postcondition = "read_back"
+	receipt.Outcome = "created"
+	if action == "comment" {
+		receipt.Outcome = "commented"
 	}
-	if writeErr != nil || readErr != nil {
-		return issueWriteAmbiguous(receipt, meta, uxv1.CodeAmbiguousUpdate)
-	}
-	if after.State != receipt.RequestedState || !sameIssueWriteContent(stateBefore, after) {
-		receipt.Outcome = "conflict"
-		return issueWriteFailure(receipt, meta, uxv1.NewError(uxv1.CodeConflict, "issue state or content drifted after the accepted mutation response"))
-	}
-	receipt.Outcome = "state_observed"
 	return commandOutput{data: issueWriteOutput{receipt}, meta: meta}, nil
 }
 
@@ -299,6 +262,7 @@ func loadIssueWritePayload(parsed Parsed, action string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		title = strings.Trim(title, " \t\n\v\f\r\x00")
 		if strings.TrimSpace(title) == "" || strings.ContainsAny(title, "\r\n") {
 			return nil, uxv1.NewError(uxv1.CodeValidation, "issue title must be a nonempty single line")
 		}
@@ -309,7 +273,11 @@ func loadIssueWritePayload(parsed Parsed, action string) (any, error) {
 		if err := validateIssueWriteBody(body); err != nil {
 			return nil, err
 		}
-		return issueCreatePayload{title, normalizeIssueWriteBody(body), "issue"}, nil
+		body = normalizeIssueWriteBody(body)
+		if strings.TrimSpace(body) == "" {
+			return nil, uxv1.NewError(uxv1.CodeUnsupported, "blank issue descriptions are temporarily unavailable because GitLab may execute default-template quick actions")
+		}
+		return issueCreatePayload{title, body, "issue"}, nil
 	case "comment":
 		body, err := privatefile.Read(parsed.Values["--body-file"], limits.MaxDescriptionBytes, false)
 		if err != nil {
@@ -331,11 +299,6 @@ func normalizeIssueWriteBody(body string) string {
 	return strings.TrimRight(strings.ReplaceAll(body, "\r", ""), " \t\n\v\f\x00")
 }
 
-func sameIssueWriteContent(a, b issueWriteRecord) bool {
-	return a.Title != nil && b.Title != nil && *a.Title == *b.Title &&
-		a.Description != nil && b.Description != nil && *a.Description == *b.Description
-}
-
 func decodeIssueWriteRecord(body []byte, identity issueWriteIdentity) (issueWriteRecord, error) {
 	if err := validateUniqueJSON(body, '{', "issue-write"); err != nil {
 		return issueWriteRecord{}, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned malformed issue-write JSON")
@@ -349,18 +312,6 @@ func decodeIssueWriteRecord(body []byte, identity issueWriteIdentity) (issueWrit
 	}
 	if record.UpdatedAt == nil || record.UpdatedAt.IsZero() || (record.State != "opened" && record.State != "closed") {
 		return record, uxv1.NewError(uxv1.CodeUpstream, "GitLab returned an incomplete issue-write document")
-	}
-	// GitLab represents an empty description as null on some versions. An
-	// explicit null is empty content; an absent field is not proof of content.
-	if record.Description == nil {
-		var fields map[string]json.RawMessage
-		if err := decodeStrict(body, &fields); err != nil {
-			return record, err
-		}
-		if _, present := fields["description"]; present {
-			empty := ""
-			record.Description = &empty
-		}
 	}
 	return record, nil
 }

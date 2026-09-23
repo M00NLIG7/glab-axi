@@ -30,10 +30,12 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 			Commit string `json:"commit"`
 		} `json:"reference"`
 		Cases []struct {
-			Action   string         `json:"action"`
-			Argv     []string       `json:"argv"`
-			Provider glab.Operation `json:"provider_operation"`
-			Outcome  string         `json:"outcome"`
+			Action    string         `json:"action"`
+			Argv      []string       `json:"argv"`
+			Provider  glab.Operation `json:"provider_operation"`
+			Outcome   string         `json:"outcome"`
+			Attempts  int            `json:"mutation_attempts"`
+			ErrorCode uxv1.Code      `json:"error_code"`
 		} `json:"cases"`
 		Excluded  []string `json:"excluded_flags"`
 		Attempts  int      `json:"max_mutation_attempts"`
@@ -70,11 +72,12 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 					t.Fatalf("accepted %s", flag)
 				}
 			}
-			// Identical retries are independent invocations, not replay receipts. A
-			// response lost on the first attempt cannot suppress the second mutation.
 			for attempt := 0; attempt < 3; attempt++ {
 				d := issueWriteDelegate(c.Action)
 				wantExit, wantOutcome := 0, c.Outcome
+				if c.ErrorCode != "" {
+					wantExit = 2
+				}
 				if c.Action == "create" {
 					body := string(d.responses[c.Provider][0].Body)
 					body = strings.Replace(body, `"id":1001`, `"id":`+strconv.Itoa(1001+attempt), 1)
@@ -85,7 +88,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 				if c.Provider == issueNoteCreateOperation {
 					d.responses[c.Provider][0].Body = []byte(strings.Replace(string(d.responses[c.Provider][0].Body), `"id":3001`, `"id":`+strconv.Itoa(3001+attempt), 1))
 				}
-				if attempt == 0 {
+				if attempt == 0 && c.Attempts > 0 {
 					d.errors[c.Provider] = []error{uxv1.Wrap(uxv1.CodeUpstream, "response lost", context.DeadlineExceeded)}
 					wantExit, wantOutcome = 6, "ambiguous"
 				}
@@ -93,9 +96,12 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 				if code := Run(context.Background(), args, deps); code != wantExit {
 					t.Fatalf("exit=%d %s", code, out)
 				}
-				_, _, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-				if receipt.Outcome != wantOutcome || receipt.MutationAttempts != contract.Attempts || receipt.RetrySafe || countOperation(d.requests, c.Provider) != 1 {
+				_, errCode, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
+				if receipt.Outcome != wantOutcome || receipt.MutationAttempts != c.Attempts || receipt.RetrySafe || countOperation(d.requests, c.Provider) != c.Attempts {
 					t.Fatalf("receipt=%+v requests=%+v", receipt, d.requests)
+				}
+				if c.ErrorCode != "" && (errCode != c.ErrorCode || len(d.inputBodies) != 0 || receipt.MutationResponse != "not_attempted") {
+					t.Fatalf("refusal code=%s receipt=%+v", errCode, receipt)
 				}
 				if attempt > 0 && c.Action == "create" && receipt.Identity.IssueID != int64(1001+attempt) {
 					t.Fatalf("new invocation reused earlier issue identity: %+v", receipt)
@@ -106,7 +112,7 @@ func TestPinnedIssueWritesConsumerContract(t *testing.T) {
 			}
 		})
 	}
-	if issueWritePreflight+issueWriteAttempt+issueWriteReadback > limits.WriteOperation {
+	if issueWritePreflight+issueWriteAttempt > limits.WriteOperation {
 		t.Fatal("phase limits exceed outer deadline")
 	}
 }

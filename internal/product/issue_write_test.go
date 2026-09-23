@@ -3,7 +3,6 @@ package product
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -55,9 +54,9 @@ func issueNoteBody() []byte {
 	return []byte(`{"id":3001,"project_id":101,"noteable_id":1001,"noteable_iid":42,"noteable_type":"Issue","body":"new body","system":false,"internal":false}`)
 }
 func issueWriteDelegate(action string) *fakeDelegate {
-	before, after := "opened", "closed"
+	before := "opened"
 	if action == "reopen" {
-		before, after = "closed", "opened"
+		before = "closed"
 	}
 	d := &fakeDelegate{responses: map[glab.Operation][]glab.Response{}, errors: map[glab.Operation][]error{}}
 	response := func(body []byte) glab.Response {
@@ -65,10 +64,9 @@ func issueWriteDelegate(action string) *fakeDelegate {
 	}
 	project := response([]byte(`{"id":101,"path_with_namespace":"group/project","web_url":"https://gitlab.com/group/project"}`))
 	d.responses[issueWriteProjectOperation] = []glab.Response{project, project}
-	d.responses[issueWriteViewOperation] = []glab.Response{response(issueWriteBody(before)), response(issueWriteBody(before)), response(issueWriteBody(after))}
+	d.responses[issueWriteViewOperation] = []glab.Response{response(issueWriteBody(before)), response(issueWriteBody(before))}
 	d.responses[issueCreateOperation] = []glab.Response{response(issueWriteBody("opened"))}
 	d.responses[issueNoteCreateOperation] = []glab.Response{response(issueNoteBody())}
-	d.responses[issueStateOperation] = []glab.Response{response(issueWriteBody(after))}
 	return d
 }
 
@@ -96,7 +94,7 @@ func decodeIssueWriteEnvelope(t *testing.T, body []byte) (bool, uxv1.Code, issue
 }
 
 func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
-	for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
+	for _, action := range []string{"create", "comment", "note"} {
 		t.Run(action, func(t *testing.T) {
 			d := issueWriteDelegate(action)
 			out, stderr, deps := issueWriteTestDeps(t, d)
@@ -110,12 +108,6 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 			want := map[string]any{"body": "new body"}
 			if action == "create" {
 				want = map[string]any{"title": "new title", "description": "new body", "issue_type": "issue"}
-			}
-			if action == "close" || action == "reopen" {
-				want = map[string]any{"state_event": action}
-				if r.Outcome != "state_observed" || r.Postcondition != "read_back" {
-					t.Fatalf("receipt=%+v", r)
-				}
 			}
 			if len(d.inputBodies) != 1 {
 				t.Fatalf("native payload count=%d", len(d.inputBodies))
@@ -140,15 +132,13 @@ func TestIssueWriteSuccessAndExactPayload(t *testing.T) {
 }
 
 func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
-	for _, action := range []string{"create", "comment", "close", "reopen"} {
+	for _, action := range []string{"create", "comment"} {
 		for _, failure := range []string{"timeout", "unframed rejection", "malformed", "wrong identity", "oversized", "missing identity", "duplicate identity", "wrong body", "non-UTF-8"} {
 			t.Run(action+"/"+failure, func(t *testing.T) {
 				d := issueWriteDelegate(action)
 				op := issueCreateOperation
 				if action == "comment" {
 					op = issueNoteCreateOperation
-				} else if action == "close" || action == "reopen" {
-					op = issueStateOperation
 				}
 				switch failure {
 				case "timeout":
@@ -166,11 +156,7 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 				case "duplicate identity":
 					d.responses[op][0].Body = []byte(strings.Replace(string(d.responses[op][0].Body), `{`, `{"id":999,`, 1))
 				case "wrong body":
-					if op == issueStateOperation {
-						d.responses[op][0].Body = issueWriteBody("unexpected")
-					} else {
-						d.responses[op][0].Body = []byte(strings.ReplaceAll(string(d.responses[op][0].Body), "new body", "other body"))
-					}
+					d.responses[op][0].Body = []byte(strings.ReplaceAll(string(d.responses[op][0].Body), "new body", "other body"))
 				case "non-UTF-8":
 					d.responses[op][0].Body = []byte{255}
 				}
@@ -179,7 +165,7 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 					t.Fatalf("exit=%d %s", code, out)
 				}
 				ok, code, r := decodeIssueWriteEnvelope(t, out.Bytes())
-				if ok || r.Outcome != "ambiguous" || r.MutationResponse != "unconfirmed" || r.MutationAttempts != 1 || (code != uxv1.CodeAmbiguousCreate && code != uxv1.CodeAmbiguousUpdate) || r.NoteID != 0 {
+				if ok || r.Outcome != "ambiguous" || r.MutationResponse != "unconfirmed" || r.MutationAttempts != 1 || code != uxv1.CodeAmbiguousCreate || r.NoteID != 0 {
 					t.Fatalf("receipt=%+v code=%s", r, code)
 				}
 				if countOperation(d.requests, op) != 1 || len(d.inputBodies) != 1 {
@@ -188,8 +174,6 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 				wantReads := 0
 				if action == "comment" {
 					wantReads = 2
-				} else if action != "create" {
-					wantReads = 3
 				}
 				if countOperation(d.requests, issueWriteViewOperation) != wantReads || len(d.requests) != 3+wantReads {
 					t.Fatalf("unexpected reconciliation: %+v", d.requests)
@@ -200,14 +184,11 @@ func TestIssueWriteAmbiguityNeverSearchesOrRetries(t *testing.T) {
 }
 
 func TestIssueWriteDefiniteRejection(t *testing.T) {
-	for _, action := range []string{"create", "comment", "close", "reopen"} {
+	for _, action := range []string{"create", "comment"} {
 		for _, status := range []int{400, 401, 403, 404, 409, 422, 429} {
 			t.Run(action+"/"+strconv.Itoa(status), func(t *testing.T) {
 				d := issueWriteDelegate(action)
-				op := issueStateOperation
-				if action == "create" {
-					op = issueCreateOperation
-				}
+				op := issueCreateOperation
 				if action == "comment" {
 					op = issueNoteCreateOperation
 				}
@@ -227,11 +208,11 @@ func TestIssueWriteDefiniteRejection(t *testing.T) {
 }
 
 func TestIssueStateNoopAndDrift(t *testing.T) {
-	for _, scenario := range []string{"noop", "expected mismatch", "adjacent drift", "post drift", "unreadable post", "wrong post identity"} {
+	for _, scenario := range []string{"noop", "refused", "expected mismatch", "adjacent drift", "adjacent timestamp drift"} {
 		t.Run(scenario, func(t *testing.T) {
 			d := issueWriteDelegate("close")
 			args := issueWriteArgs(t, "close")
-			wantExit, wantWrites := 6, 0
+			wantExit := 6
 			switch scenario {
 			case "noop":
 				args = replaceIssueWriteArg(args, "--expected-state", "closed")
@@ -243,28 +224,23 @@ func TestIssueStateNoopAndDrift(t *testing.T) {
 				args = replaceIssueWriteArg(args, "--expected-state", "closed")
 			case "adjacent drift":
 				d.responses[issueWriteViewOperation][1].Body = issueWriteBody("closed")
-			case "post drift":
-				d.responses[issueWriteViewOperation][2].Body = issueWriteBody("opened")
-				wantWrites = 1
-			case "unreadable post":
-				d.errors[issueWriteViewOperation] = []error{nil, nil, errors.New("untrusted-provider-detail")}
-				wantWrites = 1
-			case "wrong post identity":
-				d.responses[issueWriteViewOperation][2].Body = []byte(strings.ReplaceAll(string(issueWriteBody("closed")), `"id":1001`, `"id":1002`))
-				wantWrites = 1
+			case "adjacent timestamp drift":
+				d.responses[issueWriteViewOperation][1].Body = []byte(strings.ReplaceAll(string(issueWriteBody("opened")), "12:00:00Z", "12:00:01Z"))
+			case "refused":
+				wantExit = 2
 			}
 			out, _, deps := issueWriteTestDeps(t, d)
 			if code := Run(context.Background(), args, deps); code != wantExit {
 				t.Fatalf("exit=%d want=%d %s", code, wantExit, out)
 			}
-			if len(d.inputBodies) != wantWrites || strings.Contains(out.String(), "untrusted-provider-detail") {
+			if len(d.inputBodies) != 0 {
 				t.Fatalf("writes=%d output=%s", len(d.inputBodies), out)
 			}
 			_, _, r := decodeIssueWriteEnvelope(t, out.Bytes())
 			if scenario == "noop" && (r.Outcome != "unchanged" || r.MutationAttempts != 0 || r.Postcondition != "preflight") {
 				t.Fatalf("receipt=%+v", r)
 			}
-			if scenario == "post drift" && (r.Outcome != "conflict" || r.MutationResponse != "accepted" || r.ObservedState != "opened") {
+			if scenario == "refused" && (r.Outcome != "refused" || r.MutationResponse != "not_attempted" || r.MutationAttempts != 0 || r.ObservedState != "opened") {
 				t.Fatalf("receipt=%+v", r)
 			}
 		})

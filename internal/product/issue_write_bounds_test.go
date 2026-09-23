@@ -22,9 +22,8 @@ func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
 	}
 	var fixture struct {
 		Operations []struct {
-			Name    glab.Operation    `json:"name"`
-			Payload map[string]string `json:"payload"`
-			Fields  []string          `json:"response_fields"`
+			Name   glab.Operation `json:"name"`
+			Fields []string       `json:"response_fields"`
 		} `json:"operations"`
 	}
 	if err := json.Unmarshal(data, &fixture); err != nil {
@@ -34,9 +33,6 @@ func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
 		action := "create"
 		if operation.Name == issueNoteCreateOperation {
 			action = "comment"
-		}
-		if operation.Name == issueStateOperation {
-			action = operation.Payload["state_event"]
 		}
 		for _, field := range operation.Fields {
 			t.Run(action+"/missing-"+field, func(t *testing.T) {
@@ -63,8 +59,8 @@ func TestIssueWriteProviderFieldsAreRequiredEvidence(t *testing.T) {
 	}
 }
 
-func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
-	for _, description := range []string{"", strings.Repeat("界", limits.MaxDescriptionBytes/3) + "xy"} {
+func TestIssueCreateExactBounds(t *testing.T) {
+	for _, description := range []string{"body", strings.Repeat("界", limits.MaxDescriptionBytes/3) + "xy"} {
 		t.Run(strconv.Itoa(len(description)), func(t *testing.T) {
 			args := issueWriteArgs(t, "create")
 			title := strings.Repeat("x", limits.MaxTitleBytes)
@@ -86,9 +82,6 @@ func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 			response["title"], response["description"] = title, description
-			if description == "" {
-				response["description"] = nil
-			}
 			encoded, err := json.Marshal(response)
 			if err != nil {
 				t.Fatal(err)
@@ -107,7 +100,7 @@ func TestIssueCreateEmptyDescriptionAndExactBounds(t *testing.T) {
 
 func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 	t.Run("aggregate", func(t *testing.T) {
-		d := issueWriteDelegate("close")
+		d := issueWriteDelegate("comment")
 		// Four individually legal preflight documents nearly exhaust the 8MiB
 		// operation cap. The fifth document cannot turn overflow into success.
 		pad := func(body []byte) []byte {
@@ -119,7 +112,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			}
 		}
 		out, _, deps := issueWriteTestDeps(t, d)
-		if code := Run(context.Background(), issueWriteArgs(t, "close"), deps); code != 6 {
+		if code := Run(context.Background(), issueWriteArgs(t, "comment"), deps); code != 6 {
 			t.Fatalf("exit=%d %s", code, out)
 		}
 		_, _, r := decodeIssueWriteEnvelope(t, out.Bytes())
@@ -127,22 +120,18 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			t.Fatalf("receipt=%+v", r)
 		}
 	})
-	for _, phase := range []string{"preflight", "mutation", "readback"} {
+	for _, phase := range []string{"preflight", "mutation"} {
 		t.Run(phase, func(t *testing.T) {
-			d := issueWriteDelegate("close")
-			views := 0
+			d := issueWriteDelegate("comment")
 			d.doFunc = func(ctx context.Context, r glab.Request) (glab.Response, error, bool) {
 				deadline, ok := ctx.Deadline()
 				if !ok || time.Until(deadline) > limits.WriteOperation {
 					t.Fatal("missing bounded phase deadline")
 				}
-				if r.Operation == issueWriteViewOperation {
-					views++
-				}
-				block := phase == "preflight" || phase == "mutation" && r.Operation == issueStateOperation || phase == "readback" && views == 3
+				block := phase == "preflight" || phase == "mutation" && r.Operation == issueNoteCreateOperation
 				if block {
 					<-ctx.Done()
-					return glab.Response{Write: r.Operation == issueStateOperation}, uxv1.Wrap(uxv1.CodeCanceled, "controlled", ctx.Err()), true
+					return glab.Response{Write: r.Operation == issueNoteCreateOperation}, uxv1.Wrap(uxv1.CodeCanceled, "controlled", ctx.Err()), true
 				}
 				return glab.Response{}, nil, false
 			}
@@ -150,7 +139,7 @@ func TestIssueWriteAggregateBudgetAndPhaseCancellation(t *testing.T) {
 			defer cancel()
 			out, _, deps := issueWriteTestDeps(t, d)
 			start := time.Now()
-			code := Run(ctx, issueWriteArgs(t, "close"), deps)
+			code := Run(ctx, issueWriteArgs(t, "comment"), deps)
 			if time.Since(start) > time.Second {
 				t.Fatal("caller deadline ignored")
 			}

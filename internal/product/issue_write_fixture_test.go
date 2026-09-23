@@ -16,7 +16,6 @@ const (
 	issueWriteViewOperation    glab.Operation = "issue-write-view"
 	issueCreateOperation       glab.Operation = "issue-create"
 	issueNoteCreateOperation   glab.Operation = "issue-note-create"
-	issueStateOperation        glab.Operation = "issue-state"
 )
 
 // Retain the feature's exhaustive response/drift fixtures while exercising the
@@ -39,8 +38,6 @@ func (f issueWriteFixtureTransport) RoundTrip(r *http.Request) (*http.Response, 
 		request.Operation = issueCreateOperation
 	case "POST /api/v4/projects/101/issues/42/notes":
 		request.Operation = issueNoteCreateOperation
-	case "PUT /api/v4/projects/101/issues/42":
-		request.Operation = issueStateOperation
 	default:
 		f.t.Fatal("unexpected native issue fixture route")
 	}

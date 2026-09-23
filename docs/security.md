@@ -83,40 +83,42 @@ is attempted. Default `board list` and `board view` never select issues; all
 query documents and tier differences are pinned in
 `contracts/gitlab-planning/v19.3.0/`.
 
-Issue create/note/state require `--auth-source native` and are pinned in
-`contracts/issue-writes/v1.json` and `provider-v1.json`. One native client and
-credential handles every preflight, mutation and readback; no official-profile
-fallback or account equivalence is assumed. The shared boundary refuses all
-redirects before a second request. Explicit caller-bound numeric project and
-issue identities are checked against canonical HTTPS URLs under the configured
-native web authority, which may differ from the API host/path. Mutations use numeric
-project routes, preventing a project-path rename from redirecting a write to a
-replacement project. Private descriptor-validated content is bounded before
-credential resolution, and request JSON remains in memory. Slash-leading description/comment lines are denied even inside code
-fences because GitLab quick actions can perform additional mutations.
-New bodies are then canonicalized by removing carriage returns and trailing
-ASCII whitespace, preserving leading/internal whitespace and Unicode spaces.
-Exact response comparisons and request hashes use the canonical submitted body.
+Issue create/note and state observations require `--auth-source native` and are
+pinned in `contracts/issue-writes/v1.json` and `provider-v1.json`. One native client
+and credential handles every request; no official-profile fallback or account
+equivalence is assumed. The shared boundary refuses all redirects before a second
+request. Caller-bound numeric project and issue identities must match canonical
+HTTPS URLs under the configured native web authority, including API/web mappings.
+Create/note mutations use numeric project routes. Private descriptor-validated
+content is bounded before credential resolution, and request JSON stays in memory.
 
-There is one mutation attempt per invocation, without retry. No latest-note or
-title search can establish write authorship. Create/note success requires the
-direct response's exact identity and content. State commands validate two
-preflight observations and make one state-event PUT, followed by one exact
-readback. A state mutation requires stable observed title/description and refuses
-existing descriptions with slash-leading lines or normalization-sensitive
-whitespace. Response and readback content must match the observation. These are
-observations, NOT an atomic expected-revision guarantee or
-exclusive authorship. An unconfirmed mutation remains ambiguous even if the
-state readback matches. A confirmed response followed by state drift is a
-conflict. Already-matching bound states return a no-write receipt. Error receipts
-disclose attempt count, response evidence and observed state without raw provider
-errors. `retry_safe` and `atomic_precondition` are always false. Reinvoking create
-or comment can duplicate the resource. No comments are bundled with state changes,
-and GitHub close reasons are not translated into invented GitLab properties.
-Concurrent description sanitization and default-template quick actions for blank
-creation remain [provider blockers](../contracts/issue-writes/review-blockers.md).
-The snapshot checks cannot prove absence of collateral effects, and this scope
-does not authorize those effects.
+New slash-leading description/comment lines are denied even inside code fences.
+After original input bounds, title normalization strips only surrounding ASCII
+whitespace. New bodies remove carriage returns and trailing ASCII whitespace;
+leading/internal body whitespace and Unicode spaces remain unchanged. Hashes and
+exact direct response checks use the canonical request. Normalized-empty and
+whitespace-only create descriptions return `unsupported` before credentials or
+HTTP, preventing default-template quick actions without filler or compensation.
+This temporarily excludes title-only and blank creation, even without a template.
+
+Create/note allow at most one mutation attempt without retry or reconciliation
+searches. Their direct responses must prove exact identity and content. Unconfirmed
+outcomes remain ambiguous, and another invocation can duplicate the resource.
+Close/reopen send no PUT: an actual transition returns `unsupported` with a
+`refused` receipt, zero attempts and `mutation_response=not_attempted`.
+Already-matching bound states return `unchanged` with `postcondition=preflight`.
+Those reads establish observations only, never an atomic precondition or exclusive
+authorship. Existing descriptions are not filtered, normalized or resubmitted;
+fenced content does not prevent a read-only no-op. Snapshot checks cannot prevent
+concurrent content sanitization by GitLab, so no state mutation path remains.
+
+Receipts disclose attempts, response evidence and observed state without private
+content or raw provider errors. For refused/no-op state requests, `requested_sha256`
+hashes intent only, not a transmitted payload. `retry_safe` and
+`atomic_precondition` remain false. No GitHub close reasons or bundled comments
+are supported. The [temporary parity gaps](../contracts/issue-writes/review-blockers.md)
+remain explicit; the increment does not claim full issue parity or authorize
+collateral content/quick-action effects.
 
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds

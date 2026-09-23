@@ -1,101 +1,89 @@
 # Typed issue writes
 
 `v1.json` pins the executable consumer grammar and bounded UX-v1 receipt.
-`provider-v1.json` pins the GitLab REST routes, request/response fields and
-semantic evidence. Issue create, comment/note and close/reopen require explicit
-`--auth-source native`, host, project, numeric identities and canonical URL.
-They reuse `internal/product/native.go` and `internal/productnative` for one
-existing-native environment/keyring identity throughout the complete operation.
-There is no official-profile fallback or account-equivalence assumption.
-Existing read/merge/ensure defaults and frozen native-v1 are unchanged.
+`provider-v1.json` pins the GitLab REST routes, fields and semantic evidence.
+Create, comment/note and close/reopen require explicit `--auth-source native`,
+host, project, numeric identities and canonical URL. They reuse one existing-native
+environment/keyring identity through `internal/product/native.go` and
+`internal/productnative`, without official-profile fallback or account-equivalence
+assumptions. Existing defaults and frozen native-v1 are unchanged.
 
-## Delegated dependency evidence
+## Scope and temporary gaps
 
-Pinned official `glab` 1.112.0 follows HTTP 301/302/303 for issue-create POST,
-issue-note POST and issue-state PUT to a different HTTPS authority as GET,
-forwarding the synthetic `Private-Token` in the local characterization fixture.
-307/308 do not redirect these private-input requests in that fixture. The
-upstream behavior is NOT fixed or used as the public issue-write backend.
-`TestPinnedOfficialGlabIssueWritesRedirectCharacterization` preserves that
-negative evidence. The native acceptance tests instead require zero redirected
-requests for every status, including same-origin cross-path redirects.
-No production service or real credential is involved.
+Supported mutations are nonblank ordinary issue creation and plain issue notes;
+`note` remains a thin alias for `comment`. This is not full reference issue parity.
+Close/reopen transitions temporarily return `unsupported` with zero mutation
+attempts. Already-matching caller-bound states return read-only `unchanged`
+observations. Title-only, normalized-empty and whitespace-only creation is also
+temporarily unavailable, even for projects without a default template. The
+[provider evidence](review-blockers.md) explains these boundaries. No filler,
+compensating mutation or collateral-operation authority is introduced.
 
-## Scope and private input
+Private title/body files are descriptor-validated and bounded before credentials.
+Request JSON stays in memory. Numeric mutation routes and exact configured web
+URLs bind the selected project and issue identities. After original file bounds,
+titles strip surrounding ASCII whitespace, preserving internal and Unicode spaces.
+New descriptions/notes reject quick-action-shaped lines even in code fences, then
+remove carriage returns and trailing ASCII whitespace. Leading/internal body
+whitespace and Unicode spaces remain unchanged. Hashes and exact response checks
+use this canonical content. Existing issue content is never filtered, normalized
+or resubmitted by state actions; fenced code permits read-only no-ops.
 
-Coverage is ordinary issue creation, plain issue notes (`comment`/`note`) and
-individual reversible close/reopen requests, not full reference issue parity.
-Title/body content enters through descriptor-validated private files before
-credential resolution. Request JSON stays in memory. Numeric project routes
-prevent a mutable project path from selecting a replacement project; exact
-web URLs are bound to the configured native web origin and path prefix.
-Quick-action-shaped lines are rejected even inside Markdown code fences.
-After the private-file size and quick-action checks, new description/note bodies
-lose carriage returns and trailing ASCII space, tab, newline, vertical tab and
-form feed, matching the pinned provider extractor. Leading/internal whitespace
-and Unicode spaces are preserved. The request hash and exact response comparison
-use this canonical content.
-Labels, assignment, milestone, custom types, attachments, delete/move, lock,
-hierarchy and bundled comment+close are not included.
+Labels, assignment, milestones, custom types, attachments, delete/move, lock,
+hierarchy, GitHub close reasons and bundled comment+close are outside this contract.
+Existing `issue edit` remains validation-only. Windows persisted-native-config/
+self-managed mapping remains unproven.
 
 ## Receipts and concurrency
 
-- Create/comment accept only direct response evidence for the exact resource
-  and content. They never look up the latest note or an issue by title to claim
-  authorship or idempotency.
-- Close/reopen take `--expected-state opened|closed`. This is a preflight
-  observation, not a server-enforced precondition. Two reads detect observed
-  drift but cannot prevent another writer in the remaining window. Only
-  `state_event` is submitted; there is no atomic expected revision.
-  Before PUT, existing title/description evidence must match across those reads;
-  descriptions with slash-leading lines or provider-sensitive whitespace are
-  refused. Existing content is never resubmitted or normalized by the client.
-- An accepted state response plus exact readback returns `state_observed`, not
-  exclusive authorship. Response content must match the preflight observation;
-  later different state or content is `conflict`.
-- Matching preflight state returns `unchanged` without a mutation.
-- A definite HTTP rejection reports `rejected`. Otherwise an unconfirmed,
-  canceled, oversized, malformed or redirected mutation outcome is ambiguous.
-  State readback cannot promote an unconfirmed response to success. A new
-  invocation is a new attempt. Never retry blindly.
-- `mutation_attempts` counts zero or one intended native transfer, not proof of
-  transmission or provider application. `mutation_response`, `postcondition`
-  and the compact typed request's SHA-256 provide bounded evidence without
-  private content or raw provider errors. `atomic_precondition` and `retry_safe`
-  are always false.
-- GitLab `closed`/`opened` does not model GitHub `completed`/`not_planned` close
-  reasons. Comments and state events remain separate invocations.
-
-Existing `issue edit` remains validation-only in this increment, including its
-label-name races and missing expected revision. Existing-content and label
-changes are outside the authorized issue-write scope. However, raced description
-sanitization (R1) and default-template effects on blank creates (R2) remain
-[unresolved provider blockers](review-blockers.md); observed-content checks do
-not establish absence of collateral effects. Windows persisted-native-config/self-managed
-mapping remains unproven; this increment does not claim or implement general
-Windows authentication support.
+- Create/comment accept only direct response evidence for exact identity and
+  content. They never search by title or latest note to claim authorship or replay.
+- Close/reopen take `--expected-state opened|closed`. Identity/state drift fails
+  preflight. Matching requested state returns `unchanged`; otherwise the
+  `unsupported` error carries `outcome=refused`. Both have zero mutation attempts,
+  `mutation_response=not_attempted` and `postcondition=preflight`. These are
+  observations, not atomic preconditions or exclusive authorship.
+- Definite HTTP rejection of create/note reports `rejected`. Unconfirmed,
+  canceled, oversized, malformed or redirected outcomes remain `ambiguous_create`.
+  Another invocation is a new attempt and may duplicate the resource.
+- `mutation_attempts` counts zero or one intended transfer, not proof of receipt
+  or application. `requested_sha256` hashes canonical requested JSON; for state
+  refusals/no-ops it describes intent only, with no payload transmitted.
+  `atomic_precondition` and `retry_safe` are always false. No private content or
+  raw provider errors appear in receipts.
 
 ## Executable evidence
 
 - `TestPinnedIssueWritesConsumerContract`: public grammar, excluded fields,
-  independent invocations and distinct direct-response identities.
+  independent create/note invocations, distinct identities and state refusals.
 - `TestIssueWritesNativeContractExecutableAliases`: both built executable names
-  against local TLS with private config/CA and synthetic environment credentials;
-  success, rejection, lost/malformed responses, target mismatch, no-op and
-  no-child/no-network input denials. Official glab is a child-invocation trap.
-- Other `TestIssueWritesNativeContract*`: one environment/keyring identity for
-  the full sequence, native unavailability without fallback, configured API/web
-  mapping, every redirect and ambiguous state readback.
-- `TestIssueWrite*`, `TestIssueState*` and the provider-field fixture: payload,
-  drift, response bounds, cancellation, missing evidence and one-attempt tests.
-- `TestIssueWriteProviderContentNormalization` and
-  `TestIssueStateProviderExistingDescription`: ordinary file normalization and
-  pre-mutation refusal of descriptions that the provider would rewrite.
-- `TestIssueWriteProviderUnresolvedCollateralCharacterization`: negative
-  evidence for the remaining template/concurrent-content blockers, not acceptance.
-- Official-glab fixture tests characterize only the pinned dependency; they do
-  not substitute for native product validation.
+  against local TLS, isolated config/CA and synthetic credentials; create/note
+  success, response failures, normalization, state refusals/no-ops, blank denials
+  and zero official-child invocations.
+- Other `TestIssueWritesNativeContract*`: one environment/keyring credential,
+  native unavailability without fallback, API/web mapping and redirect refusal.
+- `TestIssueWritesApprovedStateBoundary`: zero mutations despite concurrent
+  description insertion, with ordinary, empty, command, fenced and CRLF content.
+- `TestIssueWritesApprovedBlankCreateBoundary`: zero template effects for blank
+  inputs; nonblank creation works with absent, ordinary and quick-action templates.
+- `TestIssueCreateProviderTitleNormalization` and
+  `TestIssueWriteProviderContentNormalization`: provider normalization, original
+  bounds, canonical request hashes and exact response evidence.
+- Other issue-write tests cover response fields, drift, bounds, cancellation,
+  quick-action denials and one-attempt semantics.
 
-There are no list/search/paginated requests in this contract. Phase deadlines
-are 10/20/10 seconds inside the native 45-second lifetime. JSON response and
-aggregate bounds remain 2 MiB and 8 MiB.
+There are no list/search/paginated requests. Preflight/mutation budgets are 10/20
+seconds inside the 45-second operation lifetime. JSON response and aggregate
+bounds remain 2 MiB and 8 MiB. `cmd/gen-product` owns generated help, skills and
+the issue-write receipt schema.
+
+## Delegated dependency evidence
+
+Pinned official `glab` 1.112.0 follows HTTP 301/302/303 for issue-create POST,
+issue-note POST and issue-state PUT to another HTTPS authority as GET, forwarding
+the synthetic `Private-Token` in the local characterization fixture. 307/308 do not
+redirect those requests in that fixture. The upstream behavior is not fixed or
+used for public issue writes. `TestPinnedOfficialGlabIssueWritesRedirectCharacterization`
+preserves test-only negative evidence. Native acceptance requires zero redirected
+requests, including same-origin cross-path redirects. No live provider or real
+credential is involved.

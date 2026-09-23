@@ -1,4 +1,7 @@
-{
+package product
+
+func IssueWriteSchema() string {
+	return `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://glab-axi.invalid/schema/ux-v1/issue-write.schema.json",
   "title": "Typed issue create, note and state observation receipt",
@@ -78,4 +81,6 @@
       ]
     }
   }
+}
+`
 }

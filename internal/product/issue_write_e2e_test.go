@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/testgitlab"
 )
 
@@ -39,10 +40,15 @@ func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, action := range []string{"create", "comment", "note", "close", "reopen"} {
-				for _, mode := range []string{"success", "rejected", "lost", "malformed", "wrong-project", "wrong-iid", "invalid-host", "invalid-url", "quick-action", "noop", "missing-native", "redirect"} {
+				modes := []string{"success", "rejected", "lost", "malformed", "wrong-project", "wrong-iid", "invalid-host", "invalid-url", "quick-action", "missing-native", "redirect", "normalized-body"}
+				if action == "close" || action == "reopen" {
+					modes = []string{"refused", "wrong-project", "wrong-iid", "invalid-host", "invalid-url", "noop", "missing-native"}
+				} else if action == "create" {
+					modes = append(modes, "blank-description", "title-whitespace")
+				}
+				for _, mode := range modes {
 					t.Run(action+"/"+mode, func(t *testing.T) {
-						stateOp := action == "close" || action == "reopen"
-						if mode == "noop" && !stateOp || mode == "quick-action" && stateOp || mode == "wrong-iid" && action == "create" {
+						if mode == "wrong-iid" && action == "create" {
 							t.Skip("not applicable")
 						}
 						token := strings.Join([]string{"synthetic", "native", "executable", action}, "-")
@@ -104,6 +110,21 @@ func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
 						args := issueNativeArgs(t, action)
 						wantExit, wantWrites := 0, 1
 						switch mode {
+						case "refused":
+							wantExit, wantWrites = 2, 0
+						case "blank-description":
+							setIssueWriteBodyFile(t, args, " \t\r\n")
+							wantExit, wantWrites = 2, 0
+						case "normalized-body":
+							setIssueWriteBodyFile(t, args, "new body\r\n")
+						case "title-whitespace":
+							for i, v := range args {
+								if v == "--title-file" {
+									if err := os.WriteFile(args[i+1], []byte(" new title \t\n"), 0600); err != nil {
+										t.Fatal(err)
+									}
+								}
+							}
 						case "rejected":
 							wantExit = 2
 						case "lost", "malformed", "redirect":
@@ -164,9 +185,19 @@ func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
 						if strings.Contains(out.String(), "untrusted provider detail") {
 							t.Fatal("raw provider error escaped")
 						}
-						if mode == "invalid-host" || mode == "invalid-url" || mode == "quick-action" || mode == "missing-native" {
+						if mode == "invalid-host" || mode == "invalid-url" || mode == "quick-action" || mode == "missing-native" || mode == "blank-description" {
 							if len(requests) != 0 {
 								t.Fatal("invalid input made a network request")
+							}
+						}
+						if mode == "refused" || mode == "noop" {
+							ok, errCode, r := decodeIssueWriteEnvelope(t, out.Bytes())
+							wantOutcome := "refused"
+							if mode == "noop" {
+								wantOutcome = "unchanged"
+							}
+							if ok != (mode == "noop") || mode == "refused" && errCode != uxv1.CodeUnsupported || r.Outcome != wantOutcome || r.MutationAttempts != 0 || r.MutationResponse != "not_attempted" || r.Postcondition != "preflight" || r.ObservedState == "" || r.RetrySafe || r.AtomicPrecondition || len(requests) != 4 {
+								t.Fatalf("state receipt=%+v code=%s requests=%d", r, errCode, len(requests))
 							}
 						}
 						if wantWrites == 1 {

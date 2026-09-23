@@ -1,84 +1,74 @@
-# Remaining provider incompatibilities
+# Temporary issue parity gaps
 
-R1 is mitigated for descriptions observed before mutation, but remains open
-for concurrent description changes. R2 remains open. This increment does not
-yet satisfy the required absence of collateral content/quick-action effects.
-These are release blockers, not authority to perform the extra operations.
+State transitions and blank creation are temporarily refused to prevent provider
+content/quick-action effects outside the authorized scope. Nonblank ordinary
+creation, plain comments and the thin `note` alias remain supported. This boundary
+does not establish full issue parity or resolve the provider mechanisms below.
+Existing `issue edit` remains validation-only.
 
-## R1: state updates sanitize stored content
+## State transitions
 
 The pinned GitLab
 [update service](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issuable_base_service.rb#L177)
-feeds the existing description through quick-action extraction when a PUT
-contains only `state_event`. Its
+feeds the stored description through quick-action extraction even for a
+`state_event`-only PUT. The
 [interpreter](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/quick_actions/interpret_service.rb#L58)
-subtracts the original commands' parameter changes, but still returns stripped
-text. The reproduction must distinguish this content removal from executing
-the same stored label command again.
+subtracts existing command parameter changes but still returns stripped text.
+Stored command removal is a collateral content edit, even without executing the
+same stored label command again.
 
-`TestIssueStateProviderExistingDescription` failed before the guard: both close
-and reopen changed `keep\n/label ~bug` to `keep` and returned `state_observed`.
-Trailing newlines and carriage returns were also rewritten. Ordinary and empty
-descriptions passed the control cases. The guard now rejects observed command
-lines and normalization-sensitive descriptions before PUT. It also requires
-observed content stability, checks response/readback content, and preserves
-no-write no-ops. It never submits replacement description/title content.
-
-The remaining counterexample is `state-description-race` in
-`TestIssueWriteProviderUnresolvedCollateralCharacterization`: both preflight
-reads see `keep`; another writer inserts `keep\n/label ~bug` before PUT; GitLab
-strips the newly stored command and returns `keep`. The direct response and
-readback match the original snapshots. They cannot detect that collateral edit,
-and `state_observed` proves only the observed state/content. The receipt still
-sets `atomic_precondition=false`.
-
+Two reads can both observe `keep`, followed by another writer storing
+`keep\n/label ~bug`. The PUT strips that new command text and returns `keep`, so
+matching preflight/response/readback snapshots cannot prevent or detect the edit.
 The pinned [REST route](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/api/issues.rb#L383)
-offers neither an extraction-bypass parameter nor a conditional revision guard.
-`updated_at` is a writable timestamp, not a precondition. Submitting the old
-description would authorize an overwrite and does not fix the race. Fully
-preventing this effect requires a supported provider mechanism or a separately
-decided product boundary; the observed-content guard alone does not resolve R1.
+offers neither an extraction bypass nor an atomic expected revision.
 
-## R2: blank creation invokes the default template
+`TestIssueWritesApprovedStateBoundary` reproduced that mutation before correction.
+Close/reopen now have no PUT path: actual transitions return `unsupported` and a
+`refused` receipt with zero mutation attempts. Already-matching bound states return
+`unchanged` from read-only observations. The previous existing-description guard
+is removed: ordinary fenced `/usr/bin/env` content is inert under the pinned
+[extractor](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/gitlab/quick_actions/extractor.rb#L87)
+and does not prohibit a read-only no-op. No existing content is filtered or
+resubmitted, and no snapshot grants mutation authority.
+
+## Blank creation
 
 The pinned
 [create service](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/services/issues/create_service.rb#L164)
-substitutes a default template when the description is blank. Its
+substitutes a template for blank descriptions. Its
 [service tests](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/spec/services/issues/create_service_spec.rb#L223)
-cover both template substitution and its quick-action effects. The pinned REST
-create parameters provide no template-bypass option.
+cover template substitution and quick-action effects. A `/label ~bug` template can
+add a label yet return an empty description, passing exact empty-body checks.
+There is no supported template-bypass option in the pinned REST create parameters.
 
-The TLS CLI characterization reproduced these outcomes before fixes:
+`TestIssueWritesApprovedBlankCreateBoundary` reproduced the unrequested label
+mutation before correction. Normalized-empty and whitespace-only descriptions
+now return `unsupported` before credentials or HTTP. This also temporarily refuses
+otherwise ordinary blank/title-only creation without a template. Nonblank plain
+creation remains supported, including with quick-action templates configured.
+There is no filler body, template-preflight permission claim or second mutation.
 
-| Submitted description | Default template | Stored description | Labels added | CLI result |
-| --- | --- | --- | --- | --- |
-| Empty | Absent | Empty | None | `created` |
-| Empty | `template body` | `template body` | None | `ambiguous_create` |
-| Empty | `/label ~bug` | Empty | `bug` | `created` |
-| `ordinary body` | `/label ~bug` | `ordinary body` | None | `created` |
+## Normalization and preserved boundaries
 
-A template preflight would be another raced observation, not prevention at
-creation time. Rejecting every blank body would remove the valid first row;
-filler text, a second mutation, or a made-up server parameter would change the
-approved contract. Blank creation is retained pending the supervisor's concrete
-boundary decision. The quick-action-template case still requires resolution.
+Titles use the pinned
+[issuable stripping declaration](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/models/concerns/issuable.rb#L140)
+and [strip attribute implementation](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/app/models/concerns/strip_attribute.rb#L29):
+Ruby [String#strip](https://docs.ruby-lang.org/en/3.4/String.html#method-i-strip)
+removes surrounding ASCII whitespace, preserving internal and Unicode spaces.
+`TestIssueCreateProviderTitleNormalization` reproduced successful mutation followed
+by `ambiguous_create` for ` new title \t\n` before correction. Canonical titles now
+enter request hashing and exact response verification after original input limits.
+New descriptions/notes retain the previously corrected carriage-return and trailing
+ASCII whitespace normalization, without weakening quick-action denials.
 
-## Completed corrections and evidence scope
+Unused delegated issue-write production builders remain removed; dependency
+characterization stays test-only. The single native client retains the 2 MiB
+response bound and 8 MiB aggregate budget without duplicate handler accounting.
+Source ancestry remains pinned in `v1.json`. No account-equivalence claim, replay,
+redirect, alternate transport, credential export or new credential store is added.
 
-- R3 canonicalizes new descriptions/comments with the pinned
-  [extractor's rules](https://gitlab.com/gitlab-org/gitlab/-/blob/v19.3.0-ee/lib/gitlab/quick_actions/extractor.rb#L87):
-  remove carriage returns and trailing ASCII whitespace. Input limits apply
-  before normalization; leading/internal whitespace and Unicode spaces survive.
-  Request hashes and exact response checks use the submitted canonical content.
-- R4 removes unused production delegated issue-write builders and capability
-  entries. Pinned official-client TLS/redirect probes are test-only; the unsafe
-  upstream redirect behavior is not represented as fixed.
-- R5 retains `note` as the existing thin alias for `comment`.
-- R6 removes handler byte accounting; every request still goes through the same
-  native client with a 2 MiB response bound and 8 MiB operation budget. Behavioral
-  overflow tests remain in place.
-
-Fixtures use local TLS and synthetic credentials only. They model the cited
-provider paths; they are not evidence from a live GitLab installation. Passing
-the explicitly named unresolved characterization test confirms the remaining
-counterexamples and must not be interpreted as safety acceptance or waiver.
+Regression fixtures execute the public command interface against local TLS and
+synthetic credentials. They model the cited provider paths and are not evidence
+from a live GitLab installation. Tests assert zero forbidden mutations and retain
+positive create/comment/no-op controls; unsafe effects are not success criteria.

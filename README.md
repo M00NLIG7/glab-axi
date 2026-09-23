@@ -188,24 +188,31 @@ provider acknowledgment and bounded reconciliation. GitLab hidden/masked/
 protected semantics are distinct. No actual secret access or live acceptance
 is implied by the isolated tests.
 
-Typed `issue create`, `issue comment` (`note` alias), `issue close`, and
-`issue reopen` are separate one-attempt writes requiring `--auth-source native`.
-One existing-native environment/keyring identity handles the complete operation;
-no official profile is used, and the two accounts need not be equivalent.
-They require explicit host, project, numeric project identity and canonical URL
-bound to the configured native web authority; existing issues also require
-their global ID and IID. Create takes private title/description files, comments
-private body files. Quick-action-shaped lines are refused before child work.
-State commands check the caller's observed state and read it back, but GitLab
-cannot enforce an atomic expected revision. Lost responses remain ambiguous,
-including when a later state read matches. Another invocation is a new attempt,
-not an exactly-once or deduplicated replay. No GitHub close reason, bundled
-comment, attachments, labels, assignees or milestone writes are included.
-All redirects and automatic retries are refused by the shared native boundary.
-Windows persisted-native-config/self-managed mapping remains unproven.
-See [`contracts/issue-writes`](contracts/issue-writes/) and leaf help.
-Provider sanitization of concurrently changed descriptions and default-template
-effects on blank creation remain [release blockers](contracts/issue-writes/review-blockers.md).
+Typed `issue create` and `issue comment` (`note` alias) allow at most one
+mutation per invocation and require `--auth-source native`. One existing-native
+environment/keyring identity handles the complete operation; no official profile
+is used, and the two accounts need not be equivalent. Explicit host, project,
+numeric project identity and canonical URL bind the configured native web
+authority; existing issues also require their global ID and IID.
+
+Create takes private title and nonblank description files; comments take private
+body files. Original input limits apply before normalization. Titles strip
+surrounding ASCII whitespace; bodies remove carriage returns and trailing ASCII
+whitespace. Direct response content must match exactly. New quick-action-shaped
+lines are refused before credential resolution. Lost responses remain ambiguous;
+another invocation can create a duplicate. Redirects and automatic retries are
+refused by the shared native boundary.
+
+Two temporary parity gaps prevent unauthorized provider effects: blank or
+title-only creation returns `unsupported` before credentials or HTTP, and
+`issue close`/`issue reopen` refuse actual transitions with zero mutation attempts.
+Already-matching caller-bound states return `unchanged`, a read-only preflight
+observation. Existing descriptions, including fenced code, are not filtered or
+resubmitted. No atomic revision, GitHub close reason, bundled comment, attachments,
+labels, assignees or milestone writes are included. Windows persisted-native-config/
+self-managed mapping remains unproven. See
+[`contracts/issue-writes`](contracts/issue-writes/) and the
+[temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
 The denial boundary includes generic API, existing-issue content/label mutation,
 unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,

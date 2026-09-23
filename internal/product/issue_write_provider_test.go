@@ -7,13 +7,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"gl-axi/internal/contract/uxv1"
-	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/testgitlab"
 )
 
@@ -23,6 +21,7 @@ type issueWriteProviderFixture struct {
 	description     string
 	template        string
 	raceDescription string
+	issueReads      int
 	labels          []string
 	writes          int
 }
@@ -42,6 +41,7 @@ func (f *issueWriteProviderFixture) ServeHTTP(w http.ResponseWriter, r *http.Req
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 101, "path_with_namespace": "group/project", "web_url": issueNativeWeb + "/group/project"})
 		return
 	case "GET /projects/101/issues/42":
+		f.issueReads++
 	case "POST /projects/101/issues", "POST /projects/101/issues/42/notes", "PUT /projects/101/issues/42":
 		var payload map[string]string
 		if json.NewDecoder(r.Body).Decode(&payload) != nil {
@@ -50,9 +50,6 @@ func (f *issueWriteProviderFixture) ServeHTTP(w http.ResponseWriter, r *http.Req
 		}
 		f.writes++
 		if r.Method == http.MethodPut {
-			if f.raceDescription != "" {
-				f.description = f.raceDescription
-			}
 			f.description = strings.TrimSuffix(f.description, "\n/label ~bug")
 			f.description = strings.TrimRight(strings.ReplaceAll(f.description, "\r", ""), " \t\n\v\f")
 			f.state = "closed"
@@ -68,6 +65,7 @@ func (f *issueWriteProviderFixture) ServeHTTP(w http.ResponseWriter, r *http.Req
 			})
 			return
 		} else {
+			record["title"] = strings.Trim(payload["title"], " \t\n\v\f\r\x00")
 			f.description = payload["description"]
 			if strings.TrimSpace(f.description) == "" {
 				f.description = f.template
@@ -86,6 +84,9 @@ func (f *issueWriteProviderFixture) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	record["description"], record["state"], record["labels"] = f.description, f.state, f.labels
 	_ = json.NewEncoder(w).Encode(record)
+	if r.Method == http.MethodGet && f.issueReads == 2 && f.raceDescription != "" {
+		f.description = f.raceDescription
+	}
 }
 
 func setIssueWriteBodyFile(t *testing.T, args []string, body string) {
@@ -157,48 +158,6 @@ func TestIssueWriteProviderContentNormalization(t *testing.T) {
 	}
 }
 
-func TestIssueStateProviderExistingDescription(t *testing.T) {
-	for _, action := range []string{"close", "reopen"} {
-		for _, test := range []struct {
-			name, description string
-			unsafe            bool
-		}{
-			{"ordinary", "keep\nordinary text", false},
-			{"empty", "", false},
-			{"imported-command", "keep\n/label ~bug", true},
-			{"trailing-newline", "keep\n", true},
-			{"carriage-return", "ke\rep", true},
-		} {
-			t.Run(action+"/"+test.name, func(t *testing.T) {
-				state := "opened"
-				if action == "reopen" {
-					state = "closed"
-				}
-				provider := &issueWriteProviderFixture{state: state, description: test.description}
-				server := testgitlab.New(provider)
-				defer server.Close()
-				token := strings.Join([]string{"synthetic", "provider", "state"}, "-")
-				out, stderr, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
-				code := Run(context.Background(), issueNativeArgs(t, action), deps)
-				assertIssueNativePrivate(t, out.Bytes(), stderr.Bytes(), server.Requests(), token)
-				provider.mu.Lock()
-				defer provider.mu.Unlock()
-				if provider.description != test.description {
-					t.Fatalf("state-only request rewrote description: %q -> %q; exit=%d output=%s", test.description, provider.description, code, out)
-				}
-				if test.unsafe {
-					_, errCode, _ := decodeIssueWriteEnvelope(t, out.Bytes())
-					if errCode != uxv1.CodeSecurityBoundary || provider.writes != 0 {
-						t.Fatalf("unsafe description reached mutation: writes=%d output=%s", provider.writes, out)
-					}
-				} else if code != 0 || provider.writes != 1 {
-					t.Fatalf("ordinary state operation failed: exit=%d output=%s", code, out)
-				}
-			})
-		}
-	}
-}
-
 func TestIssueWriteNormalizationRetainsQuickActionDenials(t *testing.T) {
 	for _, action := range []string{"create", "comment", "note"} {
 		for _, body := range []string{"hello\n/label ~bug\n", "\r/la\rbel ~bug\r\n", "```\r\n/label ~bug\r\n```\r\n"} {
@@ -218,116 +177,4 @@ func TestIssueWriteNormalizationRetainsQuickActionDenials(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestIssueStateContentEvidence(t *testing.T) {
-	for _, phase := range []string{"preflight", "mutation", "readback"} {
-		for _, field := range []string{"title", "description"} {
-			for _, missing := range []bool{false, true} {
-				t.Run(phase+"/"+field+"/missing="+strconv.FormatBool(missing), func(t *testing.T) {
-					d := issueWriteDelegate("close")
-					op, index := issueWriteViewOperation, 1
-					wantWrites, wantCode := 0, uxv1.CodeConflict
-					if missing {
-						wantCode = uxv1.CodeUpstream
-					}
-					if phase == "mutation" {
-						op, index, wantWrites, wantCode = issueStateOperation, 0, 1, uxv1.CodeAmbiguousUpdate
-					} else if phase == "readback" {
-						index, wantWrites, wantCode = 2, 1, uxv1.CodeConflict
-					}
-					var record map[string]any
-					if err := json.Unmarshal(d.responses[op][index].Body, &record); err != nil {
-						t.Fatal(err)
-					}
-					if missing {
-						delete(record, field)
-					} else {
-						record[field] = "different content"
-					}
-					body, err := json.Marshal(record)
-					if err != nil {
-						t.Fatal(err)
-					}
-					d.responses[op][index].Body = body
-					out, _, deps := issueWriteTestDeps(t, d)
-					code := Run(context.Background(), issueWriteArgs(t, "close"), deps)
-					ok, errCode, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-					if code == 0 || ok || errCode != wantCode || len(d.inputBodies) != wantWrites {
-						t.Fatalf("unproven content accepted: writes=%d output=%s", len(d.inputBodies), out)
-					}
-					if wantWrites == 1 && (receipt.MutationAttempts != 1 || receipt.ObservedState != "closed" || receipt.AtomicPrecondition || receipt.RetrySafe) {
-						t.Fatalf("receipt=%+v", receipt)
-					}
-				})
-			}
-		}
-	}
-}
-
-func TestIssueStateUnsafeDescriptionNoop(t *testing.T) {
-	d := issueWriteDelegate("close")
-	for i := range d.responses[issueWriteViewOperation] {
-		var record map[string]any
-		if err := json.Unmarshal(issueWriteBody("closed"), &record); err != nil {
-			t.Fatal(err)
-		}
-		record["description"] = "keep\n/label ~bug"
-		body, err := json.Marshal(record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		d.responses[issueWriteViewOperation][i] = glab.Response{Body: body}
-	}
-	args := replaceIssueWriteArg(issueWriteArgs(t, "close"), "--expected-state", "closed")
-	out, _, deps := issueWriteTestDeps(t, d)
-	code := Run(context.Background(), args, deps)
-	_, _, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-	if code != 0 || len(d.inputBodies) != 0 || receipt.Outcome != "unchanged" || receipt.MutationAttempts != 0 {
-		t.Fatalf("read-only no-op failed: exit=%d output=%s", code, out)
-	}
-}
-
-func TestIssueWriteProviderUnresolvedCollateralCharacterization(t *testing.T) {
-	for _, test := range []struct {
-		name, body, template string
-		wantCode, wantLabels int
-	}{
-		{"blank-absent-template", "", "", 0, 0},
-		{"blank-ordinary-template", "", "template body", 6, 0},
-		{"blank-quick-action-template", "", "/label ~bug", 0, 1},
-		{"explicit-quick-action-template", "ordinary body", "/label ~bug", 0, 0},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			provider := &issueWriteProviderFixture{template: test.template}
-			server := testgitlab.New(provider)
-			defer server.Close()
-			token := strings.Join([]string{"synthetic", "provider", "template"}, "-")
-			out, _, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
-			args := issueNativeArgs(t, "create")
-			setIssueWriteBodyFile(t, args, test.body)
-			code := Run(context.Background(), args, deps)
-			provider.mu.Lock()
-			defer provider.mu.Unlock()
-			if code != test.wantCode || provider.writes != 1 || len(provider.labels) != test.wantLabels {
-				t.Fatalf("provider characterization changed: exit=%d labels=%v writes=%d output=%s", code, provider.labels, provider.writes, out)
-			}
-			t.Logf("R2 characterization: exit=%d writes=%d description=%q labels=%v", code, provider.writes, provider.description, provider.labels)
-		})
-	}
-	t.Run("state-description-race", func(t *testing.T) {
-		provider := &issueWriteProviderFixture{state: "opened", description: "keep", raceDescription: "keep\n/label ~bug"}
-		server := testgitlab.New(provider)
-		defer server.Close()
-		token := strings.Join([]string{"synthetic", "provider", "race"}, "-")
-		out, _, deps := issueNativeDeps(t, server, token, &issueNativeKeyring{})
-		code := Run(context.Background(), issueNativeArgs(t, "close"), deps)
-		provider.mu.Lock()
-		defer provider.mu.Unlock()
-		_, _, receipt := decodeIssueWriteEnvelope(t, out.Bytes())
-		if code != 0 || provider.writes != 1 || provider.description != "keep" || receipt.Outcome != "state_observed" || receipt.AtomicPrecondition {
-			t.Fatalf("provider race characterization changed: exit=%d writes=%d description=%q output=%s", code, provider.writes, provider.description, out)
-		}
-		t.Log("R1 unresolved: provider strips concurrently inserted command text; matching snapshots cannot prove absence of collateral edits")
-	})
 }

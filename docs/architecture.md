@@ -223,27 +223,40 @@ approved v1 surface is pinned in `contracts/issue-edit/v1.json`; creation,
 comments, state changes, assignment, milestones, hierarchy, boards, approvals,
 credentials, and pipelines remain outside it.
 
-## Typed issue create, note and state writes
+## Typed issue creation, notes and state observations
 
-`contracts/issue-writes/v1.json` is a separate contract, not an expansion of
-issue-edit concurrency guarantees. `commands_issue_write.go` requires explicit
-native opt-in, validates private content before opening one shared native client,
-and sends one fixed in-memory payload after caller-bound numeric identity and
-configured canonical web-URL validation. That same client and credential serves
-all reads and reconciliation. No official-profile fallback or account-equivalence
-assumption is used. The schema separates attempts, accepted response
-evidence, observed postconditions, ambiguity and no-write no-ops. Create and note
-never search for reconciliation. State readback never converts an unconfirmed
-mutation into success. No atomic expected revision or exclusive attribution is
-claimed. Preflight, mutation and readback budgets are 10/20/10 seconds inside the
-45-second write deadline. Fixed reads need no pagination; each response and the
-aggregate retain the standard byte caps. Body quick actions are denied before
-credential resolution; new bodies are canonicalized using the pinned provider's
-carriage-return/trailing-ASCII-whitespace rules. The shared native client owns
-both response and operation byte budgets. State writes reject observed unsafe
-descriptions and require unchanged content evidence in responses/readback.
-Concurrent description sanitization and blank-create template effects remain
-[unresolved provider blockers](../contracts/issue-writes/review-blockers.md).
+`contracts/issue-writes/v1.json` is separate from issue-edit concurrency guarantees.
+`commands_issue_write.go` requires explicit native opt-in and validates private
+content before opening one shared native client. Nonblank create and plain notes
+send one fixed in-memory payload after caller-bound numeric identity and configured
+web-URL validation. The same credential serves all requests, without official-profile
+fallback or account-equivalence assumptions. Create and note never search for
+reconciliation or retry automatically. Direct response identity and content must
+match exactly; unconfirmed writes remain ambiguous.
+
+State actions retain identity and expected-state preflight observations but have
+no mutation dispatch or readback path. Already-matching states return `unchanged`;
+actual transitions return `unsupported` with a `refused` receipt and zero attempts.
+Existing descriptions are not inspected for slash lines or normalization. This
+prevents provider content sanitization even when a concurrent writer changes the
+description after preflight. It does not provide state-transition parity or an
+atomic precondition. Blank and whitespace-only create descriptions are also
+temporarily refused before credential resolution because default templates can
+execute unrequested quick actions. See the
+[temporary parity gaps](../contracts/issue-writes/review-blockers.md).
+
+Original private-file bounds precede normalization. Titles strip surrounding ASCII
+whitespace; new descriptions/notes remove carriage returns and trailing ASCII
+whitespace. New quick-action-shaped lines are denied before credential resolution.
+Canonical request hashes and exact response comparisons retain ordinary newline
+files without weakening provider evidence. State hashes represent requested intent
+only. The receipt schema is owned by `IssueWriteSchema` and emitted alongside help
+and skills by `cmd/gen-product`.
+
+Preflight/mutation budgets remain 10/20 seconds inside the 45-second operation
+lifetime. Fixed reads need no pagination. The shared native client owns both the
+2 MiB response bound and 8 MiB aggregate budget. Receipts keep
+`atomic_precondition=false` and `retry_safe=false`.
 
 ## MR ensure: bounded create/update write
 
