@@ -33,6 +33,8 @@ func TestVariableMutationCancellationAndOutputPaths(t *testing.T) {
 				f.cancelOnWrite = cancel
 			}
 			if mode == "unchanged" {
+				f.state[0]["hidden"] = false
+				f.state[0]["masked"] = false
 				f.state[0]["value"] = f.newValue
 				if err := os.WriteFile(f.oldFile, []byte(f.newValue), 0o600); err != nil {
 					t.Fatal(err)
@@ -42,7 +44,11 @@ func TestVariableMutationCancellationAndOutputPaths(t *testing.T) {
 			if mode == "output-failure" {
 				deps.Runtime.Stdout = variableFailWriter{}
 			}
-			exit := Run(ctx, f.args("secret", "set", "hidden", "json"), deps)
+			group, class := "secret", "hidden"
+			if mode == "unchanged" {
+				group, class = "variable", "ordinary"
+			}
+			exit := Run(ctx, f.args(group, "set", class, "json"), deps)
 			f.assertConfidential(t, stdout.String(), stderr.String())
 			f.mu.Lock()
 			writes := f.writes
@@ -81,15 +87,22 @@ func TestVariableConsumerContractRemainsPinned(t *testing.T) {
 			Atomic  bool   `json:"atomic_precondition"`
 		} `json:"provider"`
 		Surface struct {
-			Mutations  int    `json:"mutations_per_invocation"`
-			Retries    int    `json:"retries"`
-			MaxValue   int    `json:"max_value_bytes"`
-			Ambiguous  string `json:"ambiguous_code"`
-			AuthSource string `json:"auth_source"`
+			Mutations              int    `json:"mutations_per_invocation"`
+			Retries                int    `json:"retries"`
+			MaxValue               int    `json:"max_value_bytes"`
+			Ambiguous              string `json:"ambiguous_code"`
+			AuthSource             string `json:"auth_source"`
+			HiddenVerification     string `json:"hidden_value_verification"`
+			HiddenNoop             *bool  `json:"hidden_noop_detection"`
+			RequiresAcknowledgment bool   `json:"success_requires_provider_acknowledgment"`
+			LostResponseSuccess    *bool  `json:"lost_response_success"`
 		} `json:"surface"`
 	}
 	if json.Unmarshal(data, &contract) != nil || contract.Schema != "glab-axi/ci-variable-contract/v1" || contract.Comparison.Revision != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || contract.Provider.Version != "17.6.0" || contract.Provider.Atomic || contract.Surface.Mutations != 1 || contract.Surface.Retries != 0 || contract.Surface.MaxValue != civariable.MaxValueBytes || contract.Surface.Ambiguous != string(uxv1.CodeAmbiguousVariable) || contract.Surface.AuthSource != "native" {
 		t.Fatal("CI variable consumer contract drifted")
+	}
+	if contract.Surface.HiddenVerification != "unavailable_hidden" || contract.Surface.HiddenNoop == nil || *contract.Surface.HiddenNoop || !contract.Surface.RequiresAcknowledgment || contract.Surface.LostResponseSuccess == nil || *contract.Surface.LostResponseSuccess {
+		t.Fatal("hidden verification contract overstates provider evidence")
 	}
 	if len(contract.Comparison.Leaves) != 6 {
 		t.Fatal("missing reference leaves")

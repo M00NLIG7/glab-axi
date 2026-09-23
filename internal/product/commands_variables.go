@@ -73,8 +73,15 @@ func validateVariableParsed(p Parsed) error {
 			}
 		}
 	} else {
-		if !validVariableType(v["--expected-type"]) || !validBool(v["--expected-protected"]) || !validBool(v["--expected-raw"]) || v["--expected-value-file"] == "" || v["--expected-value-file"] == "-" {
-			return variableValidation("existing prestate requires type, protected, raw, and a private expected-value file")
+		if !validVariableType(v["--expected-type"]) || !validBool(v["--expected-protected"]) || !validBool(v["--expected-raw"]) {
+			return variableValidation("existing prestate requires type, protected, and raw guards")
+		}
+		if class == "hidden" {
+			if v["--expected-value-file"] != "" {
+				return variableValidation("hidden values cannot be verified; expected-value files are not supported for hidden entries")
+			}
+		} else if v["--expected-value-file"] == "" || v["--expected-value-file"] == "-" {
+			return variableValidation("unhidden prestate requires a private expected-value file")
 		}
 		if p.Definition.Path[0] == "variable" && class != "ordinary" || p.Definition.Path[0] == "secret" && class == "ordinary" {
 			return uxv1.NewError(uxv1.CodeSafety, "selected class belongs to the other CI variable surface")
@@ -103,15 +110,18 @@ func validateVariableParsed(p Parsed) error {
 }
 
 type variableReceipt struct {
-	Action             string               `json:"action"`
-	Outcome            string               `json:"outcome"`
-	ProjectID          int64                `json:"project_id"`
-	ProjectURL         string               `json:"project_url"`
-	Key                string               `json:"key"`
-	EnvironmentScope   string               `json:"environment_scope"`
-	AtomicPrecondition bool                 `json:"atomic_precondition"`
-	MutationAttempted  bool                 `json:"mutation_attempted"`
-	State              *civariable.Metadata `json:"state,omitempty"`
+	Action               string               `json:"action"`
+	Outcome              string               `json:"outcome"`
+	ProjectID            int64                `json:"project_id"`
+	ProjectURL           string               `json:"project_url"`
+	Key                  string               `json:"key"`
+	EnvironmentScope     string               `json:"environment_scope"`
+	AtomicPrecondition   bool                 `json:"atomic_precondition"`
+	MutationAttempted    bool                 `json:"mutation_attempted"`
+	ProviderAcknowledged bool                 `json:"provider_acknowledged"`
+	Reconciliation       string               `json:"reconciliation"`
+	ValueVerification    string               `json:"value_verification"`
+	State                *civariable.Metadata `json:"state,omitempty"`
 }
 type variableMutationOutput struct {
 	Variable variableReceipt `json:"variable"`
@@ -222,7 +232,7 @@ func variableInventory(ctx context.Context, c *productnative.Client, id int64, m
 			return nil, err
 		}
 		media, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		observations, decodeErr := civariable.Decode(r.Body, true, match)
+		observations, decodeErr := civariable.Decode(r.Body, match)
 		clear(r.Body) // Values and descriptions never leave this read boundary.
 		if mediaErr != nil || media != "application/json" || decodeErr != nil {
 			return nil, uxv1.NewError(uxv1.CodeUpstream, "CI variable inventory is invalid or unavailable")
@@ -253,11 +263,17 @@ func expectedVariable(p Parsed) civariable.Metadata {
 	class := p.Values["--expected-class"]
 	return civariable.Metadata{Key: p.Positionals[0], EnvironmentScope: p.Values["--scope"], VariableType: p.Values["--expected-type"], Class: class, Masked: class == "masked" || class == "hidden", Hidden: class == "hidden", Protected: p.Values["--expected-protected"] == "true", Raw: p.Values["--expected-raw"] == "true"}
 }
-func expectedVariableMatches(p Parsed, o *civariable.Observation) bool {
+func variablePreconditionObserved(p Parsed, o *civariable.Observation) bool {
 	if p.Values["--expected-class"] == "absent" {
 		return o == nil
 	}
-	return o != nil && o.Metadata == expectedVariable(p) && o.MatchesExpected
+	if o == nil || o.Metadata != expectedVariable(p) {
+		return false
+	}
+	if o.Hidden {
+		return true
+	}
+	return o.MatchesExpected
 }
 
 func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, deps Dependencies) (commandOutput, error) {
@@ -267,7 +283,7 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 	match := civariable.Comparison{Scope: scope}
 	if action != "list" {
 		match.Key = p.Positionals[0]
-		if p.Values["--expected-class"] != "absent" {
+		if p.Values["--expected-value-file"] != "" {
 			value, err := readVariableInput(ctx, p.Values["--expected-value-file"], nil)
 			if err != nil {
 				return fail(err)
@@ -339,16 +355,22 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 		return commandOutput{data: map[string]any{"variables": items, "values_disclosed": false}, meta: meta}, nil
 	}
 	before := findVariable(inventory, match.Key, scope)
-	if !expectedVariableMatches(p, before) {
-		return fail(uxv1.NewError(uxv1.CodeConflict, "CI variable prestate does not match the exact private value and metadata guards"))
+	if !variablePreconditionObserved(p, before) {
+		return fail(uxv1.NewError(uxv1.CodeConflict, "CI variable prestate does not match the exact metadata or readable-value guards"))
 	}
-	receipt := variableReceipt{Action: action, Outcome: "not_applied", ProjectID: project.ID, ProjectURL: project.WebURL, Key: match.Key, EnvironmentScope: scope}
+	receipt := variableReceipt{Action: action, Outcome: "ambiguous", ProjectID: project.ID, ProjectURL: project.WebURL, Key: match.Key, EnvironmentScope: scope, Reconciliation: "not_observed", ValueVerification: "not_observed"}
+	if p.Values["--expected-class"] == "hidden" || action == "set" && group == "secret" {
+		receipt.ValueVerification = "unavailable_hidden"
+	} else if action == "delete" {
+		receipt.ValueVerification = "matched"
+	}
 	desired := civariable.Metadata{Key: match.Key, EnvironmentScope: scope, VariableType: p.Values["--type"], Masked: group == "secret", Hidden: group == "secret", Protected: p.Values["--protected"] == "true", Raw: true}
 	desired.Class = desired.Classification()
-	if action == "set" && before != nil && before.Metadata == desired && before.MatchesDesired {
+	if action == "set" && !desired.Hidden && before != nil && before.Metadata == desired && before.MatchesDesired {
 		receipt.Action = "unchanged"
 		receipt.Outcome = "precondition_observed"
 		receipt.State = &desired
+		receipt.ValueVerification = "matched"
 		return commandOutput{data: variableMutationOutput{receipt}, meta: meta}, nil
 	}
 	// GitLab has no CAS or immutable variable ID; value-only races and ABA remain.
@@ -356,7 +378,7 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 	if err != nil {
 		return fail(err)
 	}
-	if !expectedVariableMatches(p, findVariable(inventory, match.Key, scope)) {
+	if !variablePreconditionObserved(p, findVariable(inventory, match.Key, scope)) {
 		return fail(uxv1.NewError(uxv1.CodeConflict, "CI variable prestate changed before mutation"))
 	}
 	again, err := loadVariableProject(ctx, c, t.Repo)
@@ -368,11 +390,14 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 	}
 	route := "projects/" + strconv.FormatInt(project.ID, 10) + "/variables"
 	request := productnative.Request{Method: http.MethodDelete, Path: route + "/" + url.PathEscape(match.Key), Query: url.Values{"filter[environment_scope]": {scope}}, MaxBytes: limits.MaxJSONPageBytes}
+	expectedStatus := http.StatusNoContent
 	if action == "set" {
 		request.Method = http.MethodPut
+		expectedStatus = http.StatusOK
 		payload := map[string]any{"value": *match.Desired, "variable_type": desired.VariableType, "protected": desired.Protected, "masked": desired.Masked, "raw": true}
 		if before == nil {
 			request.Method = http.MethodPost
+			expectedStatus = http.StatusCreated
 			request.Path = route
 			request.Query = nil
 			payload["key"] = match.Key
@@ -392,6 +417,7 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 	}
 	receipt.MutationAttempted = true
 	response, writeErr := c.Do(ctx, request)
+	receipt.ProviderAcknowledged = writeErr == nil && response.StatusCode == expectedStatus
 	clear(response.Body) // Never use a value-bearing write echo as the receipt.
 	clear(request.Body)
 	// Observe the exact postcondition once, within the same identity and lifetime.
@@ -406,22 +432,34 @@ func executeVariables(ctx context.Context, t Target, p Parsed, meta uxv1.Meta, d
 	}
 	if readErr == nil {
 		after := findVariable(inventory, match.Key, scope)
-		if action == "delete" && after == nil || action == "set" && after != nil && after.Metadata == desired && after.MatchesDesired {
-			receipt.Outcome = "postcondition_observed"
-			if action == "set" {
-				receipt.State = &desired
+		postcondition := false
+		if action == "delete" && after == nil {
+			receipt.Reconciliation = "absence_observed"
+			postcondition = true
+		} else if action == "set" && after != nil && after.Metadata == desired {
+			receipt.State = &desired
+			receipt.Reconciliation = "metadata_observed"
+			if desired.Hidden {
+				postcondition = true
+			} else if after.MatchesDesired {
+				receipt.Reconciliation = "value_and_metadata_observed"
+				receipt.ValueVerification = "matched"
+				postcondition = true
 			}
+		}
+		if receipt.ProviderAcknowledged && postcondition {
+			receipt.Outcome = "postcondition_observed"
 			return commandOutput{data: variableMutationOutput{receipt}, meta: meta}, nil
 		}
-		if writeErr != nil && expectedVariableMatches(p, after) {
+		if writeErr != nil && variablePreconditionObserved(p, after) {
 			if rejection, ok := uxv1.NewHTTPRejection(uxv1.AsError(writeErr).StatusCode); ok {
+				receipt.Outcome = "rejected"
 				rejection.Retryable = false
 				rejection.Receipt = variableMutationOutput{receipt}
 				return fail(rejection)
 			}
 		}
 	}
-	receipt.Outcome = "ambiguous"
 	ambiguous := uxv1.NewError(uxv1.CodeAmbiguousVariable, "CI variable mutation outcome is ambiguous; inspect the exact key and scope before any retry")
 	ambiguous.Receipt = variableMutationOutput{receipt}
 	return fail(ambiguous)

@@ -192,8 +192,12 @@ one explicitly selected native client, without official-profile fallback. Provid
 values/descriptions are removed at each read boundary, never rendered. Both list families expose only
 safe metadata; ordinary variables cannot alias masked, hidden, or protected
 entries. Mutations require explicit host/project/scope, expected numeric project
-identity, confirmation, and exact private previous-value plus metadata guards.
-One mutation is followed by bounded reconciliation; receipts disclose the lack
+identity, confirmation, and exact metadata guards. Unhidden entries also require
+private previous-value checks; hidden values are unavailable and never treated
+as matching. One mutation requires provider acknowledgment plus bounded
+reconciliation for success; lost responses remain ambiguous. Hidden set observes
+metadata, and delete observes exact absence. Receipts disclose unavailable hidden
+value verification and the lack
 of provider CAS and immutable variable identity. Unsupported version/capability,
 incomplete inventories, class transitions, and uncertain outcomes fail closed.
 

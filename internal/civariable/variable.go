@@ -68,26 +68,18 @@ type Comparison struct {
 	Desired  *string `json:"-"`
 }
 
-// Decode accepts an object or list, drops every non-metadata field immediately,
+// Decode accepts a list, drops every non-metadata field immediately,
 // and refuses absent booleans rather than treating older servers as unhidden.
 // The caller owns and clears the raw response buffer, including error paths.
-func Decode(body []byte, list bool, match Comparison) ([]Observation, error) {
+func Decode(body []byte, match Comparison) ([]Observation, error) {
 	bad := errors.New("invalid or unavailable CI variable metadata")
 	if !utf8.Valid(body) {
 		return nil, bad
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	var objects []json.RawMessage
-	if list {
-		if decoder.Decode(&objects) != nil || objects == nil {
-			return nil, bad
-		}
-	} else {
-		var object json.RawMessage
-		if decoder.Decode(&object) != nil {
-			return nil, bad
-		}
-		objects = []json.RawMessage{object}
+	if decoder.Decode(&objects) != nil || objects == nil {
+		return nil, bad
 	}
 	defer func() {
 		for _, o := range objects {
@@ -155,7 +147,7 @@ func Decode(body []byte, list bool, match Comparison) ([]Observation, error) {
 		}
 		m.Class = m.Classification()
 		observation := Observation{Metadata: m}
-		if m.Key == match.Key && m.EnvironmentScope == match.Scope {
+		if !m.Hidden && m.Key == match.Key && m.EnvironmentScope == match.Scope {
 			var value string
 			if raw, ok := fields["value"]; ok && !bytes.Equal(raw, []byte("null")) && json.Unmarshal(raw, &value) == nil {
 				if match.Expected != nil {

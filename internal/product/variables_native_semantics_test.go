@@ -25,7 +25,8 @@ func TestNativeVariableTypesAndExactPrestate(t *testing.T) {
 		{name: "wrong-project", action: "delete", class: "hidden", mode: "wrong-project", want: 9},
 		{name: "wrong-host", action: "delete", class: "hidden", mode: "wrong-host", want: 9},
 		{name: "old-version", action: "delete", class: "hidden", mode: "old-version", want: 2},
-		{name: "value-drift", action: "delete", class: "hidden", mode: "drift", want: 6},
+		{name: "hidden-value-drift-is-unobservable", action: "delete", class: "hidden", mode: "drift"},
+		{name: "readable-value-drift", action: "delete", class: "masked", mode: "drift", want: 6},
 		{name: "wrong-poststate", action: "set", class: "hidden", mode: "wrong-poststate", want: 6},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

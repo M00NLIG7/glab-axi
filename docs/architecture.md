@@ -306,8 +306,10 @@ CI-variable operations require explicit native selection and use one shared
 `productnative.Client` for their complete operation. Feature-owned numeric-project
 routes and exact scope filters never use the official profile. `internal/civariable`
 removes values/descriptions at each inventory read boundary, retaining only
-metadata and non-serialized private equality results. Complete bounded inventories,
-not error strings, prove absence and prestate. Help and owned schemas are generated
+metadata and non-serialized private equality results for unhidden entries.
+Hidden entries use exact observable metadata guards and report unavailable value
+verification. Complete bounded inventories establish absence or the applicable
+prestate; mutation success also requires provider acknowledgment. Help and owned schemas are generated
 through `go run ./cmd/gen-product`.
 
 ## Native authority and CI semantics

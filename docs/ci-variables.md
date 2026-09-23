@@ -29,11 +29,12 @@ difference from `gh-axi variable list`, which displays ordinary variable values.
 - `masked`: masked in job logs, not hidden in settings. Protection is reported
   separately. This is not equivalent to a hidden secret.
 - `hidden`: masked and hidden in GitLab settings; protection is separate.
-  **GitLab's API can still return the value.** This is not GitHub's encrypted
-  secret API and does not make malicious CI code safe.
+  **The pinned GitLab API returns `value:null`.** The old and resulting values
+  cannot be verified. This does not make malicious CI code safe.
 
-Provider value fields are compared only in transient private memory for the
-selected key/scope and discarded at the inventory read boundary. Only safe
+Unhidden provider value fields are compared only in transient private memory for
+the selected key/scope and discarded at the inventory read boundary. Hidden,
+null, missing, or malformed values never become value matches. Only safe
 metadata and non-serialized exact-match booleans leave that boundary. Provider error
 bodies, stderr, and unexpected fields are not raw-rendered. Go does not promise
 cryptographic erasure of all heap copies; these commands do not claim protection
@@ -43,6 +44,9 @@ from a debugger or another process with access to this process's private memory.
 
 The contract pins [GitLab 17.6 project-variable API evidence](https://gitlab.com/gitlab-org/gitlab/-/blob/v17.6.0-ee/doc/api/project_level_variables.md)
 and [17.6 variable security semantics](https://gitlab.com/gitlab-org/gitlab/-/blob/v17.6.0-ee/doc/ci/variables/index.md).
+The pinned [API serializer](https://gitlab.com/gitlab-org/gitlab/-/blob/v17.6.0-ee/lib/api/entities/ci/variable.rb)
+uses [VariableValue](https://gitlab.com/gitlab-org/gitlab/-/blob/v17.6.0-ee/app/models/ci/variable_value.rb)
+to return null for hidden values.
 Project variables are available on Free, Premium, and Ultimate. GitLab 17.4
 introduced hidden variables behind a feature flag; 17.6 made them generally
 available. These commands require a successful authenticated version read of
@@ -75,20 +79,23 @@ gl-axi secret set DEPLOY_KEY --auth-source native -R group/project --hostname gi
   --value-file /absolute/private/value --confirm
 ```
 
-Create requires proven absence in that **exact** scope. Updating or deleting
-requires all of:
+Create requires proven absence in that **exact** scope. Updating or deleting a
+hidden entry requires all of these observable metadata guards:
 
 ```text
 --expected-class hidden
 --expected-type env_var
 --expected-protected true
 --expected-raw true
---expected-value-file /absolute/private/previous-value
 ```
 
-The caller must already possess the old value. There is no command to reveal or
-export it and no exported low-entropy value hash. `--confirm` authorizes only the
-selected operation; it is not an auto-approval of arbitrary provider calls.
+Hidden entries reject `--expected-value-file` because GitLab withholds their
+values. These guards do not verify the old value or detect value-only drift.
+For unhidden entries, the caller must also supply
+`--expected-value-file /absolute/private/previous-value` and already possess the
+old value. There is no command to reveal or export values and no exported
+low-entropy value hash. `--confirm` authorizes only the selected operation; it is
+not an auto-approval of arbitrary provider calls.
 
 `--value-file -` explicitly selects piped stdin. Files must be absolute, private,
 regular, and not final-component symlinks. Input is bounded to 1..10000 UTF-8
@@ -107,30 +114,56 @@ class, protection, key, or scope transition is allowed. Set always explicitly
 uses `raw:true`, disabling expansion (an existing `raw:false` is an explicit
 prestate guard, not a request to keep expansion). Descriptions are preserved by
 omitting them from writes. `secret delete` can delete hidden, masked, or
-protected entries with their exact class and private prestate.
+protected entries with their exact metadata and, for unhidden entries, private
+value prestate.
 
 ## Outcomes, races, and bounds
 
 A mutation validates project ID/path/URL, completes an inventory, checks the
-private value and metadata prestate, then repeats the complete inventory and
+metadata prestate and any applicable private value, then repeats the complete
+inventory and
 project identity immediately before **one** POST/PUT/DELETE. Private request
 bodies stay in process; no delegated temporary JSON file is needed. Writes use the
 bound numeric project ID; update/delete always send the encoded exact
 `filter[environment_scope]`. No provider default scope is trusted. After dispatch
-one bounded inventory and project recheck establish the exact postcondition.
+one bounded inventory and project recheck observe the exact resulting metadata,
+the resulting value when readable, or deletion absence.
 
 GitLab offers neither a variable revision/CAS nor an immutable variable ID.
 Preflight cannot prevent a concurrent change or delete/recreate between the
-last check and the write. Receipts explicitly report `atomic_precondition:false`
-and `postcondition_observed`, not exclusive authorship or atomic enforcement.
-No-op set reports `precondition_observed` and makes no mutation.
+last check and the write. Hidden value-only drift cannot be detected even during
+preflight. Receipts explicitly report `atomic_precondition:false`; they never
+claim exclusive authorship, atomic value enforcement, or absence of concurrent
+changes. Unhidden no-op set reports `precondition_observed` and makes no mutation.
+Hidden set always attempts the requested mutation because equality with the
+desired value cannot be checked.
 
 Complete successful inventories, **never a 404 or an error string**, prove
-absence. A validated resulting value plus metadata proves set; exact absence
-proves delete. A definite HTTP provider rejection is returned only when reconciliation
-also proves the original private prestate. Otherwise the result is
+absence. Success requires a complete provider response with the pinned success
+status (201 for create, 200 for update, 204 for delete) and observable
+reconciliation: exact metadata for hidden set, value plus metadata for unhidden
+set, or exact absence for delete. A lost, incomplete, or unsuccessful response
+never becomes success from reconciliation alone, even when metadata or absence
+matches the requested result.
+
+Receipts separate these facts:
+
+- `provider_acknowledged`: whether the mutation returned a complete response
+  with its pinned success status through the native transport.
+- `reconciliation`: `metadata_observed`, `value_and_metadata_observed`,
+  `absence_observed`, or `not_observed` for the requested postcondition.
+- `value_verification`: `unavailable_hidden` for every hidden mutation;
+  otherwise `matched` or `not_observed` for the desired set value or the
+  preflight delete value. It never means an atomic value guard.
+
+Successful mutations report `outcome:postcondition_observed`. A definite HTTP
+provider rejection reports `outcome:rejected` only when reconciliation also
+observes the original applicable guards: metadata for hidden entries, value
+plus metadata for unhidden entries, or absence for create. A rejected hidden
+mutation does not prove an unchanged hidden value. Other failures return
 `ambiguous_variable` (exit 6) with a value-free receipt and
-`mutation_attempted:true`. A canceled/timed-out write is not retried; if the
+`mutation_attempted:true`. Observable evidence remains in ambiguous receipts
+without implying success. A canceled/timed-out write is not retried; if the
 caller deadline prevents reconciliation the outcome remains ambiguous.
 
 Each inventory uses at most 10 pages of 100 records. A full final page cannot

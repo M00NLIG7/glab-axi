@@ -16,7 +16,10 @@ import (
 func variableArgs(action, class string) []string {
 	args := []string{"secret", action, "KEY", "-R", "group/project", "--hostname", "gitlab.com", "--scope", "production", "--expected-project-id", "101", "--expected-project-url", "https://gitlab.com/group/project", "--expected-class", class, "--confirm", "--format", "json"}
 	if class != "absent" {
-		args = append(args, "--expected-type", "env_var", "--expected-protected", "false", "--expected-raw", "true", "--expected-value-file", "/private/previous")
+		args = append(args, "--expected-type", "env_var", "--expected-protected", "false", "--expected-raw", "true")
+		if class != "hidden" {
+			args = append(args, "--expected-value-file", "/private/previous")
+		}
 	}
 	if action == "set" {
 		args = append(args, "--value-file", "/private/new", "--type", "env_var", "--protected", "false")

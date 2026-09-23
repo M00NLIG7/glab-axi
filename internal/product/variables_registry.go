@@ -13,7 +13,7 @@ func variableDefinitions() []Definition {
 				d.NoLimit = true
 				d.Schema = "ci-variable-mutation"
 				d.Usage = "gl-axi " + group + " " + action + " KEY --auth-source native -R NAMESPACE/PROJECT --hostname HOST --scope SCOPE --expected-project-id ID --expected-project-url URL --expected-class CLASS [prestate flags] --confirm [--format toon|json]"
-				d.Details += "\nUnavailable on Windows until private-file ACL verification is supported.\nOne mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.\nExisting entries require exact class/type/protected/raw and a private expected-value file.\nsecret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries."
+				d.Details += "\nUnavailable on Windows until private-file ACL verification is supported.\nOne mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.\nExisting entries require exact class/type/protected/raw. Unhidden entries also require a private expected-value file; hidden values cannot be verified and reject that flag.\nSuccess requires provider acknowledgment plus bounded reconciliation; hidden set observes metadata only, and delete observes absence. Lost responses remain ambiguous.\nsecret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries."
 				flags = append(flags,
 					FlagDefinition{Name: "--expected-project-id", Value: "ID", Description: "Exact positive project ID.", Required: true},
 					FlagDefinition{Name: "--expected-project-url", Value: "URL", Description: "Exact HTTPS project URL.", Required: true},
@@ -21,7 +21,7 @@ func variableDefinitions() []Definition {
 					FlagDefinition{Name: "--expected-type", Value: "TYPE", Description: "Existing env_var or file type."},
 					FlagDefinition{Name: "--expected-protected", Value: "BOOL", Description: "Existing true or false protection."},
 					FlagDefinition{Name: "--expected-raw", Value: "BOOL", Description: "Existing true or false raw expansion setting."},
-					FlagDefinition{Name: "--expected-value-file", Value: "FILE", Description: "Private absolute file containing exact previous value; never a hash or argv value."},
+					FlagDefinition{Name: "--expected-value-file", Value: "FILE", Description: "Required only for existing unhidden entries; private absolute file containing the exact previous value. Forbidden for hidden entries."},
 					FlagDefinition{Name: "--confirm", Boolean: true, Required: true, Description: "Explicitly authorize this exact guarded mutation."})
 				if action == "set" {
 					flags = append(flags,

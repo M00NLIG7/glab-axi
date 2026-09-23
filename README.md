@@ -178,7 +178,9 @@ Guarded project `secret` and `variable` list/set/delete commands require
 `--auth-source native` for the complete operation; there is no official-profile
 fallback or account-equivalence claim. See [CI variables](docs/ci-variables.md).
 Both lists are metadata-only; set/delete require exact scope, project identity,
-explicit confirmation, and private value preconditions. GitLab hidden/masked/
+explicit confirmation, and metadata guards. Unhidden entries also require private
+value preconditions; hidden values cannot be verified. Mutation success requires
+provider acknowledgment and bounded reconciliation. GitLab hidden/masked/
 protected semantics are distinct. No actual secret access or live acceptance
 is implied by the isolated tests.
 

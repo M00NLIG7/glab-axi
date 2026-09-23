@@ -28,7 +28,7 @@
         },
         "outcome": {
           "enum": [
-            "not_applied",
+            "rejected",
             "precondition_observed",
             "postcondition_observed",
             "ambiguous"
@@ -40,6 +40,17 @@
         },
         "project_url": {
           "type": "string"
+        },
+        "provider_acknowledged": {
+          "type": "boolean"
+        },
+        "reconciliation": {
+          "enum": [
+            "not_observed",
+            "metadata_observed",
+            "value_and_metadata_observed",
+            "absence_observed"
+          ]
         },
         "state": {
           "additionalProperties": false,
@@ -91,6 +102,13 @@
             "raw"
           ],
           "type": "object"
+        },
+        "value_verification": {
+          "enum": [
+            "unavailable_hidden",
+            "matched",
+            "not_observed"
+          ]
         }
       },
       "required": [
@@ -101,7 +119,10 @@
         "key",
         "environment_scope",
         "atomic_precondition",
-        "mutation_attempted"
+        "mutation_attempted",
+        "provider_acknowledged",
+        "reconciliation",
+        "value_verification"
       ],
       "type": "object"
     }

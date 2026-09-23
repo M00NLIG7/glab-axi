@@ -5,6 +5,7 @@ package product
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -54,6 +55,9 @@ type nativeVariableFixture struct {
 	redirectURL                                            string
 	cancelOnWrite                                          context.CancelFunc
 	inventoryReads                                         int
+	projectReads                                           int
+	driftField                                             string
+	driftValue                                             any
 }
 
 // Fixture setup uses only the already-shipped native config and TLS test
@@ -81,9 +85,9 @@ func newNativeVariableFixture(t *testing.T, class, mode string, mappedWeb bool) 
 			t.Fatal(err)
 		}
 	}
-	f.state = []map[string]any{wireVariable("KEY", "*", "hidden", true, f.oldValue), wireVariable("KEY", "review/*", "masked", false, f.oldValue)}
+	f.state = []map[string]any{variableRecord("KEY", "*", "hidden", true, f.oldValue), variableRecord("KEY", "review/*", "masked", false, f.oldValue)}
 	if class != "absent" {
-		f.state = append([]map[string]any{wireVariable("KEY", "production", class, false, f.oldValue)}, f.state...)
+		f.state = append([]map[string]any{variableRecord("KEY", "production", class, false, f.oldValue)}, f.state...)
 	}
 	f.server = testgitlab.New(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
@@ -117,9 +121,10 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"version": version})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v4/projects/group/project":
+		f.projectReads++
 		id := 101
 		web := f.web + "/group/project"
-		if f.mode == "wrong-project" {
+		if f.mode == "wrong-project" || f.mode == "project-drift" && f.projectReads > 1 || f.mode == "post-project-drift" && f.writes > 0 {
 			id = 102
 		}
 		if f.mode == "wrong-host" {
@@ -139,7 +144,18 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if f.mode == "drift" && f.inventoryReads > 1 {
-			f.state[0]["value"] = f.newValue
+			for _, record := range f.state {
+				if record["key"] == "KEY" && record["environment_scope"] == "production" {
+					record["value"] = f.newValue
+				}
+			}
+		}
+		if f.mode == "metadata-drift" && f.inventoryReads > 1 || f.mode == "post-metadata-drift" && f.writes > 0 {
+			for _, record := range f.state {
+				if record["key"] == "KEY" && record["environment_scope"] == "production" {
+					record[f.driftField] = f.driftValue
+				}
+			}
 		}
 		if f.mode == "page-limit" || f.mode == "two-pages" || f.mode == "operation-limit" {
 			count := 100
@@ -148,7 +164,7 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			items := make([]map[string]any, 0, count)
 			for i := 0; i < count; i++ {
-				item := wireVariable("KEY"+strconv.Itoa((page-1)*100+i), "production", "hidden", false, f.oldValue)
+				item := variableWire(variableRecord("KEY"+strconv.Itoa((page-1)*100+i), "production", "hidden", false, f.oldValue))
 				if f.mode == "operation-limit" {
 					item["description"] = strings.Repeat("x", 18000)
 				}
@@ -170,11 +186,14 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 				delete(o, "hidden")
 			}
 		}
-		if f.mode == "duplicate" {
-			_ = json.NewEncoder(w).Encode(append(f.state, f.state[0]))
-			return
+		items := make([]map[string]any, 0, len(f.state))
+		for _, record := range f.state {
+			items = append(items, variableWire(record))
 		}
-		_ = json.NewEncoder(w).Encode(f.state)
+		if f.mode == "duplicate" {
+			items = append(items, items[0])
+		}
+		_ = json.NewEncoder(w).Encode(items)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/101/variables", (r.Method == http.MethodPut || r.Method == http.MethodDelete) && r.URL.Path == "/api/v4/projects/101/variables/KEY":
 		f.writes++
 		if f.cancelOnWrite != nil {
@@ -197,6 +216,16 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			w.WriteHeader(status)
 			_ = json.NewEncoder(w).Encode(map[string]string{"message": "glpat-" + f.newValue})
+			return
+		}
+		if f.mode == "unapplied-success" {
+			status := http.StatusNoContent
+			if r.Method == http.MethodPost {
+				status = http.StatusCreated
+			} else if r.Method == http.MethodPut {
+				status = http.StatusOK
+			}
+			w.WriteHeader(status)
 			return
 		}
 		index := -1
@@ -242,11 +271,29 @@ func (f *nativeVariableFixture) serve(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"message": f.newValue})
 			return
 		}
+		if f.mode == "lost-response" {
+			panic(http.ErrAbortHandler)
+		}
+		if f.mode == "unexpected-status" {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		if f.mode == "truncated-response" {
+			w.Header().Set("Content-Length", "100")
+			if r.Method == http.MethodPost {
+				w.WriteHeader(http.StatusCreated)
+			}
+			fmt.Fprint(w, "{")
+			return
+		}
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(204)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(f.state[index])
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+		}
+		_ = json.NewEncoder(w).Encode(variableWire(f.state[index]))
 	default:
 		http.Error(w, "unexpected fixture route", 404)
 	}
@@ -258,8 +305,7 @@ func (f *nativeVariableFixture) args(group, action, class, format string) []stri
 	args := variableArgs(action, class)
 	args[0] = group
 	for flag, value := range map[string]string{"--hostname": f.host, "--expected-project-url": f.web + "/group/project", "--expected-value-file": f.oldFile, "--value-file": f.newFile, "--format": format} {
-		// Do not add existing-value flags to create or new-value flags to delete.
-		if flag == "--expected-value-file" && class == "absent" || flag == "--value-file" && action != "set" {
+		if flag == "--expected-value-file" && (class == "absent" || class == "hidden") || flag == "--value-file" && action != "set" {
 			continue
 		}
 		args = replaceVariableArg(args, flag, value)
@@ -294,7 +340,7 @@ func (f *nativeVariableFixture) assertConfidential(t *testing.T, texts ...string
 	t.Helper()
 	for _, text := range texts {
 		for _, value := range []string{f.token, f.oldValue, f.newValue} {
-			if strings.Contains(text, value) {
+			if strings.Contains(text, value) || strings.Contains(text, fmt.Sprintf("%x", sha256.Sum256([]byte(value)))) {
 				t.Fatal("synthetic credential or private value escaped native output")
 			}
 		}
@@ -316,9 +362,10 @@ func TestNativeVariableFullOperationUsesOneSelectedIdentity(t *testing.T) {
 	}{
 		{"secret", "set", "absent", "", 0}, {"secret", "set", "hidden", "", 0}, {"secret", "delete", "hidden", "", 0},
 		{"variable", "set", "ordinary", "", 0}, {"variable", "set", "absent", "", 0}, {"variable", "delete", "ordinary", "", 0},
-		{"secret", "set", "hidden", "applied-error", 0}, {"secret", "delete", "hidden", "applied-error", 0},
+		{"secret", "set", "hidden", "applied-error", 6}, {"secret", "delete", "hidden", "applied-error", 6},
 		{"secret", "set", "hidden", "uncertain", 6}, {"secret", "delete", "hidden", "uncertain", 6},
 		{"secret", "set", "hidden", "rejected", 4}, {"secret", "delete", "hidden", "rejected", 4},
+		{"variable", "set", "ordinary", "lost-response", 6}, {"variable", "delete", "ordinary", "lost-response", 6},
 	} {
 		for _, keyring := range []bool{false, true} {
 			for _, mapped := range []bool{false, true} {
@@ -373,11 +420,12 @@ func TestNativeVariableInvalidSelectionAndUnavailableNeverDelegate(t *testing.T)
 	f := newNativeVariableFixture(t, "hidden", "", false)
 	base := f.args("secret", "delete", "hidden", "json")
 	tests := map[string][]string{
-		"omitted":          base[:len(base)-2],
-		"official-alias":   replaceVariableArg(base, "--auth-source", "official"),
-		"duplicate":        append(append([]string(nil), base...), "--auth-source=native"),
-		"missing-host":     replaceVariableArg(base, "--hostname", ""),
-		"invalid-prestate": replaceVariableArg(base, "--expected-type", "unknown"),
+		"omitted":            base[:len(base)-2],
+		"official-alias":     replaceVariableArg(base, "--auth-source", "official"),
+		"duplicate":          append(append([]string(nil), base...), "--auth-source=native"),
+		"missing-host":       replaceVariableArg(base, "--hostname", ""),
+		"invalid-prestate":   replaceVariableArg(base, "--expected-type", "unknown"),
+		"hidden-value-guard": replaceVariableArg(base, "--expected-value-file", f.oldFile),
 	}
 	for name, args := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -451,7 +499,7 @@ func TestNativeVariableListClassAndBoundaries(t *testing.T) {
 		for _, mode := range []string{"", "duplicate", "page-limit", "oversized", "malformed", "missing-hidden"} {
 			t.Run(group+"-"+mode, func(t *testing.T) {
 				f := newNativeVariableFixture(t, "hidden", mode, false)
-				f.state = append(f.state, wireVariable("ORDINARY", "production", "ordinary", false, f.oldValue), wireVariable("MASKED", "production", "masked", false, f.oldValue), wireVariable("PROTECTED", "production", "protected", true, f.oldValue))
+				f.state = append(f.state, variableRecord("ORDINARY", "production", "ordinary", false, f.oldValue), variableRecord("MASKED", "production", "masked", false, f.oldValue), variableRecord("PROTECTED", "production", "protected", true, f.oldValue))
 				stdout, stderr, deps, store, lookups := f.deps(t, false)
 				exit := Run(context.Background(), f.args(group, "list", "hidden", "json"), deps)
 				f.assertConfidential(t, stdout.String(), stderr.String())
@@ -510,9 +558,9 @@ func TestNativeVariableCompiledAliasesTLS(t *testing.T) {
 			}
 			// No official executable is on PATH. Native config contains only authority
 			// and the synthetic fixture CA; the credential is a runtime sentinel.
-			for _, tc := range []struct{ group, action, class string }{{"secret", "list", "hidden"}, {"variable", "list", "ordinary"}, {"secret", "set", "absent"}, {"variable", "set", "ordinary"}, {"secret", "delete", "hidden"}, {"variable", "delete", "ordinary"}} {
+			for _, tc := range []struct{ group, action, class string }{{"secret", "list", "hidden"}, {"variable", "list", "ordinary"}, {"secret", "set", "absent"}, {"secret", "set", "hidden"}, {"variable", "set", "ordinary"}, {"secret", "delete", "hidden"}, {"variable", "delete", "ordinary"}} {
 				for _, format := range []string{"json", "toon"} {
-					t.Run(tc.group+"-"+tc.action+"-"+format, func(t *testing.T) {
+					t.Run(tc.group+"-"+tc.action+"-"+tc.class+"-"+format, func(t *testing.T) {
 						f := newNativeVariableFixture(t, tc.class, "", true)
 						args := f.args(tc.group, tc.action, tc.class, format)
 						// Drive both descriptor-validated file and explicitly piped value input.
@@ -535,6 +583,15 @@ func TestNativeVariableCompiledAliasesTLS(t *testing.T) {
 						}
 						if !strings.Contains(stdout.String(), "native") || strings.Contains(stdout.String(), "upstream_version") {
 							t.Fatal("compiled native CLI reported delegated backend")
+						}
+						if tc.group == "secret" && tc.action != "list" {
+							evidence := "metadata_observed"
+							if tc.action == "delete" {
+								evidence = "absence_observed"
+							}
+							if !strings.Contains(stdout.String(), "unavailable_hidden") || !strings.Contains(stdout.String(), evidence) || !strings.Contains(stdout.String(), "provider_acknowledged") {
+								t.Fatal("compiled receipt omitted hidden verification limits")
+							}
 						}
 						f.mu.Lock()
 						writes := f.writes

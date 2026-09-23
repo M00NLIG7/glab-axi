@@ -478,7 +478,8 @@ secret lists hidden, masked, and protected classes distinctly; variable lists on
 No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
 Unavailable on Windows until private-file ACL verification is supported.
 One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
-Existing entries require exact class/type/protected/raw and a private expected-value file.
+Existing entries require exact class/type/protected/raw. Unhidden entries also require a private expected-value file; hidden values cannot be verified and reject that flag.
+Success requires provider acknowledgment plus bounded reconciliation; hidden set observes metadata only, and delete observes absence. Lost responses remain ambiguous.
 secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
 
 Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
@@ -497,7 +498,8 @@ secret lists hidden, masked, and protected classes distinctly; variable lists on
 No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
 Unavailable on Windows until private-file ACL verification is supported.
 One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
-Existing entries require exact class/type/protected/raw and a private expected-value file.
+Existing entries require exact class/type/protected/raw. Unhidden entries also require a private expected-value file; hidden values cannot be verified and reject that flag.
+Success requires provider acknowledgment plus bounded reconciliation; hidden set observes metadata only, and delete observes absence. Lost responses remain ambiguous.
 secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
 
 Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
@@ -531,7 +533,8 @@ secret lists hidden, masked, and protected classes distinctly; variable lists on
 No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
 Unavailable on Windows until private-file ACL verification is supported.
 One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
-Existing entries require exact class/type/protected/raw and a private expected-value file.
+Existing entries require exact class/type/protected/raw. Unhidden entries also require a private expected-value file; hidden values cannot be verified and reject that flag.
+Success requires provider acknowledgment plus bounded reconciliation; hidden set observes metadata only, and delete observes absence. Lost responses remain ambiguous.
 secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
 
 Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.
@@ -550,7 +553,8 @@ secret lists hidden, masked, and protected classes distinctly; variable lists on
 No group, instance, inherited, dotenv, bulk, or raw API authority. See docs/ci-variables.md.
 Unavailable on Windows until private-file ACL verification is supported.
 One mutation, no retry; preflight is not atomic CAS. Updates preserve type and protection.
-Existing entries require exact class/type/protected/raw and a private expected-value file.
+Existing entries require exact class/type/protected/raw. Unhidden entries also require a private expected-value file; hidden values cannot be verified and reject that flag.
+Success requires provider acknowledgment plus bounded reconciliation; hidden set observes metadata only, and delete observes absence. Lost responses remain ambiguous.
 secret set creates hidden+masked entries or rotates existing hidden entries, never silently promotes masked/unhidden entries.
 
 Backend: `native`. Schema: `schema/ux-v1/ci-variable-mutation.schema.json`.

@@ -15,9 +15,12 @@ func VariableSchemas() map[string]string {
 		"masked": boolean, "hidden": boolean, "protected": boolean, "raw": boolean,
 	})
 	list := object([]string{"variables", "values_disclosed"}, map[string]any{"variables": map[string]any{"type": "array", "maxItems": 1000, "items": metadata}, "values_disclosed": map[string]any{"const": false}})
-	receipt := object([]string{"action", "outcome", "project_id", "project_url", "key", "environment_scope", "atomic_precondition", "mutation_attempted"}, map[string]any{
-		"action": map[string]any{"enum": []string{"set", "delete", "unchanged"}}, "outcome": map[string]any{"enum": []string{"not_applied", "precondition_observed", "postcondition_observed", "ambiguous"}},
+	receipt := object([]string{"action", "outcome", "project_id", "project_url", "key", "environment_scope", "atomic_precondition", "mutation_attempted", "provider_acknowledged", "reconciliation", "value_verification"}, map[string]any{
+		"action": map[string]any{"enum": []string{"set", "delete", "unchanged"}}, "outcome": map[string]any{"enum": []string{"rejected", "precondition_observed", "postcondition_observed", "ambiguous"}},
 		"project_id": map[string]any{"type": "integer", "minimum": 1}, "project_url": str, "key": str, "environment_scope": str, "atomic_precondition": map[string]any{"const": false}, "mutation_attempted": boolean, "state": metadata,
+		"provider_acknowledged": boolean,
+		"reconciliation":        map[string]any{"enum": []string{"not_observed", "metadata_observed", "value_and_metadata_observed", "absence_observed"}},
+		"value_verification":    map[string]any{"enum": []string{"unavailable_hidden", "matched", "not_observed"}},
 	})
 	schemas := map[string]map[string]any{"ci-variable-list": list, "ci-variable-mutation": object([]string{"variable"}, map[string]any{"variable": receipt})}
 	out := map[string]string{}
