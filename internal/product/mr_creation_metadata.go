@@ -51,6 +51,7 @@ func readMREnsureContent(parsed Parsed) (string, string, error) {
 		if err := validateMRContentActions(description); err != nil {
 			return "", "", err
 		}
+		description = strings.TrimRight(description, " \t\n")
 	}
 	selection, err := parseMRCreationMetadata(parsed)
 	if err != nil {

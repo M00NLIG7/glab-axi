@@ -20,6 +20,7 @@ import (
 	"gl-axi/internal/auth"
 	"gl-axi/internal/config"
 	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/limits"
 	runtimepkg "gl-axi/internal/runtime"
 	"gl-axi/internal/testgitlab"
 )
@@ -424,6 +425,41 @@ func TestMRNativeCreationMetadataUsesOneNativeIdentity(t *testing.T) {
 	defer f.mu.Unlock()
 	if f.writes != 1 {
 		t.Fatalf("native creation attempts=%d", f.writes)
+	}
+}
+
+func TestMRNativeEnsureDescriptionRefusalsBeforeDependencies(t *testing.T) {
+	for _, tc := range []struct{ name, description string }{
+		{"carriage return", "body\r\n"},
+		{"vertical tab", "body\v"},
+		{"form feed", "body\f"},
+		{"NUL", "body\x00"},
+		{"format character", "body\u200b \n"},
+		{"quick action", "body\n /merge \t\n"},
+		{"oversized trailing whitespace", "a" + strings.Repeat(" ", limits.MaxDescriptionBytes)},
+		{"invalid UTF-8", "body\xff"},
+		{"public file", "body\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMRNativeFixture(t, "opened")
+			args := replaceArg(ensureArgs(t, "title", tc.description), "gitlab.com", mrWriteTestHost)
+			args = append(args, "--auth-source", "native", "--draft")
+			if tc.name == "public file" {
+				for i, arg := range args {
+					if arg == "--description-file" {
+						if err := os.Chmod(args[i+1], 0644); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			if code := Run(context.Background(), args, f.deps); code == 0 {
+				t.Fatalf("invalid description accepted: %s", f.stdout.String())
+			}
+			if len(f.server.Requests()) != 0 || f.keyring.gets != 0 || f.keyring.writes != 0 {
+				t.Fatal("invalid description consulted native credentials or the provider")
+			}
+		})
 	}
 }
 

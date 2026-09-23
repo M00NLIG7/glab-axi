@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/testgitlab"
 )
 
@@ -271,6 +272,146 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 					}
 					if tc.exit == 2 && len(f.server.Requests()) != 0 {
 						t.Fatal("invalid input performed network work")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestMRNativeEnsureDescriptionExecutableTLS(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows persisted-native-config and self-managed mapping remain unproven")
+	}
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, program := range []string{"gl-axi", "glab-axi"} {
+		t.Run(program, func(t *testing.T) {
+			binary := filepath.Join(t.TempDir(), program)
+			build := exec.Command("go", "build", "-p", "1", "-o", binary, "./cmd/"+program)
+			build.Dir = root
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v %s", err, output)
+			}
+			for _, tc := range []struct{ name, description, want, response string }{
+				{"final newline", "body\n", "body", ""},
+				{"trailing whitespace", "body \t\n\n\t ", "body", ""},
+				{"unchanged", "body", "body", ""},
+				{"leading and interior whitespace", "\n\tbody  \nnext\tpart\n", "\n\tbody  \nnext\tpart", ""},
+				{"Unicode whitespace", "body\u00a0\u2003 \t\n", "body\u00a0\u2003", ""},
+				{"empty", "", "", ""},
+				{"whitespace only", " \t\n", "", ""},
+				{"reconciled newline", "body\n", "body", "malformed"},
+				{"different returned content", "body\n", "body", "different"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					f := newMRNativeFixture(t, "opened")
+					f.ensure = true
+					created := false
+					f.mutate = func(w http.ResponseWriter, r *http.Request) bool {
+						if r.URL.EscapedPath() != mrNativeAPIPath+"/merge_requests" {
+							return false
+						}
+						switch r.Method {
+						case http.MethodGet:
+							if !created {
+								return false
+							}
+							if r.URL.Query().Get("source_branch") != "feature" || r.URL.Query().Get("target_branch") != "main" || r.URL.Query().Get("state") != "opened" {
+								t.Error("native ensure lost its exact branch/state selectors")
+							}
+							_ = json.NewEncoder(w).Encode([]upstreamMR{f.ensureRecord})
+							return true
+						case http.MethodPost:
+							var input map[string]string
+							if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input) != 4 || input["title"] != "Draft: title" || input["source_branch"] != "feature" || input["target_branch"] != "main" {
+								t.Error("invalid native ensure payload")
+								w.WriteHeader(http.StatusBadRequest)
+								return true
+							}
+							f.ensureRecord = ensureMR(11, input["title"], strings.TrimRight(input["description"], "\x00\t\n\v\f\r "))
+							f.ensureRecord.WebURL = mrNativeWebBase + "/group/project/-/merge_requests/11"
+							f.ensureRecord.Draft = true
+							created = true
+							if tc.response == "different" {
+								f.ensureRecord.Description = "different description"
+							}
+							if tc.response == "malformed" {
+								_, _ = io.WriteString(w, "{broken")
+								return true
+							}
+						}
+						return false
+					}
+					args := replaceArg(ensureArgs(t, "title", tc.description), "gitlab.com", mrWriteTestHost)
+					args = append(args, "--auth-source", "native", "--draft")
+					dir := t.TempDir()
+					marker := filepath.Join(dir, "child")
+					if err := os.WriteFile(filepath.Join(dir, "glab"), []byte("#!/bin/sh\nprintf child > \"$MR_WRITE_MARKER\"\nexit 99\n"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					for attempt, action := range []string{"created", "unchanged"} {
+						command := exec.Command(binary, args...)
+						command.Env = []string{"HOME=" + dir, "PATH=" + dir + ":/usr/bin:/bin", "GL_AXI_CONFIG=" + f.deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + f.keyring.token, "MR_WRITE_MARKER=" + marker, "GOMAXPROCS=2"}
+						var stdout, stderr bytes.Buffer
+						command.Stdout, command.Stderr = &stdout, &stderr
+						exit := 0
+						if err := command.Run(); err != nil {
+							if e, ok := err.(*exec.ExitError); ok {
+								exit = e.ExitCode()
+							} else {
+								t.Fatal(err)
+							}
+						}
+						var envelope struct {
+							Data  ensureResult `json:"data"`
+							Error *uxv1.Error  `json:"error"`
+							Meta  uxv1.Meta    `json:"meta"`
+						}
+						if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+							t.Fatal(err)
+						}
+						if tc.response == "different" {
+							wantCode := uxv1.CodeAmbiguousCreate
+							if attempt == 1 {
+								wantCode = uxv1.CodeConflict
+							}
+							if exit != 6 || envelope.Error == nil || envelope.Error.Code != wantCode {
+								t.Errorf("invocation=%d exit=%d want=%s output=%s", attempt+1, exit, wantCode, stdout.String())
+							}
+						} else {
+							if attempt == 0 && tc.response == "malformed" {
+								action = "reconciled_create"
+							}
+							if exit != 0 || envelope.Error != nil || envelope.Data.Action != action || envelope.Data.MR.Description != tc.want || envelope.Data.MR.IID != 11 || envelope.Data.Creation == nil || !envelope.Data.Creation.Draft {
+								t.Errorf("invocation=%d exit=%d want=%s output=%s", attempt+1, exit, action, stdout.String())
+							}
+						}
+						if envelope.Meta.Backend != "native" || envelope.Meta.UpstreamVersion != "" || strings.Contains(stdout.String(), f.keyring.token) || strings.Contains(stderr.String(), f.keyring.token) {
+							t.Fatal("native ensure changed backend or exposed credentials")
+						}
+						if _, err := os.Stat(marker); !os.IsNotExist(err) {
+							t.Fatal("native ensure started official glab")
+						}
+						f.mu.Lock()
+						writes := f.writes
+						f.mu.Unlock()
+						if writes != 1 {
+							t.Errorf("invocation=%d mutations=%d want=1 total", attempt+1, writes)
+						}
+					}
+					for _, request := range f.server.Requests() {
+						if request.Method == http.MethodPost {
+							var input map[string]string
+							if err := json.Unmarshal(request.Body, &input); err != nil {
+								t.Fatal(err)
+							}
+							if input["description"] != tc.want {
+								t.Errorf("posted description=%q want=%q", input["description"], tc.want)
+							}
+						}
 					}
 				})
 			}
