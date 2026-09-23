@@ -14,7 +14,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> local help/setup/signed update
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> feature-owned download / CI-variable handlers
+          |    -> feature-owned download / CI-variable / deletion handlers
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
                -> fixed argv builders
@@ -57,7 +57,7 @@ inference is permitted, precedence is explicit `--hostname`, `GITLAB_HOST`, an
 exact `gitlab.com` origin, then `gitlab.com`. Git context never exposes a native
 credential or changes the native API authority mapping.
 
-## Explicit product-native boundary and downloads
+## Explicit product-native boundary
 
 `Definition.NativeAuth` enables the single shared `--auth-source native`
 selector; `RequireNativeAuth` also requires deliberate selection on new
@@ -70,6 +70,8 @@ The [download contract](../contracts/downloads/v1.json) owns transport and
 download bounds, including the shorter outer download deadline applied by the
 product dispatcher. [CI variables](ci-variables.md#outcomes-races-and-bounds)
 describes the variable-operation limits.
+The [resource-deletion contract](../contracts/resource-delete/v1.md) owns
+deletion-specific authority, request bounds and reconciliation rules.
 Feature handlers retain their own route/identity/expected-state authority.
 This internal request interface does not expose generic user HTTP authority.
 
@@ -298,13 +300,11 @@ path issues a second PUT.
 `gl-axi` owns provider truth and one mutation. The pinned contract records
 that Firstmate owns task metadata, durable expected source/target branches and
 head, canonical URL, and captain/standing-yolo authority. This stage does not
-modify or integrate Firstmate. The explicitly acknowledged board issue query
-may cause provider ordering changes, pinned in `contracts/gitlab-planning/v19.3.0/`.
-The separate guarded project CI-variable contracts are described in
-[CI variables](ci-variables.md). Other mutations remain denied in this surface;
-issue edit is validation-only.
+modify or integrate Firstmate. For the current provider-write boundary, see the
+[generated command reference](command-reference.md#current-undeclared-operations)
+and its referenced feature contracts.
 
-CI-variable operations require explicit native selection and use one shared
+[CI-variable operations](ci-variables.md) require explicit native selection and use one shared
 `productnative.Client` for their complete operation. Feature-owned numeric-project
 routes and exact scope filters never use the official profile. `internal/civariable`
 removes values/descriptions at each inventory read boundary, retaining only

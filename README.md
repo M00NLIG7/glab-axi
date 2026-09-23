@@ -10,9 +10,11 @@ Two deliberately separate backends share one executable:
 - a product-facing lane delegates a closed, version-tested allowlist of bounded
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
-  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads and
-  [guarded project CI variables](docs/ci-variables.md) use
-  [explicit native authentication](docs/authentication.md#explicit-product-native-operations); and
+  to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads,
+  [guarded project CI variables](docs/ci-variables.md), and
+  [guarded resource deletion](#guarded-native-resource-deletion) use
+  [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
+  without an official-profile fallback; and
 - the frozen native `glab-axi/v1` lane performs the proven MR/CI automation
   contract directly and remains fully standalone for no-mistakes custody.
 
@@ -55,8 +57,8 @@ gl-axi setup hooks
 gl-axi update [--check]
 ```
 
-For board and work-item commands, see
-[GitLab-native planning](#gitlab-native-planning).
+For additional commands, see [GitLab-native planning](#gitlab-native-planning)
+and [guarded native resource deletion](#guarded-native-resource-deletion).
 
 Commands that permit inferred targets use current Git context or command-first
 `-R/--repo namespace/project` and `--hostname host`; space and equals forms are

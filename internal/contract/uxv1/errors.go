@@ -61,9 +61,10 @@ func Wrap(code Code, message string, cause error) *Error {
 	return &Error{Code: code, Message: message, Cause: cause}
 }
 
-// NewHTTPRejection returns a bounded product error for HTTP statuses that
-// prove the provider returned a definite rejection. Provider response text is
-// deliberately excluded.
+// NewHTTPRejection maps recognized HTTP statuses to bounded product errors.
+// Callers must establish whether the status proves rejection for their operation;
+// a status alone need not prove that no mutation occurred. Provider response text
+// is deliberately excluded.
 func NewHTTPRejection(status int) (*Error, bool) {
 	var code Code
 	var message string

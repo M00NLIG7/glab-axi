@@ -68,9 +68,10 @@ profile or token source.
 
 ## Provider-write boundary
 
-See the [generated command reference](command-reference.md) for the command
-allowlist. Delegated write controls are described below; guarded native
-project-variable controls are in [CI variables](ci-variables.md).
+The executable command registry owns the provider-write allowlist; see the
+[generated command reference](command-reference.md) for declared operations and
+feature-contract pointers. Guarded native project-variable controls are in
+[CI variables](ci-variables.md).
 
 `board issues` requires `--allow-ordering-initialization`, an explicit host,
 and exact project/group, board and list selectors before any child work. The
@@ -277,6 +278,8 @@ Product-native transport and download bounds are owned by the
 [download contract](../contracts/downloads/v1.json), including the client
 lifetime and the shorter download CLI deadline. CI-variable operation bounds
 are documented in [CI variables](ci-variables.md#outcomes-races-and-bounds).
+Deletion-specific request, phase and response bounds live in the
+[resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
 
 | Input/output | Limit |
 |---|---:|
@@ -315,7 +318,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate, ambiguous MR create/update/merge, or ambiguous CI-variable mutation |
+| 6 | conflict/duplicate, ambiguous MR create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |
