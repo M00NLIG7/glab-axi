@@ -4,34 +4,36 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"gl-axi/internal/contract/uxv1"
 )
 
 func TestIssueWriteErrorEnvelopeSchema(t *testing.T) {
 	compiler := jsonschema.NewCompiler()
-	compiler.UseLoader(jsonschema.SchemeURLLoader{})
+	compiler.LoadURL = func(url string) (io.ReadCloser, error) {
+		return nil, fmt.Errorf("unexpected external schema: %s", url)
+	}
 	const schemaBase = "https://glab-axi.invalid/schema/"
 	for _, name := range []string{
 		"glab-axi-ux-v1.schema.json",
 		"ux-v1/issue-write.schema.json",
 		"ux-v1/issue-edit.schema.json",
 		"ux-v1/board-ordering-receipt.schema.json",
+		"ux-v1/ci-variable-mutation.schema.json",
+		"ux-v1/resource-delete.schema.json",
 	} {
 		body, err := os.ReadFile(filepath.Join("..", "..", "schema", name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := compiler.AddResource(schemaBase+name, doc); err != nil {
+		if err := compiler.AddResource(schemaBase+name, bytes.NewReader(body)); err != nil {
 			t.Fatal(err)
 		}
 	}

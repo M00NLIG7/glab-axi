@@ -25,6 +25,7 @@ func TestNativeVariableRejectionEnvelope(t *testing.T) {
 	const schemaBase = "https://glab-axi.invalid/schema/"
 	for _, name := range []string{
 		"glab-axi-ux-v1.schema.json",
+		"ux-v1/issue-write.schema.json",
 		"ux-v1/issue-edit.schema.json",
 		"ux-v1/board-ordering-receipt.schema.json",
 		"ux-v1/ci-variable-mutation.schema.json",
