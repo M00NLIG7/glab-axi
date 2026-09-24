@@ -20,7 +20,7 @@ func discoveryResponse(value any) glab.Response {
 
 func discoveryRepo(path, kind string) map[string]any {
 	i := strings.LastIndex(path, "/")
-	return map[string]any{"id": 42, "name": "project", "path_with_namespace": path, "web_url": "https://gitlab.com/" + path, "namespace": map[string]any{"id": 17, "kind": kind, "full_path": path[:i]}, "visibility": "private", "archived": false, "http_url_to_repo": "https://gitlab.com/" + path + ".git", "ssh_url_to_repo": "git@gitlab.com:" + path + ".git"}
+	return map[string]any{"id": 42, "name": "project", "path_with_namespace": path, "web_url": "https://gitlab.com/" + path, "namespace": map[string]any{"id": 17, "kind": kind, "full_path": path[:i]}, "visibility": "private", "archived": false, "created_at": "2026-09-21T00:00:00Z", "http_url_to_repo": "https://gitlab.com/" + path + ".git", "ssh_url_to_repo": "git@gitlab.com:" + path + ".git"}
 }
 
 func TestDiscoveryCancellationAndDeadline(t *testing.T) {

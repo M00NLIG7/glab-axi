@@ -35,18 +35,16 @@ allowlists, accepted selectors, and residuals. No live account data is evidence.
   Repository search supports group search and explicit user ownership. User or
   language selection uses the project-discovery search route, not a rewritten
   GitHub query. The native query remains required.
-  Without user/language selectors, created sorting uses project-list routes
-  with `order_by=created_at&sort=desc` before pagination, `archived=false`, and
-  `search_namespaces=true` to retain basic project-search matching. Group searches
-  use `include_subgroups=true&with_shared=false`. GitLab v18.3.0's
-  `API::Helpers#project_finder_params_ce` passes namespace matching through to
-  both project finders, including the group route; the fixture pins this behavior.
-  The project-list route applies a three-character minimum for partial matching
-  that basic search does not. This mapping rejects query terms shorter than three
-  characters rather than changing their matching behavior. Standalone double-quoted
-  phrases count as single terms under GitLab's pinned term rules: `"go cli"` is
-  accepted, while `go cli` and `"go" cli` contain a short term and are rejected.
-  Unsorted search remains available. The original query is sent unchanged.
+  Repository creation ordering keeps the same native route and query as unsorted
+  search. No date-sort parameter is sent: GitLab v18.3.0's
+  `API::Helpers#order_options_with_tie_breaker` rewrites `created_at` to `id`
+  for project-list routes, and basic project search does not implement date order.
+  IDs and creation dates can disagree, including for imported projects.
+  The wrapper therefore collects a **complete** bounded candidate set, validates
+  every timestamp and distinct positive ID, sorts by timestamp descending (ID
+  descending on ties), then applies the display limit. Incomplete collection is
+  refused, never sorted as if it were a complete set. Native short terms and
+  quoted phrases are sent unchanged; no query parser or minimum-term rule is added.
 - Returned URL authorities compare case-insensitively; project, group, and
   resource paths remain exact, including resource type and IID.
 
@@ -61,6 +59,12 @@ search/tier and additional identity contracts, and are not exposed in this slice
 Filter-only searches and a GitHub qualifier interpreter are not added. Existing
 positional search text is GitLab-native, not a new raw API/query authority.
 
+Repository creation ordering is available only when the full result set can be
+exhausted within the existing 10-page, 8 MiB, and 30-second limits. Ten full
+100-item pages do not prove exhaustion and cause a structured refusal even with
+`--limit 1`. Missing or malformed timestamps, duplicate IDs, and upstream errors
+also refuse. Timestamp evidence is not exposed as a new output field.
+
 GitLab search availability depends on server configuration, edition, index, and
 permissions. Forbidden, disabled-search, unavailable-tier, malformed-result,
 rate-limit, and upstream errors remain structured failures with no scope fallback
@@ -73,7 +77,8 @@ not availability on a live GitLab deployment.
   exercises accepted selectors, unsupported/duplicate/malformed inputs before
   child execution, exact argv, nested namespaces, wrong owner/group/host/project,
   authority/path checks, default ownership before bounded results, quoted search
-  terms, created ordering, retained filters across pages, page/display/field
+  terms, creation ordering with opposing ID/timestamp order and time zones,
+  incomplete-sort refusal, retained filters across pages, page/display/field
   limits, 2 MiB page and 8 MiB total bounds, and controlled upstream errors.
 - `internal/product/discovery_test.go` exercises public `Run` cancellation,
   inherited read deadlines, and the reproduced wrong-project repo-view regression.

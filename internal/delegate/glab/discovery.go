@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/safeurl"
@@ -25,7 +24,6 @@ type SearchSelectors struct {
 }
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`)
-var quotedProjectTermPattern = regexp.MustCompile(`(?:^| )"([^"]+)"(?: |$)`)
 
 func ValidateGroup(group string) error {
 	if safeurl.ValidateProject(group+"/project") != nil || len(group) > 512 {
@@ -123,42 +121,8 @@ func discoveryEndpoint(r Request) (string, error) {
 			return "", err
 		}
 	}
-	if r.Operation == OpSearch {
-		if err := ValidateCreatedProjectQuery(r.Query); err != nil {
-			return "", err
-		}
-		q.Set("search_namespaces", "true")
-	}
 	if r.Search.Sort != "" {
-		if r.Search.Sort != "created" {
-			return "", uxv1.NewError(uxv1.CodeValidation, "unsupported discovery sort")
-		}
-		q.Set("order_by", "created_at")
-		q.Set("sort", "desc")
+		return "", uxv1.NewError(uxv1.CodeValidation, "repository creation ordering requires complete bounded collection, not a provider sort parameter")
 	}
 	return path + "?" + q.Encode(), nil
-}
-
-func ValidateCreatedProjectQuery(query string) error {
-	query = strings.Join(strings.Fields(query), " ")
-	var terms []string
-	for {
-		match := quotedProjectTermPattern.FindStringSubmatchIndex(query)
-		if match == nil {
-			break
-		}
-		terms = append(terms, strings.Fields(query[:match[0]])...)
-		terms = append(terms, query[match[2]:match[3]])
-		query = query[match[3]+1:]
-	}
-	terms = append(terms, strings.Fields(query)...)
-	if len(terms) == 0 {
-		return uxv1.NewError(uxv1.CodeUnsupported, "created repository sorting requires query terms of at least three characters")
-	}
-	for _, term := range terms {
-		if utf8.RuneCountInString(term) < 3 {
-			return uxv1.NewError(uxv1.CodeUnsupported, "created repository sorting requires query terms of at least three characters")
-		}
-	}
-	return nil
 }

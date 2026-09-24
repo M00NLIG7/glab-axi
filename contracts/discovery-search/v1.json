@@ -14,7 +14,7 @@
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/app/finders/projects_finder.rb", "sha256": "b818a78036ae65eb2dc21b3d2ceab1b95732b5e999fb78a64eb45467d6f72368", "symbols": ["sort"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/projects.rb", "sha256": "9e086a8513ba6ef1200cc14f3450e0cd7dd7fc61b29fe5f9debbc992fd6b2006", "symbols": ["present_projects", "sort_params", "filter_params"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/groups.rb", "sha256": "72ba6d2ea8294a839cf013f58efb201f16d9b898194ba6d48def924e8a8c64fc", "symbols": ["find_group_projects", "reorder_projects_with_order_support"]},
-    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/helpers.rb", "sha256": "3d02a8f64a430f4950856ff50f4429c50816259ded1d0ddf132ea0d7636e48b0", "symbols": ["project_finder_params_ce", "project_finder_params_visibility_ce"]},
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/api/helpers.rb", "sha256": "3d02a8f64a430f4950856ff50f4429c50816259ded1d0ddf132ea0d7636e48b0", "symbols": ["project_finder_params_ce", "project_finder_params_visibility_ce", "reorder_projects", "order_options_with_tie_breaker"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/app/finders/group_projects_finder.rb", "sha256": "f86c8ef5fac270f638f6e37510ccda5c3f0baf56ce0e988edfd98f8f25ea5590", "symbols": ["projects_within_group"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/app/finders/concerns/projects/search_filter.rb", "sha256": "f63fd929a0e4f08d6a2cdefe05953827313ceb8b614ae10ea78d06d88d01dd15", "symbols": ["by_search"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/gitlab/path_regex.rb", "sha256": "4a865022e7e2bbcabb3c1cae523165f19305c4893ae78f78a7a1694a84281bc4", "symbols": ["NAMESPACE_FORMAT_REGEX_JS"]},
@@ -24,26 +24,26 @@
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v18.3.0/lib/gitlab/sql/pattern.rb", "sha256": "68e4293c4b303092c0c72be52c4009ae2955140ec3639cc4bd34efbc60d24acf", "symbols": ["MIN_CHARS_FOR_PARTIAL_MATCHING", "REGEX_QUOTED_TERM", "fuzzy_arel_match", "select_fuzzy_terms", "split_query_to_search_terms"]}
   ],
   "routes": [
-    {"operation": "repo-discovery", "method": "GET", "path": "projects", "query": ["page", "per_page", "owned", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
-    {"operation": "repo-discovery", "method": "GET", "path": "users/{username}/projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search", "order_by", "sort"]},
-    {"operation": "repo-discovery", "method": "GET", "path": "groups/{escaped_full_path}/projects", "query": ["page", "per_page", "visibility", "archived", "search", "order_by", "sort", "with_shared=false", "include_subgroups"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "projects", "query": ["page", "per_page", "owned", "visibility", "archived", "with_programming_language", "search"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "users/{username}/projects", "query": ["page", "per_page", "visibility", "archived", "with_programming_language", "search"]},
+    {"operation": "repo-discovery", "method": "GET", "path": "groups/{escaped_full_path}/projects", "query": ["page", "per_page", "visibility", "archived", "search", "with_shared=false", "include_subgroups"]},
     {"operation": "discovery-group", "method": "GET", "path": "groups/{escaped_full_path}", "query": ["with_projects=false"]},
     {"operation": "discovery-project", "method": "GET", "path": "projects/{escaped_repo_or_positive_id}", "query": []},
-    {"operation": "search", "method": "GET", "path": "projects", "when": "scope=repos and sort=created", "query": ["page", "per_page", "search", "search_namespaces=true", "archived=false", "order_by=created_at", "sort=desc"]},
-    {"operation": "search", "method": "GET", "path": "groups/{escaped_full_path}/projects", "when": "scope=repos and sort=created", "query": ["page", "per_page", "search", "search_namespaces=true", "archived=false", "order_by=created_at", "sort=desc", "with_shared=false", "include_subgroups=true"]},
     {"operation": "search", "method": "GET", "path": "search", "query": ["scope=projects|issues|merge_requests", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]},
     {"operation": "search", "method": "GET", "path": "groups/{escaped_full_path}/search", "query": ["scope=projects|issues|merge_requests", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]},
     {"operation": "search", "method": "GET", "path": "projects/{escaped_repo}/search", "query": ["scope=issues|merge_requests|commits|blobs", "search", "page", "per_page", "state", "order_by=created_at", "sort=desc"]}
   ],
   "repository_listing_default": "Without an explicit user/group selector, listing retains the official owned-project default before pagination, including visibility, archived, and language filters; filtered listing uses owned=true",
   "repository_search_ordering": {
-    "created": "Without owner/language selectors, select project-list routes before pagination with archived=false and search_namespaces=true; group routes also include_subgroups=true and with_shared=false; reject provider query terms shorter than three characters because project-list partial matching differs; standalone double-quoted phrases count as single terms",
-    "default": "Unsorted host/group repository search retains the search API; owner/language selectors retain project discovery search"
+    "provider_evidence": "API::Helpers#order_options_with_tie_breaker rewrites created_at to id by default; reorder_projects is used by host, user and group project-list routes. Basic SearchResults#projects also does not implement a date sort. ID order is not creation-date order for imported projects.",
+    "created": "Keep the same native route/query as unsorted search and send no repository provider sort parameter. Collect the complete candidate set within 10 pages of 100 and shared 8 MiB/30-second limits, validate every created_at timestamp and distinct positive ID, sort by timestamp descending (ID descending on ties), then apply the requested display limit. Refuse incomplete collection; never sort a truncated prefix.",
+    "default": "Host/group repository search retains the search API; owner/language selectors retain project discovery search",
+    "provider_sort_scopes": ["issues", "merge_requests"]
   },
   "fields": {
-    "repository": ["id", "name", "path_with_namespace", "web_url", "namespace.kind", "namespace.full_path", "namespace.id", "visibility", "archived"],
+    "repository": ["id", "name", "path_with_namespace", "web_url", "namespace.kind", "namespace.full_path", "namespace.id", "visibility", "archived", "created_at"],
     "group": ["id", "full_path", "web_url"],
-    "search": ["id", "iid", "project_id", "web_url", "path_with_namespace", "state"]
+    "search": ["id", "iid", "project_id", "web_url", "path_with_namespace", "state", "created_at"]
   },
   "selectors": {
     "repo list": ["positional USER", "--group FULL_PATH", "--include-subgroups", "--visibility public|internal|private", "--archived", "--language LANGUAGE (host/user only)"],
@@ -59,6 +59,7 @@
     "GitLab language means uses programming language, not GitHub primary language; unavailable for group discovery",
     "Search labels, assignee, author, draft, review and arbitrary sort are not supported by the pinned search routes; never encoded as guessed query qualifiers",
     "GitHub stars comparisons and code language have no faithful mapping in this slice",
+    "Repository created ordering requires a complete bounded candidate set; exactly ten full pages cannot prove exhaustion and are refused. Missing/malformed timestamps, duplicate IDs and any provider error fail closed. created_at is consumed as ordering evidence, not added to the closed output.",
     "Commit author login and author-date/committer-date sorting have no faithful search mapping in this slice",
     "Host/group code and commit search require advanced-search/tier and per-result identity contracts not exposed in this slice",
     "No filter-only search or arbitrary GitHub qualifier parser is added; the existing query remains GitLab-native search text"

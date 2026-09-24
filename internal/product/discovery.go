@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
@@ -13,7 +15,7 @@ import (
 	"gl-axi/internal/safeurl"
 )
 
-const searchDetails = "Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.\nLabels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.\nCommit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.\nDisabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.\nWithout user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.\nRepository language/user filters use project discovery search; language means uses a language, not primary language."
+const searchDetails = "Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.\nLabels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.\nCommit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.\nDisabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.\nRepository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.\nRepository language/user filters use project discovery search; language means uses a language, not primary language."
 
 func discoveryFlags() []FlagDefinition {
 	return []FlagDefinition{
@@ -82,11 +84,6 @@ func validateDiscoveryParsed(p Parsed) error {
 		if err := searchSelection(p).Validate(p.Definition.Path[1]); err != nil {
 			return err
 		}
-		if path == "search repos" && p.Values["--sort"] == "created" && p.Values["--owner"] == "" && p.Values["--language"] == "" {
-			if err := glab.ValidateCreatedProjectQuery(p.Positionals[0]); err != nil {
-				return err
-			}
-		}
 		if (p.Values["--scope"] == "host" || p.Values["--group"] != "") && p.Values["--repo"] != "" {
 			return uxv1.NewError(uxv1.CodeValidation, "host/group search cannot also select a repository")
 		}
@@ -147,6 +144,9 @@ func normalizeDiscoveryRepos(body []byte, host string, selectors glab.DiscoveryS
 	var source []upstreamRepo
 	if err := decodeStrict(body, &source); err != nil {
 		return nil, false, err
+	}
+	if source == nil {
+		return nil, false, malformed("repository list")
 	}
 	out := make([]Repository, 0, len(source))
 	truncated := false
@@ -259,12 +259,24 @@ func fetchScopedSearch(ctx context.Context, client delegateClient, target Target
 		}
 		projects[project.ID] = project.PathWithNamespace
 	}
-	return fetchList(ctx, client, request, p.Limit, func(body []byte) ([]map[string]any, bool, error) {
+	createdOrder := kind == "repos" && s.Sort == "created"
+	pageWidth := min(100, p.Limit+1)
+	if createdOrder {
+		// GitLab's project-list routes rewrite created_at ordering to ID.
+		// Keep native matching and collect the entire bounded candidate set;
+		// no provider date-order promise or sort of a truncated page is safe.
+		request.Search.Sort = ""
+		pageWidth = 100
+	}
+	normalize := func(body []byte) ([]map[string]any, bool, error) {
 		var source []map[string]any
 		if err := decodeStrict(body, &source); err != nil {
 			return nil, false, err
 		}
-		if len(source) > min(100, p.Limit+1) {
+		if source == nil {
+			return nil, false, malformed("search result list")
+		}
+		if len(source) > pageWidth {
 			return nil, false, malformed("search page size")
 		}
 		out := make([]map[string]any, 0, len(source))
@@ -343,5 +355,68 @@ func fetchScopedSearch(ctx context.Context, client delegateClient, target Target
 			out = append(out, items...)
 		}
 		return out, truncated, nil
+	}
+	if createdOrder {
+		return fetchCreatedRepoSearch(ctx, client, request, p.Limit, normalize)
+	}
+	return fetchList(ctx, client, request, p.Limit, normalize)
+}
+
+// Creation order cannot be inferred from provider IDs, nor from a limited
+// prefix of results. Refuse when the complete set cannot be proved within the
+// normal operation bounds. Timestamp metadata is consumed, not added to output.
+func fetchCreatedRepoSearch(ctx context.Context, client delegateClient, request glab.Request, displayLimit int, normalize func([]byte) ([]map[string]any, bool, error)) ([]map[string]any, listState, error) {
+	type candidate struct {
+		data    map[string]any
+		id      int64
+		created time.Time
+	}
+	seen := make(map[int64]bool)
+	candidates, state, err := fetchList(ctx, client, request, limits.MaxPages*100, func(body []byte) ([]candidate, bool, error) {
+		items, cut, err := normalize(body)
+		if err != nil {
+			return nil, false, err
+		}
+		var dates []struct {
+			ID        int64  `json:"id"`
+			CreatedAt string `json:"created_at"`
+		}
+		if err := decodeStrict(body, &dates); err != nil {
+			return nil, false, err
+		}
+		out := make([]candidate, 0, len(items))
+		for i, item := range items {
+			stamp := dates[i]
+			created, err := time.Parse(time.RFC3339Nano, stamp.CreatedAt)
+			if err != nil || len(stamp.CreatedAt) > 64 || stamp.ID < 1 || seen[stamp.ID] {
+				return nil, false, malformed("repository creation-order evidence")
+			}
+			seen[stamp.ID] = true
+			out = append(out, candidate{data: item, id: stamp.ID, created: created})
+		}
+		return out, cut, nil
 	})
+	state.count = min(state.count, displayLimit)
+	if err != nil {
+		return nil, state, err
+	}
+	if !state.complete {
+		return nil, state, uxv1.NewError(uxv1.CodeSafety, "repository creation order requires complete search results within the hard page, byte, and deadline limits")
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].created.Equal(candidates[j].created) {
+			return candidates[i].id > candidates[j].id
+		}
+		return candidates[i].created.After(candidates[j].created)
+	})
+	if len(candidates) > displayLimit {
+		candidates = candidates[:displayLimit]
+		state.complete, state.truncated, state.reason = false, true, "display_limit"
+	}
+	out := make([]map[string]any, 0, len(candidates))
+	for _, item := range candidates {
+		out = append(out, item.data)
+	}
+	state.count = len(out)
+	return out, state, nil
 }

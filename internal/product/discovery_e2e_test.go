@@ -1,6 +1,7 @@
 package product
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"gl-axi/internal/contract/uxv1"
 )
@@ -24,13 +26,14 @@ type discoveryOwnershipPage struct {
 	owned, accessible []any
 }
 type discoveryCase struct {
-	name    string
-	args    []string
-	steps   []discoveryStep
-	failure bool
-	reason  string
-	count   int
-	firstID int64
+	name      string
+	args      []string
+	steps     []discoveryStep
+	failure   bool
+	reason    string
+	count     int
+	firstID   int64
+	errorCode uxv1.Code
 }
 
 func TestDiscoveryExecutableContracts(t *testing.T) {
@@ -64,8 +67,8 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 		{name: "owner-language", args: []string{"repo", "list", "alice", "--language", "Go"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&with_programming_language=Go", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
 		{name: "search-repos-short-unsorted", args: []string{"search", "repos", "go"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=go", repos(project), false}}, count: 1},
 		{name: "search-repos", args: []string{"search", "repos", "cli"}, steps: []discoveryStep{{api + "search?page=1&per_page=31&scope=projects&search=cli", repos(project), false}}, count: 1},
-		{name: "search-group-repos", args: []string{"search", "repos", "cli", "--group", "team/sub", "--sort", "created"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/projects?archived=false&include_subgroups=true&order_by=created_at&page=1&per_page=31&search=cli&search_namespaces=true&sort=desc&with_shared=false", repos(project), false}}, count: 1},
-		{name: "search-language", args: []string{"search", "repos", "cli", "--language", "Go", "--sort", "created"}, steps: []discoveryStep{{api + "projects?order_by=created_at&page=1&per_page=31&search=cli&sort=desc&with_programming_language=Go", repos(project), false}}, count: 1},
+		{name: "search-group-repos", args: []string{"search", "repos", "cli", "--group", "team/sub", "--sort", "created"}, steps: []discoveryStep{groupflight, {api + "groups/team%2Fsub/search?page=1&per_page=100&scope=projects&search=cli", repos(project), false}}, count: 1},
+		{name: "search-language", args: []string{"search", "repos", "cli", "--language", "Go", "--sort", "created"}, steps: []discoveryStep{{api + "projects?page=1&per_page=100&search=cli&with_programming_language=Go", repos(project), false}}, count: 1},
 		{name: "search-owner", args: []string{"search", "repos", "cli", "--owner", "alice"}, steps: []discoveryStep{{api + "users/alice/projects?page=1&per_page=31&search=cli", repos(discoveryRepo("alice/project", "user")), false}}, count: 1},
 	}
 	for _, command := range [][]string{{"repo", "list", "0xalice"}, {"search", "repos", "cli", "--owner", "0xalice"}} {
@@ -88,39 +91,114 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 		}
 	}
 	for _, area := range []string{"host", "group"} {
-		for _, query := range []string{`"go cli"`, `tools "go cli"`, `"go cli" "a b"`} {
+		for _, query := range []string{`"go cli"`, `tools "go cli"`, `"go cli" "a b"`, `go`, `go cli`, `"go" cli`, `""`, `界`} {
 			args := []string{"search", "repos", query, "--sort", "created"}
-			endpoint := "projects?archived=false&order_by=created_at&page=1&per_page=31&search=" + url.QueryEscape(query) + "&search_namespaces=true&sort=desc"
+			endpoint := "search?page=1&per_page=100&scope=projects&search=" + url.QueryEscape(query)
 			var steps []discoveryStep
 			if area == "group" {
 				args = append(args, "--group", "team/sub")
-				endpoint = "groups/team%2Fsub/projects?archived=false&include_subgroups=true&order_by=created_at&page=1&per_page=31&search=" + url.QueryEscape(query) + "&search_namespaces=true&sort=desc&with_shared=false"
+				endpoint = "groups/team%2Fsub/search?page=1&per_page=100&scope=projects&search=" + url.QueryEscape(query)
 				steps = append(steps, groupflight)
 			}
 			steps = append(steps, discoveryStep{api + endpoint, repos(project), false})
 			tests = append(tests, discoveryCase{name: "search-quoted-" + area + "-" + query, args: args, steps: steps, count: 1})
 		}
-		args := []string{"search", "repos", "team/sub", "--sort", "created"}
-		prefix := "projects?archived=false&"
-		suffix := "&search=team%2Fsub&search_namespaces=true&sort=desc"
+	}
+	for _, area := range []string{"host", "group", "owner", "language", "owner-language"} {
+		args := []string{"search", "repos", "project", "--sort", "created"}
+		prefix, suffix := "search?", "&scope=projects&search=project"
 		var steps []discoveryStep
-		if area == "group" {
+		user := area == "owner" || area == "owner-language"
+		switch area {
+		case "group":
 			args = append(args, "--group", "team/sub")
-			prefix = "groups/team%2Fsub/projects?archived=false&include_subgroups=true&"
-			suffix += "&with_shared=false"
+			prefix = "groups/team%2Fsub/search?"
 			steps = append(steps, groupflight)
+		case "owner", "owner-language":
+			args = append(args, "--owner", "alice")
+			prefix, suffix = "users/alice/projects?", "&search=project"
+		case "language":
+			prefix, suffix = "projects?", "&search=project"
+		}
+		if area == "language" || area == "owner-language" {
+			args = append(args, "--language", "Go")
+			suffix += "&with_programming_language=Go"
 		}
 		page := make([]any, 100)
 		for i := range page {
 			p := discoveryRepo(fmt.Sprintf("team/sub/child/p%d", i), "group")
+			if user {
+				p = discoveryRepo(fmt.Sprintf("alice/p%d", i), "user")
+			}
 			p["id"] = i + 1
 			p["created_at"] = fmt.Sprintf("2026-09-21T00:%02d:%02dZ", (99-i)/60, (99-i)%60)
 			page[i] = p
 		}
-		tests = append(tests, discoveryCase{name: "search-created-limit-" + area, args: append(append([]string{}, args...), "--limit", "1"), steps: append(append([]discoveryStep{}, steps...), discoveryStep{api + prefix + "order_by=created_at&page=1&per_page=2" + suffix, page[:2], false}), count: 1, firstID: 1, reason: "display_limit"})
-		steps = append(steps, discoveryStep{api + prefix + "order_by=created_at&page=1&per_page=100" + suffix, page, false}, discoveryStep{api + prefix + "order_by=created_at&page=2&per_page=100" + suffix, []any{}, false})
+		// GitLab v18.3.0 API::Helpers#order_options_with_tie_breaker
+		// rewrites created_at to id. Model that provider behavior, not the
+		// requested ordering: imported projects can have opposing ID/date order.
+		for i, j := 0, len(page)-1; i < j; i, j = i+1, j-1 {
+			page[i], page[j] = page[j], page[i]
+		}
+		steps = append(steps, discoveryStep{api + prefix + "page=1&per_page=100" + suffix, page, false}, discoveryStep{api + prefix + "page=2&per_page=100" + suffix, []any{}, false})
+		tests = append(tests, discoveryCase{name: "search-created-limit-" + area, args: append(append([]string{}, args...), "--limit", "1"), steps: append([]discoveryStep{}, steps...), count: 1, firstID: 1, reason: "display_limit"})
 		tests = append(tests, discoveryCase{name: "search-created-pages-" + area, args: append(args, "--limit", "101"), steps: steps, count: 100, firstID: 1})
 	}
+	createdArgs := []string{"search", "repos", "project", "--sort", "created", "--limit", "1"}
+	createdEndpoint := api + "search?page=1&per_page=100&scope=projects&search=project"
+	for _, variant := range []string{"aligned-ids", "timezone", "equal-time", "missing-time", "bad-time", "duplicate-id"} {
+		first, second := discoveryRepo("team/sub/older", "group"), discoveryRepo("team/sub/newer", "group")
+		first["id"], second["id"] = 20, 10
+		first["created_at"], second["created_at"] = "2026-09-21T12:00:00+02:00", "2026-09-21T11:30:00Z"
+		wantID := int64(10)
+		switch variant {
+		case "aligned-ids":
+			first["created_at"] = "2026-09-21T12:00:00Z"
+			wantID = 20
+		case "equal-time":
+			first["created_at"] = second["created_at"]
+			wantID = 20
+		case "missing-time":
+			delete(second, "created_at")
+		case "bad-time":
+			second["created_at"] = "not-a-date"
+		case "duplicate-id":
+			second["id"] = first["id"]
+		}
+		failed := variant == "missing-time" || variant == "bad-time" || variant == "duplicate-id"
+		test := discoveryCase{name: "search-created-" + variant, args: createdArgs, steps: []discoveryStep{{createdEndpoint, []any{first, second}, false}}, count: 1, firstID: wantID, reason: "display_limit"}
+		if failed {
+			test.failure, test.reason, test.errorCode = true, "", uxv1.CodeUpstream
+		}
+		tests = append(tests, test)
+	}
+	for _, large := range []bool{false, true} {
+		pages := 10
+		name, reason := "search-created-incomplete", "hard_page_limit"
+		if large {
+			pages, name, reason = 5, "search-created-byte-bound", ""
+		}
+		var steps []discoveryStep
+		for page := 1; page <= pages; page++ {
+			body := make([]any, 100)
+			for i := range body {
+				id := (page-1)*100 + i + 1
+				item := discoveryRepo(fmt.Sprintf("team/sub/project%d", id), "group")
+				item["id"] = id
+				if large {
+					item["description"] = strings.Repeat("x", 17000)
+				}
+				body[i] = item
+			}
+			steps = append(steps, discoveryStep{api + fmt.Sprintf("search?page=%d&per_page=100&scope=projects&search=project", page), body, false})
+		}
+		tests = append(tests, discoveryCase{name: name, args: createdArgs, steps: steps, failure: true, reason: reason, errorCode: uxv1.CodeSafety})
+	}
+	tests = append(tests,
+		discoveryCase{name: "search-created-empty", args: createdArgs, steps: []discoveryStep{{createdEndpoint, []any{}, false}}},
+		discoveryCase{name: "search-created-null", args: createdArgs, steps: []discoveryStep{{createdEndpoint, nil, false}}, failure: true, errorCode: uxv1.CodeUpstream},
+		discoveryCase{name: "search-created-disabled", args: createdArgs, steps: []discoveryStep{{createdEndpoint, "HTTP 403: search disabled", true}}, failure: true, errorCode: uxv1.CodeForbidden},
+	)
 	for _, visibility := range []string{"public", "internal", "private"} {
 		p := discoveryRepo("team/sub/project", "group")
 		p["visibility"] = visibility
@@ -324,9 +402,6 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	for _, language := range []string{" F*", "F* ", "F\t*", "Ren'Py\n", strings.Repeat("x", 65)} {
 		invalid = append(invalid, []string{"repo", "list", "--language", language}, []string{"search", "repos", "cli", "--language", language})
 	}
-	for _, query := range []string{"go", "go cli", "\"go\" cli", "\"go cli\" go", "\"go cli\" \"ab\"", "\"\"", "界"} {
-		invalid = append(invalid, []string{"search", "repos", query, "--sort", "created"}, []string{"search", "repos", query, "--group", "team/sub", "--sort", "created"})
-	}
 	for i, args := range invalid {
 		tests = append(tests, discoveryCase{name: fmt.Sprintf("invalid-%d", i), args: args, failure: true})
 	}
@@ -402,21 +477,30 @@ cat "$FIXTURE/body.$n"
 			break
 		}
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = dir
 	secret := strings.Join([]string{"synthetic", "discovery", "sentinel"}, "-")
-	cmd.Env = []string{"HOME=" + dir, "PATH=" + dir + ":/usr/bin:/bin", "FIXTURE=" + dir, "GITLAB_TOKEN=" + secret, "GLAB_CONFIG_DIR=" + filepath.Join(dir, "config")}
+	cmd.Env = []string{"GOMAXPROCS=2", "HOME=" + dir, "PATH=" + dir + ":/usr/bin:/bin", "FIXTURE=" + dir, "GITLAB_TOKEN=" + secret, "GLAB_CONFIG_DIR=" + filepath.Join(dir, "config")}
 	output, err := cmd.CombinedOutput()
 	if (err != nil) != test.failure {
 		t.Fatalf("err=%v output=%s", err, output)
 	}
 	var env struct {
-		OK   bool                       `json:"ok"`
-		Data map[string]json.RawMessage `json:"data"`
-		Meta uxv1.Meta                  `json:"meta"`
+		OK    bool                       `json:"ok"`
+		Data  map[string]json.RawMessage `json:"data"`
+		Meta  uxv1.Meta                  `json:"meta"`
+		Error struct {
+			Code uxv1.Code `json:"code"`
+		} `json:"error"`
 	}
 	if err := json.Unmarshal(output, &env); err != nil {
 		t.Fatalf("envelope: %v: %s", err, output)
+	}
+	if test.failure && (len(env.Data) != 0 || test.errorCode != "" && env.Error.Code != test.errorCode || test.reason != "" && env.Meta.Reason != test.reason) {
+		t.Fatalf("refusal evidence: %s", output)
 	}
 	if env.OK == test.failure || test.failure && env.Meta.Complete {
 		t.Fatalf("truthfulness: %s", output)

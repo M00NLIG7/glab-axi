@@ -420,7 +420,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
-Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -437,7 +437,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
-Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -454,7 +454,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
-Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -471,7 +471,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
-Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
@@ -488,7 +488,7 @@ Query text is GitLab-native, not a GitHub qualifier parser. State and created so
 Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
 Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
 Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
-Without user/language filters, repository created sorting retains namespace matching and excludes archived projects; ordering precedes pagination. Query terms under three characters are unsupported for this mapping; a standalone double-quoted phrase counts as one term.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
 Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
