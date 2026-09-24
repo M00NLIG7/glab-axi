@@ -125,10 +125,13 @@ passthrough. Every fixed API argv is represented in the upstream capability
 fixture and exact-argv tests. Guarded merge callers cannot choose any route,
 method, query, header, or body field.
 
-List adapters request a one-item probe beyond the display limit, use at most 100
-items/page and 10 pages, and never claim completeness when a display/provider
-hard limit is reached. MR discussions resolve the selected target project to a
-canonical numeric ID, full path, and validated URL, then bind the requested IID
+List adapters normally request a one-item probe beyond the display limit, use
+at most 100 items/page and 10 pages, and never claim completeness when a
+display/provider hard limit is reached. Repository creation-order search is the
+exception to display-limit probing; its complete-collection requirement is owned
+by the [discovery and search contract](../contracts/discovery-search/README.md).
+MR discussions resolve the selected target project to a canonical numeric ID,
+full path, and validated URL, then bind the requested IID
 to its provider MR ID, source/target project IDs, branches, authoritative
 base/head SHAs, URL, and `updated_at`. A fork source project is resolved through
 a fixed GET whose positive numeric ID comes only from that bound MR. Project and

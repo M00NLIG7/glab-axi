@@ -69,7 +69,9 @@ an untrusted remote cannot select where an environment credential is sent.
 `--limit` never raises hard limits.
 TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
-[generated command reference](docs/command-reference.md).
+[generated command reference](docs/command-reference.md). Repository discovery
+selectors, search scopes, and remaining parity limitations are documented in the
+[discovery and search contract](contracts/discovery-search/README.md).
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note
