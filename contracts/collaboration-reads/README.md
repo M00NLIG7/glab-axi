@@ -36,7 +36,11 @@ and incomplete metadata, with `access_denied` or `not_found_or_unsupported`.
 These responses cannot distinguish entitlement, version, hidden resource or
 permission. Other failures, including authentication/cancellation/malformed
 responses, fail. Text mentioning a status without the pinned official error
-framing is not sufficient for a definite unavailable result. Issue discussion
+framing is not sufficient for a definite unavailable result. Headless children
+use the pinned `GLAB_NO_PROMPT=1` switch; inherited `NO_PROMPT` and
+`PROMPT_DISABLED` are removed instead of injecting deprecated switches whose
+warnings would make the status framing ambiguous. The classifier still refuses
+ambiguous framing rather than stripping arbitrary warning text. Issue discussion
 errors always fail rather than becoming empty comments. A complete empty array
 means no visible discussions or assigned reviewers, not universal absence.
 
@@ -76,6 +80,12 @@ edits and approval changes are not guaranteed to advance MR/issue updated-at.
   when `GL_AXI_OFFICIAL_GLAB_TEST_BINARY` is supplied by the existing CI job.
   A fixture-only `ca_cert` configuration supports the synthetic CA on macOS as
   well as Linux; TLS verification is never disabled.
+- `internal/delegate/glab/collaboration_cli_tls_test.go`: both built public
+  executables through real pinned glab and TLS fixtures, including ordinary
+  403/404, misleading HTTP 500 messages, singleton error arrays, and an approved
+  response. The existing checksum-pinned CI job explicitly runs this and the
+  collaboration adapter TLS test. `prompt_environment_test.go` also observes
+  the actual child environment without requiring the optional upstream binary.
 - Existing discussion, native compatibility, generated help and closed-schema
   checks remain part of `go test ./...`.
 

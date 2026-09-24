@@ -426,7 +426,10 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 	if login {
 		out = append(out, "CI=false", "GITLAB_CI=false")
 	} else {
-		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=1")
+		// Use the pinned CLI's supported prompt switch only. NO_PROMPT emits
+		// a deprecation warning that makes otherwise definite HTTP errors
+		// ambiguous; inherited legacy switches are already removed above.
+		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "GLAB_NO_PROMPT=1")
 	}
 	return out
 }
