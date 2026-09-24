@@ -129,10 +129,16 @@ Backend: `official-glab`. Schema: `schema/ux-v1/auth-status.schema.json`.
 ## `issue list`
 
 ```text
-gl-axi issue list [global flags]
+gl-axi issue list [filter/selection flags] [global flags]
 ```
 
-List project issues.
+List project issues with typed filters and bounded field selection.
+
+Use --fields description,labels to add list fields while retaining defaults.
+Default fields and identity/state validation always remain.
+Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
+meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
+See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/issue-list.schema.json`.
 
@@ -142,7 +148,12 @@ Backend: `official-glab`. Schema: `schema/ux-v1/issue-list.schema.json`.
 gl-axi issue view <iid> [global flags]
 ```
 
-View one project issue.
+View one project issue with bounded descriptions.
+
+Default fields and identity/state validation always remain.
+Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
+meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
+See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/issue-view.schema.json`.
 
@@ -164,10 +175,16 @@ Backend: `official-glab`. Schema: `schema/ux-v1/issue-edit.schema.json`.
 ## `mr list`
 
 ```text
-gl-axi mr list [global flags]
+gl-axi mr list [filter/selection flags] [global flags]
 ```
 
-List project merge requests.
+List project merge requests with typed filters and bounded field selection.
+
+Use --fields description,labels to add list fields while retaining defaults.
+Default fields and identity/state validation always remain.
+Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
+meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
+See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-list.schema.json`.
 
@@ -177,7 +194,12 @@ Backend: `official-glab`. Schema: `schema/ux-v1/mr-list.schema.json`.
 gl-axi mr view <iid> [global flags]
 ```
 
-View one merge request.
+View one merge request with bounded descriptions.
+
+Default fields and identity/state validation always remain.
+Defaults are unchanged: lists omit description, views include it up to 131072 UTF-8 bytes.
+meta.complete describes the item set; meta.truncated also reports field cuts. Provider page/byte/time bounds always apply.
+See docs/read-parity.md for filter semantics, field names, and remaining reference differences.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-view.schema.json`.
 

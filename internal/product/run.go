@@ -152,7 +152,17 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 		meta.Complete = false
 		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), parsed.Format, err, meta)
 	}
-	if err := output.WriteValue(deps.Runtime.Stdout, parsed.Format, uxv1.Success(result.data, result.meta)); err != nil {
+	data, err := output.MarshalValue(parsed.Format, uxv1.Success(result.data, result.meta))
+	if err != nil {
+		meta := result.meta
+		meta.Complete = false
+		if uxv1.AsError(err).Code == uxv1.CodeUpstream {
+			meta.Truncated = true
+			meta.Reason = "operation_limit"
+		}
+		return writeFailure(deps.Runtime.Stdout, deps.Runtime.Stderr, productProgramName(deps), parsed.Format, err, meta)
+	}
+	if n, err := deps.Runtime.Stdout.Write(data); err != nil || n < len(data) {
 		_, _ = fmt.Fprintf(deps.Runtime.Stderr, "%s: output failure\n", productProgramName(deps))
 		return 8
 	}
@@ -256,7 +266,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		}
 		return commandOutput{data: map[string]any{"authenticated": true, "host": target.Host}, meta: meta}, nil
 	case "issue list":
-		items, listMeta, err := fetchIssues(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchSelectedIssues(ctx, client, target, parsed)
 		return listOutput("issues", items, meta, listMeta), err
 	case "issue view":
 		return executeIssueView(ctx, client, target, parsed, meta)
@@ -265,7 +275,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
 		return executeIssueWrite(ctx, target, parsed, deps, meta)
 	case "mr list":
-		items, listMeta, err := fetchMRs(ctx, client, target, parsed.Limit)
+		items, listMeta, err := fetchSelectedMRs(ctx, client, target, parsed)
 		return listOutput("mrs", items, meta, listMeta), err
 	case "mr view":
 		return executeMRView(ctx, client, target, parsed, meta)

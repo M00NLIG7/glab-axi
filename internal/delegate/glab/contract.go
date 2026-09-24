@@ -79,6 +79,7 @@ type Request struct {
 	ListID                      int64
 	Cursor                      string
 	AllowOrderingInitialization bool
+	Filters                     ListFilters
 	PipelineFilters             PipelineFilters
 	JobStatus                   string
 	// MaxResponseBytes may only narrow the operation's existing capture cap.
@@ -148,6 +149,13 @@ func build(request Request) (invocation, error) {
 				return invocation{}, err
 			}
 			base = append(base, request.PipelineFilters.args()...)
+		}
+		if request.Operation == OpIssueList || request.Operation == OpMRList {
+			filters, err := request.Filters.argv(request.Operation)
+			if err != nil {
+				return invocation{}, err
+			}
+			base = append(base, filters...)
 		}
 		base = append(base, page...)
 		base = append(base, repoArgs()...)
