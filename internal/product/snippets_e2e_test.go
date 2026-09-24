@@ -212,9 +212,19 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 		item.WebURL = strings.Replace(item.WebURL, "gitlab.com", host, 1)
 		item.RawURL = strings.Replace(item.RawURL, "gitlab.com", host, 1)
 		item.Files[0].RawURL = strings.Replace(item.Files[0].RawURL, "gitlab.com", host, 1)
+		ref, encodedRef := "main", "main"
+		if strings.HasPrefix(mode, "slash-ref-") {
+			ref, encodedRef = "release/next", "release%2Fnext"
+			item.Files[0].RawURL = strings.Replace(item.Files[0].RawURL, "/raw/main/", "/raw/"+encodedRef+"/", 1)
+			if strings.Contains(r.URL.Path, "/files/") && !strings.Contains(r.RequestURI, "/files/release%2Fnext/") {
+				unsafeRequest = true
+				http.Error(w, "root ref was not encoded as one API segment", http.StatusBadRequest)
+				return
+			}
+		}
 		for _, file := range snippetFilenameCases {
-			item.Files = append(item.Files, upstreamSnippetFile{Path: file.name, RawURL: item.WebURL + "/raw/main/" + file.rawPath})
-			if strings.HasSuffix(r.URL.Path, "/files/main/"+file.name+"/raw") {
+			item.Files = append(item.Files, upstreamSnippetFile{Path: file.name, RawURL: item.WebURL + "/raw/" + encodedRef + "/" + file.rawPath})
+			if strings.HasSuffix(r.URL.Path, "/files/"+ref+"/"+file.name+"/raw") {
 				w.Header().Set("Content-Type", "text/plain")
 				fmt.Fprint(w, file.content)
 				return
@@ -236,7 +246,7 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 		if mode == "unavailable" {
 			item.Files = nil
 		}
-		if strings.HasSuffix(r.URL.Path, "/files/main/dir/a b.txt/raw") {
+		if strings.HasSuffix(r.URL.Path, "/files/"+ref+"/dir/a b.txt/raw") {
 			w.Header().Set("Content-Type", "text/plain")
 			switch mode {
 			case "missing-content":
@@ -351,6 +361,30 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 	}
 	wantContent := map[string]SnippetContent{}
 	for _, scope := range []string{"personal", "project"} {
+		for _, selection := range []string{"list", "view", "files", ":username.txt", "reader.txt", "dir/a b.txt"} {
+			name := "slash-ref-" + scope + "-" + selection
+			args := []string{"view", "42", "--scope", scope}
+			switch selection {
+			case "list":
+				args = []string{"list", "--scope", scope}
+			case "view":
+			case "files":
+				args = append(args, "--files")
+			default:
+				args = append(args, "--filename", selection)
+				text := "a世🙂z"
+				for _, file := range snippetFilenameCases {
+					if file.name == selection {
+						text = file.content
+					}
+				}
+				wantContent[name] = SnippetContent{Filename: selection, Ref: "release/next", Text: text}
+			}
+			if scope == "project" {
+				args = append(args, "-R", "group/project")
+			}
+			tests = append(tests, testCase{name, args, false})
+		}
 		for _, file := range snippetFilenameCases {
 			name := "filename-" + scope + "-" + file.name
 			args := []string{"view", "42", "--scope", scope, "--filename", file.name}
@@ -410,6 +444,18 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 			}
 			if test.name == "long-title" && (!e.Meta.Truncated || len(e.Data.Snippet.Title) > 4096) {
 				t.Fatal("UTF-8 title bound not honored")
+			}
+			if strings.HasPrefix(test.name, "slash-ref-") {
+				snippet := e.Data.Snippet
+				if strings.HasSuffix(test.name, "-list") {
+					if len(e.Data.Snippets) != 1 {
+						t.Fatalf("snippets=%+v", e.Data.Snippets)
+					}
+					snippet = e.Data.Snippets[0]
+				}
+				if snippet.ID != 42 || len(snippet.Files) != 1+len(snippetFilenameCases) || !snippet.FilesAvailable {
+					t.Fatalf("slash-ref metadata=%+v", snippet)
+				}
 			}
 			if want, ok := wantContent[test.name]; ok {
 				if e.Data.Snippet.Content == nil || *e.Data.Snippet.Content != want {

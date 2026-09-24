@@ -183,7 +183,11 @@ func snippetFileRef(f upstreamSnippetFile, target Target, id int64) (string, err
 	if err := safeurl.ValidateBranch(middle); err != nil {
 		return invalid()
 	}
-	expected := (&url.URL{Scheme: "https", Host: target.Host, Path: prefix + middle + suffix}).String()
+	// Rails treats the root ref as one segment, but the filename as a path.
+	// Escape a slash within the ref without accepting encoded filename
+	// separators or literal ref separators in the provider's canonical URL.
+	escapedRef := strings.ReplaceAll((&url.URL{Path: middle}).EscapedPath(), "/", "%2F")
+	expected := "https://" + target.Host + prefix + escapedRef + (&url.URL{Path: suffix}).EscapedPath()
 	expected = strings.NewReplacer("%21", "!", "%27", "'", "%28", "(", "%29", ")", "%2A", "*").Replace(expected)
 	if f.RawURL != expected {
 		return invalid()

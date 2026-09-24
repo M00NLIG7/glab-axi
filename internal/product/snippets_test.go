@@ -122,6 +122,36 @@ func TestSnippetProviderFilenameEncoding(t *testing.T) {
 	}
 }
 
+func TestSnippetRootRefEncoding(t *testing.T) {
+	for _, ref := range []struct{ name, encoded string }{
+		{"release/next", "release%2Fnext"},
+		{"release/日本", "release%2F%E6%97%A5%E6%9C%AC"},
+		{"release/a+b", "release%2Fa+b"},
+	} {
+		for _, scope := range []string{"personal", "project"} {
+			t.Run(scope+"/"+ref.name, func(t *testing.T) {
+				f := snippetFake()
+				item := snippetFixture(42, scope == "project")
+				item.Files[0].RawURL = item.WebURL + "/raw/" + ref.encoded + "/dir/a%20b.txt"
+				f.responses[glab.OpSnippetView] = []glab.Response{{Body: snippetJSON(item)}, {Body: snippetJSON(item)}}
+				f.responses[glab.OpSnippetFile] = []glab.Response{{Body: []byte("exact file contents")}}
+				args := []string{"snippet", "view", "42", "--scope", scope, "--filename", "dir/a b.txt"}
+				if scope == "project" {
+					args = append(args, "-R", "group/project")
+				}
+				e, code := runSnippetTest(t, f, args...)
+				if code != 0 || !e.OK || !e.Meta.Complete || e.Data.Snippet.Content == nil || e.Data.Snippet.Content.Ref != ref.name || e.Data.Snippet.Content.Text != "exact file contents" {
+					t.Fatalf("code=%d result=%+v", code, e)
+				}
+				r := f.requests[len(f.requests)-2]
+				if r.Operation != glab.OpSnippetFile || r.Ref != ref.name || r.Filename != "dir/a b.txt" {
+					t.Fatalf("request=%+v", r)
+				}
+			})
+		}
+	}
+}
+
 func TestSnippetRejectsNoncanonicalProviderURLs(t *testing.T) {
 	for _, scope := range []string{"personal", "project"} {
 		for name, change := range map[string]func(*upstreamSnippet){
@@ -140,8 +170,11 @@ func TestSnippetRejectsNoncanonicalProviderURLs(t *testing.T) {
 			"encoded boundary": func(s *upstreamSnippet) {
 				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "/raw/main/", "/raw/main%2F", 1)
 			},
-			"encoded traversal": func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/main/%2E%2E/dir/a%20b.txt" },
-			"double encoding":   func(s *upstreamSnippet) { s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "%20", "%2520", 1) },
+			"literal ref separator": func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/release/next/dir/a%20b.txt" },
+			"ref traversal":         func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/release%2F%2E%2E%2Fnext/dir/a%20b.txt" },
+			"ref encoding case":     func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/release%2fnext/dir/a%20b.txt" },
+			"encoded traversal":     func(s *upstreamSnippet) { s.Files[0].RawURL = s.WebURL + "/raw/main/%2E%2E/dir/a%20b.txt" },
+			"double encoding":       func(s *upstreamSnippet) { s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "%20", "%2520", 1) },
 			"encoded name": func(s *upstreamSnippet) {
 				s.Files[0].RawURL = strings.Replace(s.Files[0].RawURL, "a%20b", "%61%20b", 1)
 			},
