@@ -37,7 +37,11 @@ paginated discussion GET routes and exposes no note mutation. The source-project
 route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
-schema. Exact issue-edit validation pins only project, issue, and label-catalog
+schema. Collaboration reads additionally pin issue discussions and MR approval
+summary GETs; versioned provider/consumer evidence and uncertainty semantics
+are in `contracts/collaboration-reads/v1.json` and its README. Assigned reviewers
+are not submitted reviews, and discussion notes are not approval votes.
+Exact issue-edit validation pins only project, issue, and label-catalog
 GET routes. No issue content/label PUT is exposed because GitLab accepts no
 expected issue revision and only label names. `issue-writes.json` and test-only
 probes retain characterization evidence, not a supported delegated

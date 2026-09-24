@@ -38,10 +38,10 @@ gl-axi                               # current-project dashboard
 gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
-gl-axi issue list|view
+gl-axi issue list|view|discussions
 gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
 gl-axi issue edit IID ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # dry-run preview; live changes fail closed
-gl-axi mr list|view|checks|diff|discussions
+gl-axi mr list|view|checks|diff|discussions|approvals
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
@@ -70,6 +70,12 @@ an untrusted remote cannot select where an environment credential is sent.
 TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
+
+Use `issue discussions <iid>` for comments/threaded notes and
+`mr approvals <iid>` for assigned reviewers and current GitLab approval state.
+See the [versioned collaboration contract](contracts/collaboration-reads/README.md)
+for GitLab/GitHub semantic differences, bounds, identity rechecks and unavailable
+or unknown evidence.
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note

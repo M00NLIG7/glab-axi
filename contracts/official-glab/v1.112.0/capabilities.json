@@ -119,6 +119,16 @@
       "argv": ["ci", "get", "--merge-request", "{iid}", "--output", "json", "-R", "{repo}"]
     },
     {
+      "name": "issue-discussions",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/issues/{iid}/discussions?page={page}&per_page={per_page}"]
+    },
+    {
+      "name": "mr-approvals",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/approvals"]
+    },
+    {
       "name": "mr-discussions",
       "kind": "fixed-api-read-json-page",
       "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo}/merge_requests/{iid}/discussions?page={page}&per_page={per_page}"]

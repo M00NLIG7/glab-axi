@@ -3,6 +3,7 @@ package glab
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,7 +31,7 @@ var versionPattern = regexp.MustCompile(`^glab ([0-9]+\.[0-9]+\.[0-9]+) \(([0-9A
 
 // Only pinned wrapper framing can prove a status; an unframed provider body
 // may still influence the broad safe category below, but never StatusCode.
-var childHTTPRejectionPattern = regexp.MustCompile(`(?im)(?:\bhttp(?:\s+status)?(?:\s+code)?\s*[:=]?\s*|\bglab:\s*|\bapi\s+(?:request|call)\s+(?:failed|error)\s*:\s*|\b(?:get|post|put|patch|delete|head)\s+(?:"https://[^"\s]+"|https://[^\s]+):\s*)(400|401|403|404|405|406|409|422|429)\b`)
+var childHTTPRejectionPattern = regexp.MustCompile(`^glab: (?:[^\r\n]+ \(HTTP ([0-9]{3})\)|HTTP ([0-9]{3}))\n?$`)
 
 type ClientConfig struct {
 	Path             string
@@ -268,7 +269,7 @@ func (c *Client) runCapturePath(ctx context.Context, path string, args []string,
 				return nil, err
 			}
 		}
-		return nil, classifyChildFailure(stderr.buffer.Bytes(), waitErr, write, operation)
+		return nil, classifyChildFailure(stdout.buffer.Bytes(), stderr.buffer.Bytes(), waitErr, write, operation)
 	}
 	return stdout.buffer.Bytes(), nil
 }
@@ -303,29 +304,53 @@ func (c *boundedCapture) Write(p []byte) (int, error) {
 	return original, nil
 }
 
-func classifyChildFailure(stderr []byte, cause error, write bool, operation Operation) error {
-	if match := childHTTPRejectionPattern.FindSubmatch(stderr); len(match) == 2 {
-		status, parseErr := strconv.Atoi(string(match[1]))
-		if parseErr == nil {
-			if write {
-				if rejection, ok := operationHTTPRejection(operation, status); ok {
-					rejection.Cause = cause
-					return rejection
-				}
-				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
+func childHTTPStatus(body, stderr []byte) (int, bool) {
+	match := childHTTPRejectionPattern.FindSubmatch(stderr)
+	if len(match) != 3 {
+		return 0, false
+	}
+	var response struct {
+		Message string
+		Errors  []json.RawMessage
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return 0, false
+	}
+	statusText := string(match[2])
+	expected := "glab: HTTP " + statusText
+	if response.Message != "" {
+		statusText = string(match[1])
+		expected = "glab: " + response.Message + " (HTTP " + statusText + ")"
+	} else if len(response.Errors) != 0 {
+		return 0, false
+	}
+	if strings.TrimSuffix(string(stderr), "\n") != expected {
+		return 0, false
+	}
+	status, err := strconv.Atoi(statusText)
+	return status, err == nil
+}
+
+func classifyChildFailure(body, stderr []byte, cause error, write bool, operation Operation) error {
+	if status, ok := childHTTPStatus(body, stderr); ok {
+		if write || operation == OpMRApprovals {
+			if rejection, ok := operationHTTPRejection(operation, status); ok {
+				rejection.Cause = cause
+				return rejection
 			}
-			switch status {
-			case 401:
-				return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)
-			case 403:
-				return uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", cause)
-			case 404:
-				return uxv1.Wrap(uxv1.CodeNotFound, "GitLab resource was not found", cause)
-			case 429:
-				return uxv1.Wrap(uxv1.CodeRateLimited, "GitLab rate limit was reached", cause)
-			default:
-				return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
-			}
+			return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
+		}
+		switch status {
+		case 401:
+			return uxv1.Wrap(uxv1.CodeAuthentication, "official glab authentication failed", cause)
+		case 403:
+			return uxv1.Wrap(uxv1.CodeForbidden, "official glab operation was forbidden", cause)
+		case 404:
+			return uxv1.Wrap(uxv1.CodeNotFound, "GitLab resource was not found", cause)
+		case 429:
+			return uxv1.Wrap(uxv1.CodeRateLimited, "GitLab rate limit was reached", cause)
+		default:
+			return uxv1.Wrap(uxv1.CodeUpstream, "official glab operation failed", cause)
 		}
 	}
 
@@ -401,7 +426,10 @@ func sanitizedEnv(base []string, host string, login bool) []string {
 	if login {
 		out = append(out, "CI=false", "GITLAB_CI=false")
 	} else {
-		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=1")
+		// Use the pinned CLI's supported prompt switch only. NO_PROMPT emits
+		// a deprecation warning that makes otherwise definite HTTP errors
+		// ambiguous; inherited legacy switches are already removed above.
+		out = append(out, "PAGER=", "GLAB_PAGER=", "EDITOR=", "VISUAL=", "BROWSER=", "TERM=dumb", "GLAB_NO_PROMPT=1")
 	}
 	return out
 }

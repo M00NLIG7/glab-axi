@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/mr-approvals.schema.json",
+  "title": "glab-axi/ux-v1 mr-approvals data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mr", "reviewers", "approvals"],
+  "properties": {
+    "mr": {"$ref": "mr-discussions.schema.json#/$defs/mr_identity"},
+    "reviewers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["availability", "users"],
+      "properties": {
+        "availability": {"enum": ["available", "unknown"]},
+        "users": {"type": "array", "maxItems": 1000, "items": {"$ref": "mr-discussions.schema.json#/$defs/user"}}
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["availability", "state", "tier", "approved_by"],
+      "properties": {
+        "availability": {"enum": ["available", "unavailable"]},
+        "reason": {"enum": ["access_denied", "not_found_or_unsupported"]},
+        "state": {"enum": ["approved", "not_approved", "unknown"]},
+        "tier": {"const": "unknown"},
+        "approvals_required": {"type": "integer", "minimum": 0},
+        "approvals_left": {"type": "integer", "minimum": 0},
+        "approved_by": {"type": "array", "maxItems": 1000, "items": {"$ref": "mr-discussions.schema.json#/$defs/user"}}
+      },
+      "allOf": [{
+        "if": {"properties": {"availability": {"const": "unavailable"}}},
+        "then": {
+          "required": ["reason"],
+          "properties": {"state": {"const": "unknown"}, "approved_by": {"maxItems": 0}},
+          "not": {"anyOf": [{"required": ["approvals_required"]}, {"required": ["approvals_left"]}]}
+        },
+        "else": {"not": {"required": ["reason"]}}
+      }]
+    }
+  }
+}

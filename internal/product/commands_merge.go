@@ -100,6 +100,11 @@ func validateParsedCommand(parsed Parsed) error {
 	if isIssueWrite(parsed) {
 		return validateIssueWriteParsed(parsed)
 	}
+	if path == "issue discussions" || path == "mr approvals" {
+		if _, err := positivePosition(parsed, "resource IID"); err != nil {
+			return err
+		}
+	}
 	if path == "issue edit" {
 		return validateIssueEditParsed(parsed)
 	}

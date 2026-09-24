@@ -28,6 +28,7 @@ GitLab project (not Rune).
    AXI output, or test evidence.
 7. Run auth status, dashboard, issue list/view, MR
    list/view/checks/diff/discussions, the
+   [collaboration reads](../contracts/collaboration-reads/README.md),
    [product CI reads](../contracts/read-parity/ci-reads.json),
    release list/view, repo list/view, label list, and bounded search against
    synthetic non-secret data. Discussion fixtures must include same-project and

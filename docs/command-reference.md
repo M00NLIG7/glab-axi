@@ -146,6 +146,20 @@ View one project issue.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/issue-view.schema.json`.
 
+## `issue discussions`
+
+```text
+gl-axi issue discussions <iid> [global flags]
+```
+
+View bounded issue comments and threaded notes.
+
+Includes individual and system notes, in provider order. The limit counts threads.
+Exact issue/project identity is rechecked around pagination. Empty means no visible discussions, not denied access.
+No comment, reply, or resolution mutation is exposed.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/issue-discussions.schema.json`.
+
 ## `issue edit`
 
 ```text
@@ -211,6 +225,21 @@ Examples:
 ```text
 gl-axi mr discussions 42 -R group/project --hostname gitlab.com --limit 1000 --format json
 ```
+
+## `mr approvals`
+
+```text
+gl-axi mr approvals <iid> [global flags]
+```
+
+View assigned reviewers and current GitLab approval state.
+
+Assigned reviewers are not submitted reviews. Use mr discussions for inline/threaded notes.
+The approved boolean is provider-reported and edition-dependent; absent state is unknown, never inferred from counts.
+403/404 approval responses are unavailable, not zero approvals; tier stays unknown. Approval rules are not exposed.
+The limit bounds each user array. Identity/base/head are rechecked; this is observational evidence, not merge authority.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/mr-approvals.schema.json`.
 
 ## `mr diff`
 
