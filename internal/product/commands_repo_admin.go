@@ -129,6 +129,19 @@ func adminDestination(p Parsed) string {
 func adminVisibility(s string) bool { return s == "private" || s == "internal" || s == "public" }
 func adminAccess(s string) bool     { return s == "disabled" || s == "private" || s == "enabled" }
 
+func adminForkVisibilityAllowed(source, requested string) bool {
+	switch source {
+	case "private":
+		return requested == "private"
+	case "internal":
+		return requested == "private" || requested == "internal"
+	case "public":
+		return adminVisibility(requested)
+	default:
+		return false
+	}
+}
+
 func validateRepoAdminParsed(p Parsed) error {
 	bad := func(message string) error { return uxv1.NewError(uxv1.CodeValidation, message) }
 	if err := safeurl.ValidateHost(p.Values["--hostname"]); err != nil {
@@ -412,6 +425,12 @@ func executeRepoAdmin(ctx context.Context, p Parsed, deps Dependencies, meta uxv
 	}
 	if err != nil {
 		return s.output(r), err
+	}
+	// GitLab clamps fork visibility to the source's level. Refuse an
+	// impossible requested result before creating a destination. Namespace
+	// and instance restrictions still require canonical postcondition checks.
+	if action == "fork" && !adminForkVisibilityAllowed(before.Visibility, p.Values["--visibility"]) {
+		return s.output(r), uxv1.NewError(uxv1.CodeSafety, "fork visibility cannot be broader than the observed source; no mutation attempted")
 	}
 	payload := map[string]any{}
 	desired := before.adminSettings

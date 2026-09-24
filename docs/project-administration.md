@@ -137,6 +137,13 @@ project creation. Only namespace, name/path and visibility are set.
 No follow-up settings change, local clone, remote edit,
 push or pipeline mutation is performed.
 
+Requested visibility must be no broader than the observed source:
+`private < internal < public`. A broader request is refused before POST,
+not silently downgraded. The pinned [GitLab fork service](https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/app/services/projects/fork_service.rb)
+also applies namespace and instance restrictions. Those restrictions and
+concurrent changes can still cause a postcondition mismatch after creation;
+the client reports ambiguity rather than changing visibility or retrying.
+
 Receipts distinguish:
 
 | Outcome | Meaning |

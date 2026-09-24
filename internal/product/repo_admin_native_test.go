@@ -482,6 +482,36 @@ func TestRepoAdminNativeSelectorAndUnavailableCredentialsNeverFallback(t *testin
 	}
 }
 
+func (f *adminNativeFixture) runExecutable(t *testing.T, binary string, args []string) (string, string, error) {
+	t.Helper()
+	_, _, deps := f.deps(t)
+	cfg, err := config.Load(deps.Runtime.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := cfg.Hosts["gitlab.example.invalid"]
+	host.CABundle = adminTestFile(t, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.server.Certificate().Raw}))
+	cfg.Hosts["gitlab.example.invalid"] = host
+	if err := config.Save(deps.Runtime.ConfigPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	marker := filepath.Join(home, "child-attempt")
+	if err := os.WriteFile(filepath.Join(home, "glab"), []byte("#!/bin/sh\nprintf child > \"$GL_AXI_NATIVE_CHILD_MARKER\"\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, args...)
+	cmd.Dir = home
+	cmd.Env = []string{"PATH=" + home + ":/usr/bin:/bin", "HOME=" + home, "GL_AXI_CONFIG=" + deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + f.token, "GL_AXI_NATIVE_CHILD_MARKER=" + marker}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	runErr := cmd.Run()
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("native CLI attempted an official-glab child")
+	}
+	return stdout.String(), stderr.String(), runErr
+}
+
 func TestRepoAdminNativeExecutableAliasesTLS(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no-child fixture uses a POSIX shell")
@@ -510,41 +540,17 @@ func TestRepoAdminNativeExecutableAliasesTLS(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					f := newAdminNativeFixture(t, action)
 					f.redirectCode, f.crossOrigin = scenario.redirect, action != "edit"
-					_, _, deps := f.deps(t)
-					cfg, err := config.Load(deps.Runtime.ConfigPath)
-					if err != nil {
-						t.Fatal(err)
-					}
-					host := cfg.Hosts["gitlab.example.invalid"]
-					host.CABundle = adminTestFile(t, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.server.Certificate().Raw}))
-					cfg.Hosts["gitlab.example.invalid"] = host
-					if err := config.Save(deps.Runtime.ConfigPath, cfg); err != nil {
-						t.Fatal(err)
-					}
-					home := t.TempDir()
-					marker := filepath.Join(home, "child-attempt")
-					if err := os.WriteFile(filepath.Join(home, "glab"), []byte("#!/bin/sh\nprintf child > \"$GL_AXI_NATIVE_CHILD_MARKER\"\nexit 1\n"), 0700); err != nil {
-						t.Fatal(err)
-					}
-					cmd := exec.Command(binary, f.args(t)...)
-					cmd.Dir = home
-					cmd.Env = []string{"PATH=" + home + ":/usr/bin:/bin", "HOME=" + home, "GL_AXI_CONFIG=" + deps.Runtime.ConfigPath, "GL_AXI_TOKEN=" + f.token, "GL_AXI_NATIVE_CHILD_MARKER=" + marker}
-					var stdout, stderr bytes.Buffer
-					cmd.Stdout, cmd.Stderr = &stdout, &stderr
-					runErr := cmd.Run()
-					f.verify(t, 1, stdout.String(), stderr.String())
-					if _, err := os.Stat(marker); !os.IsNotExist(err) {
-						t.Fatal("native CLI attempted an official-glab child")
-					}
+					stdout, stderr, runErr := f.runExecutable(t, binary, f.args(t))
+					f.verify(t, 1, stdout, stderr)
 					if scenario.redirect != 0 {
 						exit, ok := runErr.(*exec.ExitError)
 						if !ok || (exit.ExitCode() != 6 && exit.ExitCode() != 9) {
-							t.Fatalf("redirect run=%v stdout=%s", runErr, stdout.String())
+							t.Fatalf("redirect run=%v stdout=%s", runErr, stdout)
 						}
 						return
 					}
 					if runErr != nil {
-						t.Fatalf("run: %v stdout=%s stderr=%s", runErr, stdout.String(), stderr.String())
+						t.Fatalf("run: %v stdout=%s stderr=%s", runErr, stdout, stderr)
 					}
 					var result struct {
 						Data adminOutput `json:"data"`
@@ -553,11 +559,11 @@ func TestRepoAdminNativeExecutableAliasesTLS(t *testing.T) {
 							Complete bool   `json:"complete"`
 						} `json:"meta"`
 					}
-					if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+					if err := json.Unmarshal([]byte(stdout), &result); err != nil {
 						t.Fatal(err)
 					}
 					if result.Meta.Backend != "native" || result.Data.Administration.Project == nil || result.Data.Administration.Project.URL != f.after.URL {
-						t.Fatalf("native authority receipt: %s", stdout.String())
+						t.Fatalf("native authority receipt: %s", stdout)
 					}
 					if action == "fork" && (result.Meta.Complete || result.Data.Administration.Outcome != "accepted") {
 						t.Fatal("asynchronous native fork claimed readiness")

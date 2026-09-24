@@ -5,6 +5,7 @@
   "provider_evidence": [
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/doc/api/projects.md", "sha256": "e09243c640d00480b91dc5e10180d0dda8f9b05eb86448535629cc1490376bcd", "sections": ["Retrieve a project", "Project feature visibility level", "Create a project", "Edit a project"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/doc/api/project_forks.md", "sha256": "86a692d6971a0e111c94ef9d7c218ebf5f69de0347b5a773319eaccc1641b7b2", "sections": ["Create a fork of a project"]},
+    {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/app/services/projects/fork_service.rb", "sha256": "311285bd4770cedfad8e22dc26401ca3c47666128f1c7ee868111549551b605d", "sections": ["target_visibility_level"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/doc/api/namespaces.md", "sha256": "85606cc4bdc6570ef0bcd760cb0993f9ba71f9227e852bb9a58718d7573e40a0", "sections": ["Retrieve namespace details"]},
     {"url": "https://raw.githubusercontent.com/gitlabhq/gitlabhq/v19.0.0/doc/api/users.md", "sha256": "29c81944753e3e8611c09f29a590b2bba509d4ca484fad8aa84ac70f3a3ec705", "sections": ["Retrieve the current user"]}
   ],
@@ -24,7 +25,7 @@
   "max_page_bytes": 2097152,
   "max_operation_bytes": 8388608,
   "pagination": "none: exact account, namespace ID and project path lookups only",
-  "precondition": "Two identity reads and adjacent expected settings/absence checks. One existing native credential and configured API/web authority are pinned for the full operation. GitLab does not enforce atomic expected revision. Detected drift stops; residual provider-side races are disclosed.",
+  "precondition": "Two identity reads and adjacent expected settings/absence checks. Fork visibility broader than the observed source is refused before POST; namespace/instance restrictions still require postcondition verification. One existing native credential and configured API/web authority are pinned for the full operation. GitLab does not enforce atomic expected revision. Detected drift stops; residual provider-side races are disclosed.",
   "ambiguous_create": "A matching destination after an uncertain create/fork cannot prove attribution. Return non-retryable ambiguity even if observed; never create again automatically.",
   "fork_readiness": {"none": "accepted", "scheduled": "accepted", "started": "in_progress", "finished": "completed with exact fork source evidence", "failed": "failed; project may remain", "unknown": "ambiguous"},
   "excluded_effects": ["clone", "source", "push", "remote", "template", "merge-policy changes", "permission or account changes", "deletion", "CI mutation"]
