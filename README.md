@@ -90,7 +90,8 @@ Visibility filters are exact `public|internal|private`, applied locally over at
 most ten provider pages. Private personal snippets are creator-only, whereas
 private project snippets are member-visible. Neither means GitHub secret or
 unlisted. Output distinguishes incomplete pagination from truncated fields.
-Default view returns metadata/file names, not all file contents. `--filename`
+Default view returns metadata/file names, not all file contents. `--files`
+omits description and cannot combine with `--fields` or `--filename`. `--filename`
 selects one exact inventory path at its reported root ref, constructs a fixed
 API route rather than following a returned URL, and rechecks metadata afterward.
 Selectors accept positive IDs or canonical selected-host `/-/snippets/ID` URLs
@@ -100,8 +101,9 @@ UTF-8 bytes, can be selected up to 131072 bytes, and rejects binary/unavailable
 files. File paths containing traversal, controls, backslashes, `%`, `?`, or `#`
 are unsupported. Additive `--fields` accepts only `description,created_at,updated_at`;
 identity, visibility, owner and URL always remain. Comment counts, arbitrary-owner
-listing, all-file content, raw/unlimited output, snippet writes and clone are not
-provided. See the [pinned snippet contract](contracts/official-glab/v1.112.0/snippet-reads.json).
+listing, all-file content, raw/unlimited output, snippet creation/editing and clone
+are not provided. Deletion is a separate [guarded native operation](#guarded-native-resource-deletion).
+See the [pinned snippet contract](contracts/official-glab/v1.112.0/snippet-reads.json).
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note

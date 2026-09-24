@@ -469,6 +469,10 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 					t.Fatalf("got %d requests, want %d", count, wantRequests)
 				}
 			}
+			t.Logf("CLI args: %q\nexit: %v\nstdout: %s\nstderr: %s", args, runErr, out.String(), stderr.String())
+			mu.Lock()
+			t.Logf("TLS request URIs: %q", requests)
+			mu.Unlock()
 		})
 	}
 	// Exercise cancellation while official glab is waiting on a TLS response.
