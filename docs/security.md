@@ -55,7 +55,9 @@ native HTTP transport.
   nested-note, field, aggregate-body, page, and operation limits;
 - completeness and truncation follow each command's contract; the
   [planning contract](../contracts/gitlab-planning/v19.3.0/README.md#comparison-and-material-differences)
-  distinguishes collection completeness from field truncation;
+  distinguishes collection completeness from field truncation, and the
+  [collaboration contract](../contracts/collaboration-reads/README.md#meaning-and-uncertainty)
+  defines successful but incomplete approval evidence;
   malformed, unsupported, unavailable, or drifting identity
   returns a controlled incomplete error instead of partial trusted evidence.
 

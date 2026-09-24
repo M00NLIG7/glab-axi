@@ -167,6 +167,7 @@ func TestPinnedOfficialGlabApprovalCLIAvailabilityTLS(t *testing.T) {
 							t.Fatalf("unexpected request: %s", request)
 						}
 					}
+					t.Logf("$ %s mr approvals 7 -R group/project --hostname %s --format json\nprovider status=%d\nexit=%d\nstdout=%s\nstderr=%s\nprovider requests=%v", program, host, test.status, exit, stdout.String(), stderr.String(), requests)
 				})
 			}
 		})

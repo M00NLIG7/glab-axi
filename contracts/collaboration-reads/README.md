@@ -35,9 +35,13 @@ A definite HTTP 403 or 404 from the approval GET returns `availability=unavailab
 and incomplete metadata, with `access_denied` or `not_found_or_unsupported`.
 These responses cannot distinguish entitlement, version, hidden resource or
 permission. Other failures, including authentication/cancellation/malformed
-responses, fail. Text mentioning a status without the pinned official error
-framing is not sufficient for a definite unavailable result. Headless children
-use the pinned `GLAB_NO_PROMPT=1` switch; inherited `NO_PROMPT` and
+responses, fail. A definite status requires the pinned terminal HTTP framing
+corroborated by the captured response body; provider error-array text alone,
+even a single entry resembling that framing, cannot establish it. See
+`childHTTPStatus` in `internal/delegate/glab/client.go` and
+`TestApprovalAvailabilityNeedsPinnedHTTPFraming` for the classification boundary.
+
+Headless children use the pinned `GLAB_NO_PROMPT=1` switch; inherited `NO_PROMPT` and
 `PROMPT_DISABLED` are removed instead of injecting deprecated switches whose
 warnings would make the status framing ambiguous. The classifier still refuses
 ambiguous framing rather than stripping arbitrary warning text. Issue discussion
@@ -86,6 +90,10 @@ edits and approval changes are not guaranteed to advance MR/issue updated-at.
   response. The existing checksum-pinned CI job explicitly runs this and the
   collaboration adapter TLS test. `prompt_environment_test.go` also observes
   the actual child environment without requiring the optional upstream binary.
+- `internal/delegate/glab/collaboration_reads_cli_tls_test.go`: both public
+  executables through real pinned glab and TLS fixtures for issue threads,
+  reviewer/approval states, pagination, identity drift and refused flags. Like
+  the other real-glab fixtures, it requires `GL_AXI_OFFICIAL_GLAB_TEST_BINARY`.
 - Existing discussion, native compatibility, generated help and closed-schema
   checks remain part of `go test ./...`.
 
