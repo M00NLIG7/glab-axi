@@ -88,8 +88,10 @@ provide unbounded body output or caller-configurable byte limits.
 ## Bounds and compatibility
 
 All pages retain identical filters and page width. The display limit remains
-1..1000, at most 100 items/page and 10 pages, with 2 MiB JSON/page and 8 MiB total
-provider output and a 30-second read deadline. Exact-limit lists probe one further
+1..1000, at most 100 items/page and 10 pages, with 2 MiB provider JSON/page,
+an 8 MiB serialized-output cap, and a 30-second read deadline. The output cap
+is not a cumulative provider-download limit: several individually bounded pages
+can exceed it before serialization. Exact-limit lists probe one further
 page when necessary; the hard page limit never claims completeness. There is no
 unbounded `--full`, arbitrary `--json`, jq, raw API or new provider mutation.
 Accumulated results exceeding the 8 MiB serialization cap return a bounded
