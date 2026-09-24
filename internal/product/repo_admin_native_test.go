@@ -509,6 +509,15 @@ func (f *adminNativeFixture) runExecutable(t *testing.T, binary string, args []s
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("native CLI attempted an official-glab child")
 	}
+	f.mu.Lock()
+	writes := f.mutations
+	f.mu.Unlock()
+	wires := f.verify(t, writes, stdout.String(), stderr.String())
+	trace, err := json.Marshal(wires)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("synthetic TLS CLI receipt: exit=%v\nstdout=%s\nstderr=%s\ncredential-free requests=%s", runErr, stdout.String(), stderr.String(), trace)
 	return stdout.String(), stderr.String(), runErr
 }
 

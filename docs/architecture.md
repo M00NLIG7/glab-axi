@@ -14,7 +14,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
           |-> local help/setup/signed update
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
-          |    -> feature-owned download / issue-write / CI-variable / deletion handlers
+          |    -> feature-owned handlers selected by the product registry
           |    -> exact identities; downloads use safedownload publication
           |    -> glab-axi/ux-v1 TOON/JSON
           `-> default typed official-glab adapter (exactly 1.112.0 / 816e3a52)
@@ -72,8 +72,9 @@ the shared transport limits. Feature handlers retain their own route, identity,
 expected-state authority and operation budgets, pinned in the
 [download contract](../contracts/downloads/v1.json),
 [issue-write contract](../contracts/issue-writes/provider-v1.json),
-[resource-deletion contract](../contracts/resource-delete/v1.md), and
-[CI-variable documentation](ci-variables.md#outcomes-races-and-bounds).
+[resource-deletion contract](../contracts/resource-delete/v1.md),
+[CI-variable documentation](ci-variables.md#outcomes-races-and-bounds), and
+[project-administration documentation](project-administration.md).
 This internal request interface does not expose generic user HTTP authority.
 
 `internal/safedownload` pins destination-parent directory descriptors and uses
