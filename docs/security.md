@@ -322,6 +322,9 @@ Deletion-specific request, phase and response bounds live in the
 [resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
 Product CI-read request, trace-selection, final-data and watch budgets are
 pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
+Snippet reads use the [snippet contract](../contracts/official-glab/v1.112.0/snippet-reads.json)
+for operation/content bounds and the [snippet normalizer](../internal/product/snippets_normalize.go)
+for metadata field bounds instead of the title/description defaults below.
 
 | Input/output | Limit |
 |---|---:|

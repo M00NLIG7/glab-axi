@@ -278,6 +278,9 @@ func parseFlags(definition Definition, args []string) (Parsed, error) {
 
 func deniedFlag(definition Definition, name string) string {
 	path := strings.Join(definition.Path, " ")
+	if strings.HasPrefix(path, "snippet ") && (name == "--secret" || name == "--unlisted") {
+		return "GitLab snippets use public/internal/private visibility, not GitHub secret/unlisted visibility; those aliases"
+	}
 	if path == "auth status" && (name == "--show-token" || name == "-t") {
 		return "credential display"
 	}

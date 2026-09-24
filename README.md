@@ -52,6 +52,7 @@ gl-axi release list|view
 gl-axi release download TAG ... --auth-source native      # exact link ID/name/commit
 gl-axi repo list|view
 gl-axi label list
+gl-axi snippet list|view --scope personal|project
 gl-axi search issues|mrs|repos|commits|code
 
 gl-axi setup hooks
@@ -70,6 +71,39 @@ an untrusted remote cannot select where an environment credential is sent.
 TOON is default; `--format json` selects the versioned JSON contract. Help is
 local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md).
+
+`snippet list` and `snippet view` provide GitLab-native gist-read equivalents,
+not GitHub visibility aliases. Both require `--scope personal|project`; project
+scope also requires explicit `-R namespace/project`. Every read verifies the
+current official-glab identity, with no anonymous listing fallback. Personal
+lists include only that user's personal snippets; personal view can select any
+visible personal snippet by exact ID or same-host URL. Project snippets bind
+the numeric project identity as well as its exact path.
+
+```sh
+gl-axi snippet list --scope personal --visibility private --fields created_at,updated_at
+gl-axi snippet view 42 --scope project -R group/project --files
+gl-axi snippet view 42 --scope personal --filename notes.md --content-limit 32768
+```
+
+Visibility filters are exact `public|internal|private`, applied locally over at
+most ten provider pages. Private personal snippets are creator-only, whereas
+private project snippets are member-visible. Neither means GitHub secret or
+unlisted. Output distinguishes incomplete pagination from truncated fields.
+Default view returns metadata/file names, not all file contents. `--files`
+omits description and cannot combine with `--fields` or `--filename`. `--filename`
+selects one exact inventory path at its reported root ref, constructs a fixed
+API route rather than following a returned URL, and rechecks metadata afterward.
+Selectors accept positive IDs or canonical selected-host `/-/snippets/ID` URLs
+(prefixed with the project path for project scope).
+This is not an atomic immutable-content snapshot. Content defaults to 32768
+UTF-8 bytes, can be selected up to 131072 bytes, and rejects binary/unavailable
+files. File paths containing traversal, controls, backslashes, `%`, `?`, or `#`
+are unsupported. Additive `--fields` accepts only `description,created_at,updated_at`;
+identity, visibility, owner and URL always remain. Comment counts, arbitrary-owner
+listing, all-file content, raw/unlimited output, snippet creation/editing and clone
+are not provided. Deletion is a separate [guarded native operation](#guarded-native-resource-deletion).
+See the [pinned snippet contract](contracts/official-glab/v1.112.0/snippet-reads.json).
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note
