@@ -30,9 +30,10 @@ MRs additionally accept `--source-branch BRANCH`, `--target-branch BRANCH`, and
 `--draft` to select draft MRs. Omitting `--draft` includes both draft and
 non-draft MRs. Branches must be valid Git branch names. Returned MRs must match selected branches.
 
-All flags accept space or equals values. Duplicate singleton flags, empty values,
-unknown flags, and ambiguous input fail before official-glab child work. These
-are typed selectors, not raw upstream argv or query-language passthrough.
+Value-taking flags accept space or equals forms; `--draft` is a valueless
+boolean switch. Duplicate singleton flags, empty values, unknown flags, and
+ambiguous input fail before official-glab child work. These are typed selectors,
+not raw upstream argv or query-language passthrough.
 
 ```sh
 gl-axi issue list -R group/project --state closed --label bug --author alice --sort updated
