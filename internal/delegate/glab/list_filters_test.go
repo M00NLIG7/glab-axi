@@ -143,6 +143,17 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + filepath.Join(home, "config"), "GITLAB_TOKEN=" + strings.Join([]string{"synthetic", "filter", "token"}, "-"), "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caBundle, "PATH=/usr/bin:/bin"}})
+	// Keep dependency startup distinct from provider request timing. Version
+	// retains the client's five-second bound; failures must not be retried.
+	started := time.Now()
+	version, err := client.Version(context.Background())
+	t.Logf("official glab version verification: %s", time.Since(started))
+	mu.Lock()
+	startupRequests := append([]string(nil), records...)
+	mu.Unlock()
+	if err != nil || version != SupportedVersion || len(startupRequests) != 0 {
+		t.Fatalf("version=%q error=%v startup requests=%v", version, err, startupRequests)
+	}
 	for _, test := range []struct {
 		op          Operation
 		state, sort string
@@ -165,8 +176,10 @@ func TestPinnedOfficialGlabReadFiltersTLS(t *testing.T) {
 			filters.Milestone = "release 2"
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		started := time.Now()
 		response, err := client.Do(ctx, Request{Operation: op, Host: logicalHost, Repo: "group/project", Page: 2, PerPage: 31, Filters: filters})
 		cancel()
+		t.Logf("op=%s state=%s request duration: %s", op, test.state, time.Since(started))
 		mu.Lock()
 		captured := append([]string(nil), records...)
 		records = nil
