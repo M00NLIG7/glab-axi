@@ -198,4 +198,4 @@ jobs:
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS)$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS|TestPinnedOfficialGlabRepoAdminRedirectEvidence)$' -count=1

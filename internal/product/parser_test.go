@@ -59,7 +59,7 @@ func TestParserClassifiesPermanentSecurityBoundaries(t *testing.T) {
 		{"auth", "login", "--device"},
 		{"mr", "approve", "1"}, {"mr", "comment", "1"}, {"mr", "reply", "1"},
 		{"mr", "resolve", "1"}, {"mr", "update", "1"},
-		{"pipeline", "retry", "2"}, {"repo", "create"}, {"release", "upload"},
+		{"pipeline", "retry", "2"}, {"repo", "delete"}, {"release", "upload"},
 		{"label", "delete"},
 	} {
 		if _, err := Parse(args); err == nil || string(uxCode(err)) != "security_boundary" {

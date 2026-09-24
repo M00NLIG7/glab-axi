@@ -60,11 +60,17 @@ API/account. The fixture pins their SHA-256 digests. `TestPinnedOfficialGlabCIRe
 executes the pinned CLI against a local TLS fake for all five route shapes.
 Filtered job reads are not used by guarded merge's complete jobs/bridges proof.
 
+Project administration is not delegated: those fixed routes are owned by the
+explicit product-native contract in `contracts/repo-admin/v1.json`. Isolated
+TLS tests retain negative evidence of official-glab POST/PUT redirect behavior;
+this is not an upstream fix or an executable product administration allowlist.
+
 The Linux checksum in `capabilities.json` is also used by the offline upstream
 contract job in CI. That job executes version/help plus isolated TLS fake-server
 ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
-read-only issue-edit validation, test-only issue-write characterization and
-guarded-merge requests with synthetic credentials; it never contacts a live
+read-only issue-edit validation, test-only issue-write characterization,
+guarded-merge requests and historical project-redirect evidence with synthetic
+credentials; it never contacts a live
 GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter

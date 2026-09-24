@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/repo-admin.schema.json",
+  "title": "Guarded provider-only project administration receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["administration"],
+  "properties": {
+    "administration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "outcome", "mutation_attempted", "reconciled", "host", "project_path", "namespace", "account", "residual", "local_effects"],
+      "properties": {
+        "operation": {"enum": ["create", "edit", "fork"]},
+        "outcome": {"enum": ["unchanged", "completed", "accepted", "in_progress", "failed", "ambiguous"]},
+        "mutation_attempted": {"type": "boolean"},
+        "reconciled": {"type": "boolean"},
+        "host": {"type": "string", "minLength": 1, "maxLength": 253},
+        "project_path": {"type": "string", "minLength": 3, "maxLength": 1024},
+        "namespace": {"$ref": "#/$defs/namespace"},
+        "account": {
+          "type": "object", "additionalProperties": false, "required": ["id", "username"],
+          "properties": {"id": {"type": "integer", "minimum": 1}, "username": {"type": "string", "minLength": 1, "maxLength": 1024}}
+        },
+        "project": {"$ref": "#/$defs/project"},
+        "source_id": {"type": "integer", "minimum": 1},
+        "import_status": {"type": "string", "maxLength": 32},
+        "residual": {"const": "GitLab provides no atomic expected project revision; one native credential is pinned for this operation, but identity/settings checks cannot eliminate provider-side races. Never blindly retry a mutation."},
+        "local_effects": {"const": "none"}
+      },
+      "allOf": [
+        {"if": {"properties": {"outcome": {"enum": ["completed", "unchanged", "accepted", "in_progress", "failed"]}}}, "then": {"required": ["project"]}},
+        {"if": {"properties": {"outcome": {"enum": ["accepted", "in_progress", "failed"]}}}, "then": {"required": ["source_id", "import_status"], "properties": {"operation": {"const": "fork"}, "mutation_attempted": {"const": true}}}},
+        {"if": {"properties": {"outcome": {"const": "unchanged"}}}, "then": {"properties": {"operation": {"const": "edit"}, "mutation_attempted": {"const": false}}}}
+      ]
+    }
+  },
+  "$defs": {
+    "namespace": {
+      "type": "object", "additionalProperties": false, "required": ["id", "full_path", "kind"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "full_path": {"type": "string", "minLength": 1, "maxLength": 1024}, "kind": {"enum": ["user", "group"]}}
+    },
+    "project": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "path_with_namespace", "web_url", "namespace", "updated_at", "description", "visibility", "default_branch", "issues_access_level", "wiki_access_level", "only_allow_merge_if_pipeline_succeeds", "only_allow_merge_if_all_discussions_are_resolved", "allow_merge_on_skipped_pipeline", "merge_method", "squash_option"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "path_with_namespace": {"type": "string", "minLength": 3, "maxLength": 1024},
+        "web_url": {"type": "string", "format": "uri", "maxLength": 2048},
+        "namespace": {"$ref": "#/$defs/namespace"},
+        "updated_at": {"type": "string", "format": "date-time", "maxLength": 64},
+        "description": {"type": "string", "maxLength": 2000},
+        "visibility": {"enum": ["private", "internal", "public"]},
+        "default_branch": {"type": "string", "maxLength": 1024},
+        "issues_access_level": {"enum": ["disabled", "private", "enabled"]},
+        "wiki_access_level": {"enum": ["disabled", "private", "enabled"]},
+        "only_allow_merge_if_pipeline_succeeds": {"type": "boolean"},
+        "only_allow_merge_if_all_discussions_are_resolved": {"type": "boolean"},
+        "allow_merge_on_skipped_pipeline": {"type": "boolean"},
+        "merge_method": {"enum": ["merge", "rebase_merge", "ff"]},
+        "squash_option": {"enum": ["never", "always", "default_on", "default_off"]}
+      }
+    }
+  }
+}

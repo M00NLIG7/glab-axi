@@ -165,6 +165,9 @@ func writeFailure(stdout, stderr io.Writer, programName string, format output.Fo
 		if receipt, ok := failure.Error.Receipt.(issueWriteOutput); ok && receipt.Write.Outcome == "ambiguous" {
 			failure.Help = []string{"inspect the selected project/issue and receipt before any new attempt; never infer deduplication from title or latest-comment matches"}
 		}
+		if _, ok := failure.Error.Receipt.(adminOutput); ok {
+			failure.Help = []string{"inspect the exact project with gl-axi repo view --admin-snapshot --auth-source native; never blindly retry project administration"}
+		}
 	}
 	if programName == buildinfo.LegacyName {
 		if failure.Error != nil {
@@ -304,10 +307,15 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		return listOutput("releases", items, meta, listMeta), err
 	case "release view":
 		return executeReleaseView(ctx, client, target, parsed, meta)
+	case "repo create", "repo edit", "repo fork":
+		return executeRepoAdmin(ctx, parsed, deps, meta)
 	case "repo list":
 		items, listMeta, err := fetchRepos(ctx, client, target, parsed.Limit)
 		return listOutput("repositories", items, meta, listMeta), err
 	case "repo view":
+		if parsed.Booleans["--admin-snapshot"] {
+			return executeNativeRepoSnapshot(ctx, parsed, deps, meta)
+		}
 		return executeRepoView(ctx, client, target, parsed, meta)
 	case "label list":
 		items, listMeta, err := fetchLabels(ctx, client, target, parsed.Limit)

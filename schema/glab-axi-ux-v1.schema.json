@@ -43,7 +43,8 @@
             {
               "$ref": "ux-v1/issue-write.schema.json",
               "properties": {"write": {"properties": {"outcome": {"enum": ["refused", "rejected", "ambiguous", "conflict"]}}}}
-            }
+            },
+            {"$ref": "ux-v1/repo-admin.schema.json"}
           ]
         }
       },

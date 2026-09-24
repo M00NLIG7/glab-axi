@@ -11,7 +11,7 @@ Two deliberately separate backends share one executable:
   reads, exact-identity issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
   to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, typed issue writes,
-  [guarded project CI variables](docs/ci-variables.md), and
+  guarded project create/edit/fork, [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
   with `--auth-source native`, without an official-profile fallback; and
@@ -51,6 +51,7 @@ gl-axi job artifacts|download ID ... --auth-source native  # exact job/pipeline/
 gl-axi release list|view
 gl-axi release download TAG ... --auth-source native      # exact link ID/name/commit
 gl-axi repo list|view
+gl-axi repo create|edit|fork ...      # explicit provider-only administration
 gl-axi label list
 gl-axi search issues|mrs|repos|commits|code
 
@@ -214,10 +215,21 @@ self-managed mapping remains unproven. See
 [`contracts/issue-writes`](contracts/issue-writes/) and the
 [temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
+Guarded `repo create`, `repo edit`, and `repo fork` require explicit account,
+namespace and host/project identities plus `--auth-source native` and
+`--allow-project-admin`. The entire operation uses one native credential and
+configured API/web authority, never the opaque official profile. Visibility
+must be explicit for creation/fork; edits require private expected prestate and
+`--accept-non-atomic`. Fork acceptance is not readiness. Each operation attempts
+at most one mutation and reports bounded postcondition evidence and residual
+races, with no local clone/push/template workflow or merge-policy changes. See
+[project administration](docs/project-administration.md).
+
 The denial boundary includes generic API, existing-issue content/label mutation,
 unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,
-merge-request and label-resource mutation, MR delete, repository writes,
-and other release/pipeline/job writes. `issue edit --dry-run` is validation-only and changes no
+merge-request and label-resource mutation, MR delete, repository writes outside
+guarded create/edit/fork, and other release/pipeline/job writes.
+`issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
 
 ### Guarded native resource deletion

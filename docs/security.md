@@ -73,7 +73,8 @@ profile or token source.
 The executable command registry owns the provider-write allowlist; see the
 [generated command reference](command-reference.md) for declared operations and
 feature-contract pointers. Guarded native project-variable controls are in
-[CI variables](ci-variables.md).
+[CI variables](ci-variables.md), and guarded project create/edit/fork controls
+are in [project administration](project-administration.md).
 
 `board issues` requires `--allow-ordering-initialization`, an explicit host,
 and exact project/group, board and list selectors before any child work. The
@@ -121,6 +122,21 @@ hashes intent only, not a transmitted payload. `retry_safe` and
 are supported. The [temporary parity gaps](../contracts/issue-writes/review-blockers.md)
 remain explicit; the increment does not claim full issue parity or authorize
 collateral content/quick-action effects.
+
+Project administration requires explicit account, namespace, host and project
+identities, `--auth-source native`, consequential opt-in, and explicit visibility
+for creation/fork. One native credential and configured API/web authority bind
+the entire sequence. There is no official child/profile fallback or redirect.
+Edits require private expected prestate plus non-atomic acknowledgement.
+Identity/settings/absence are rechecked immediately before a single mutation;
+a bounded canonical read verifies postconditions. Merge-policy fields are never
+sent. Creation/fork cannot silently choose a personal namespace or public
+visibility. Asynchronous acceptance is not completion. Pending/timeout receipts
+are incomplete, and uncertainty never retries or cleans up a destination.
+GitLab has no atomic project revision, so provider-side residual races remain
+explicitly disclosed even with one credential pinned for the full operation. See
+[project administration](project-administration.md) and the pinned consumer
+fixture under `contracts/repo-admin/`.
 
 Issue-edit validation requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
@@ -184,8 +200,8 @@ additionally requires:
 
 Generic API, existing-issue content/label mutation, alternate/unguarded merge,
 approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
-mutation, MR delete, repository mutation, and other release/pipeline/job writes
-remain denied. Issue-edit preview
+mutation, MR delete, repository mutation outside guarded create/edit/fork, and
+other release/pipeline/job writes remain denied. Issue-edit preview
 changes no issue field or label. The exact native
 deletion exception below grants no broader write authority.
 
@@ -339,6 +355,9 @@ pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 | official data-command child stderr | 4 KiB (never rendered raw) |
 | issue-edit validation | 20 s preflight (30 s outer read budget), no PUT |
 | guarded merge phases | 20 s preflight / 15 s PUT / 10 s reconcile (45 s total) |
+| project administration phases | 15 s preflight / 10 s mutation / 20 s observation (45 s total) |
+| project description / private expected snapshot | 2,000 bytes / 16 KiB |
+| fork postcondition reads / optional wait | 10 / 20 s |
 | pagination | 10 pages / 1,000 items (merge jobs + bridges combined) |
 | existing release-view metadata | 100 entries |
 | ZIP/file paths | portable ASCII / 1,024 bytes per relative path / 255 bytes per component |

@@ -30,6 +30,7 @@ func TestNativeVariableRejectionEnvelope(t *testing.T) {
 		"ux-v1/board-ordering-receipt.schema.json",
 		"ux-v1/ci-variable-mutation.schema.json",
 		"ux-v1/resource-delete.schema.json",
+		"ux-v1/repo-admin.schema.json",
 	} {
 		body, err := os.ReadFile(filepath.Join("..", "..", "schema", filepath.FromSlash(name)))
 		if err != nil {
