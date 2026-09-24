@@ -22,6 +22,10 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 		lookup = os.LookupEnv
 	}
 	target := Target{Host: parsed.Values["--hostname"], Repo: parsed.Values["--repo"]}
+	repoMode := parsed.Definition.RepoMode
+	if len(parsed.Definition.Path) == 2 && parsed.Definition.Path[0] == "search" && (parsed.Values["--scope"] == "host" || parsed.Values["--group"] != "") {
+		repoMode = RepoNone
+	}
 	if parsed.Definition.Path != nil && len(parsed.Definition.Path) == 2 && parsed.Definition.Path[0] == "repo" && parsed.Definition.Path[1] == "view" && len(parsed.Positionals) == 1 {
 		if target.Repo != "" {
 			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repo view accepts either its repository argument or --repo, not both")
@@ -34,7 +38,7 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 		}
 	}
 	groupPlanning := isPlanningPath(parsed.Definition.Path) && parsed.Values["--group"] != ""
-	if target.Repo == "" && parsed.Definition.RepoMode != RepoNone && !groupPlanning {
+	if target.Repo == "" && repoMode != RepoNone && !groupPlanning {
 		identity, identityErr := gitremote.Origin(ctx, cwd)
 		if identityErr != nil {
 			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repository is required; run inside a GitLab checkout or pass -R namespace/project")
@@ -57,7 +61,7 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 	if err := safeurl.ValidateHost(target.Host); err != nil {
 		return Target{}, uxv1.Wrap(uxv1.CodeValidation, "invalid GitLab hostname", err)
 	}
-	if parsed.Definition.RepoMode != RepoNone && !groupPlanning {
+	if repoMode != RepoNone && !groupPlanning {
 		if target.Repo == "" {
 			return Target{}, uxv1.NewError(uxv1.CodeValidation, "repository is required; run inside a GitLab checkout or pass -R namespace/project")
 		}

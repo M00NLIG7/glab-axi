@@ -377,10 +377,14 @@ Backend: `official-glab`. Schema: `schema/ux-v1/release-view.schema.json`.
 ## `repo list`
 
 ```text
-gl-axi repo list [--hostname HOST] [--limit N]
+gl-axi repo list [USER | --group FULL_PATH] [global flags]
 ```
 
-List repositories visible to the official profile.
+Discover repositories with explicit user/group ownership.
+
+Discovery defaults to projects you own, including when filters are applied. User owners and groups are distinct.
+Group discovery excludes shared projects; descendants are opt-in.
+Language means uses the language, not GitHub primary language. No group language filter.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/repo-list.schema.json`.
 
@@ -407,30 +411,51 @@ Backend: `official-glab`. Schema: `schema/ux-v1/label-list.schema.json`.
 ## `search issues`
 
 ```text
-gl-axi search issues <query> [global flags]
+gl-axi search issues <query> [--scope project|host | --group FULL_PATH] [global flags]
 ```
 
-Search issues in one project.
+Search issues in a project, group, or explicit host scope.
+
+Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.
+Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
+Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
+Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
+Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
 
 ## `search mrs`
 
 ```text
-gl-axi search mrs <query> [global flags]
+gl-axi search mrs <query> [--scope project|host | --group FULL_PATH] [global flags]
 ```
 
-Search merge requests in one project.
+Search merge requests in a project, group, or explicit host scope.
+
+Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.
+Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
+Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
+Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
+Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
 
 ## `search repos`
 
 ```text
-gl-axi search repos <query> [--hostname HOST] [--limit N]
+gl-axi search repos <query> [--group FULL_PATH | --owner USER] [--language LANGUAGE] [--hostname HOST] [--limit N]
 ```
 
-Search projects/repositories on one host.
+Search projects/repositories on one host or within a group/user namespace.
+
+Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.
+Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
+Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
+Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
+Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
 
@@ -442,6 +467,13 @@ gl-axi search commits <query> [global flags]
 
 Search commits in one project.
 
+Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.
+Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
+Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
+Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
+Repository language/user filters use project discovery search; language means uses a language, not primary language.
+
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
 
 ## `search code`
@@ -451,6 +483,13 @@ gl-axi search code <query> [global flags]
 ```
 
 Search code blobs in one project.
+
+Query text is GitLab-native, not a GitHub qualifier parser. State and created sorting are the only mapped search filters.
+Labels, assignee, author, review, draft, stars, other sorts and code language are unsupported, not silently ignored.
+Commit/code search remains project-only. Host/group code and commit search require additional advanced-search/tier contracts.
+Disabled search, tier restrictions and upstream errors fail closed; there is no fallback to another scope.
+Repository created sorting keeps the same search route and query. It requires the complete result set within the existing page/byte/deadline bounds, then sorts timestamps before applying the display limit; otherwise it refuses.
+Repository language/user filters use project discovery search; language means uses a language, not primary language.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/search.schema.json`.
 

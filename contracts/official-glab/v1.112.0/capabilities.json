@@ -175,6 +175,23 @@
       "argv": ["release", "view", "{tag}", "--output", "json", "-R", "{repo}"]
     },
     {
+      "name": "repo-discovery",
+      "kind": "fixed-api-read-json-page",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "{typed_discovery_endpoint}"],
+      "selector_contract": "../../discovery-search/v1.json"
+    },
+    {
+      "name": "discovery-group",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "groups/{escaped_group}?with_projects=false"]
+    },
+    {
+      "name": "discovery-project",
+      "kind": "fixed-api-read-json-object",
+      "argv": ["api", "--method", "GET", "--hostname", "{host}", "projects/{escaped_repo_or_positive_id}"],
+      "input_policy": "positive ID must come from a bounded search result; returned ID, project path and canonical host URL are bound before use"
+    },
+    {
       "name": "repo-list",
       "kind": "read-json-page",
       "argv": ["repo", "list", "--output", "json", "--page", "{page}", "--per-page", "{per_page}"]
@@ -191,6 +208,7 @@
     },
     {
       "name": "search",
+      "selector_contract": "../../discovery-search/v1.json",
       "kind": "fixed-api-read-json-page",
       "argv": ["api", "--method", "GET", "--hostname", "{host}", "{fixed_search_endpoint}"]
     },

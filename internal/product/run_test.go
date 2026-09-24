@@ -137,7 +137,7 @@ func TestProductRejectsMalformedAndCrossAuthorityUpstream(t *testing.T) {
 func TestRepositoryNormalizerBoundsProjectIdentity(t *testing.T) {
 	item := upstreamRepo{
 		ID: 1, Name: "project", PathWithNamespace: strings.Repeat("a", 1024) + "/project",
-		WebURL: "https://gitlab.com/group/project", Archived: false,
+		WebURL: "https://gitlab.com/group/project",
 	}
 	if _, _, err := normalizeRepo(item, "gitlab.com"); err == nil {
 		t.Fatal("oversized repository identity was accepted")

@@ -42,6 +42,9 @@ const (
 	OpJobTrace                   Operation = "job-trace"
 	OpReleaseList                Operation = "release-list"
 	OpReleaseView                Operation = "release-view"
+	OpRepoDiscovery              Operation = "repo-discovery"
+	OpDiscoveryGroup             Operation = "discovery-group"
+	OpDiscoveryProject           Operation = "discovery-project"
 	OpRepoList                   Operation = "repo-list"
 	OpRepoView                   Operation = "repo-view"
 	OpLabelList                  Operation = "label-list"
@@ -80,6 +83,8 @@ type Request struct {
 	JobStatus                   string
 	// MaxResponseBytes may only narrow the operation's existing capture cap.
 	MaxResponseBytes int
+	Discovery        DiscoverySelectors
+	Search           SearchSelectors
 }
 
 type invocation struct {
@@ -147,6 +152,28 @@ func build(request Request) (invocation, error) {
 		base = append(base, page...)
 		base = append(base, repoArgs()...)
 		return jsonPage(base), nil
+	case OpRepoDiscovery:
+		if _, err := pageArgs(); err != nil {
+			return invocation{}, err
+		}
+		endpoint, err := discoveryEndpoint(request)
+		if err != nil {
+			return invocation{}, err
+		}
+		return jsonPage(append(apiPrefix(), endpoint)), nil
+	case OpDiscoveryGroup:
+		if err := ValidateGroup(request.Discovery.Group); err != nil {
+			return invocation{}, err
+		}
+		return jsonObject(append(apiPrefix(), "groups/"+url.PathEscape(request.Discovery.Group)+"?with_projects=false")), nil
+	case OpDiscoveryProject:
+		project := escapedRepo
+		if request.ID > 0 {
+			project = strconv.FormatInt(request.ID, 10)
+		} else if err := safeurl.ValidateProject(request.Repo); err != nil {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "invalid discovery project")
+		}
+		return jsonObject(append(apiPrefix(), "projects/"+project)), nil
 	case OpRepoList:
 		page, err := pageArgs()
 		if err != nil {
@@ -266,15 +293,35 @@ func build(request Request) (invocation, error) {
 		if !ok {
 			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "search scope must be issues, mrs, repos, commits, or code")
 		}
-		if request.Scope != "repos" {
+		if err := request.Search.Validate(request.Scope); err != nil {
+			return invocation{}, err
+		}
+		projectSearch := request.Scope != "repos" && request.Search.Area != "host" && request.Search.Group == ""
+		if !projectSearch && request.Repo != "" {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "host/group search cannot select a project")
+		}
+		if projectSearch {
 			if err := safeurl.ValidateProject(request.Repo); err != nil {
 				return invocation{}, uxv1.Wrap(uxv1.CodeValidation, "invalid repository target", err)
 			}
 		}
-		query := url.Values{"scope": {scope}, "search": {request.Query}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}.Encode()
+		if request.Scope == "repos" && request.Search.Sort != "" {
+			return invocation{}, uxv1.NewError(uxv1.CodeValidation, "repository creation ordering requires complete bounded collection, not a provider sort parameter")
+		}
+		values := url.Values{"scope": {scope}, "search": {request.Query}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}
+		if request.Search.State != "" {
+			values.Set("state", request.Search.State)
+		}
+		if request.Search.Sort != "" {
+			values.Set("order_by", "created_at")
+			values.Set("sort", "desc")
+		}
+		query := values.Encode()
 		endpoint := "search?" + query
-		if request.Scope != "repos" {
+		if projectSearch {
 			endpoint = "projects/" + escapedRepo + "/search?" + query
+		} else if request.Search.Group != "" {
+			endpoint = "groups/" + url.PathEscape(request.Search.Group) + "/search?" + query
 		}
 		return jsonPage(append(apiPrefix(), endpoint)), nil
 	case OpEnsureProject, OpMergeProject, OpIssueEditProject:
@@ -340,7 +387,7 @@ func build(request Request) (invocation, error) {
 
 func operationNeedsRepo(op Operation) bool {
 	switch op {
-	case OpRepoList, OpMRDiscussionsSourceProject:
+	case OpRepoList, OpRepoDiscovery, OpDiscoveryGroup, OpDiscoveryProject, OpMRDiscussionsSourceProject:
 		return false
 	case OpSearch:
 		return false // validated after the scope is known
