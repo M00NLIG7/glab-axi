@@ -74,12 +74,12 @@ from `auth login`. Product data commands close stdin and disable prompts, pager,
 editor, browser, debug HTTP, CI auto-login, color, and update checks. Do not put
 credentials in argv, shell history, chat, fixtures, or logs.
 
-Issue-edit validation and guarded `mr merge` use this same opaque official-glab
-profile/environment lane. Neither asks official glab to print a token, reads its
-config, or falls back to the native v1 keyring. MR request bodies contain no
-credential and pass through private mode-0600 files. Issue-edit proposals use
-descriptor-validated private title/description files; that command constructs
-no mutation body or PUT.
+Guarded `mr merge` uses this same opaque official-glab profile/environment lane.
+It neither asks official glab to print a token, reads its config, nor falls back
+to the native v1 keyring. MR request bodies contain no credential and pass through
+private mode-0600 files. For issue-edit transport selection, see the
+[issue-edit contract](../contracts/issue-edit/README.md); the explicit native
+boundary is described [below](#explicit-product-native-operations).
 
 ### OAuth/device and private-host limitations
 

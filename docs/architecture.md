@@ -118,8 +118,10 @@ argv function. Each operation has one fixed builder in
 
 Most reads use official commands with documented JSON output. Operations for
 which v1.112.0 has no safe dedicated JSON command, including job detail/trace,
-bounded search, MR discussions, guarded issue editing, MR ensure, and
-guarded MR merge, use internal fixed `glab api` routes.
+bounded search, MR discussions, delegated issue-edit validation, MR ensure, and
+guarded MR merge, use internal fixed `glab api` routes. The
+[official adapter contract](../contracts/official-glab/v1.112.0/README.md)
+owns the distinction between delegated issue reads and native-only edits.
 The public AXI has no `api` command, endpoint/method/header/body authority, or
 passthrough. Every fixed API argv is represented in the upstream capability
 fixture and exact-argv tests. Guarded merge callers cannot choose any route,
@@ -238,11 +240,11 @@ Receipts include bound identity, caller evidence, ordered changes, and requested
 label IDs. Native private-text evidence is always byte counts and SHA-256 digests,
 including previews or rejected payloads; unverified proposed content cannot bypass
 the native response credential scanner by appearing verbatim in a receipt.
-The default delegated preview retains its bounded values/digests. Only verified
-results include `resulting_updated_at`; unknown outcomes do not recycle prestate
-as a result. Budgets are 20 seconds preflight, 15 mutation, 10 verification within
-45 total, retaining caller cancellation. All response bytes share the 8 MiB
-operation cap, with 2 MiB/page and 10 pages/catalog.
+The default delegated preview retains its bounded values/digests. The
+[receipt schema](../schema/ux-v1/issue-edit.schema.json) owns action-dependent
+fields, including timestamp presence. Phase and response budgets are pinned in
+[the consumer contract](../contracts/issue-edit/v2.json); caller cancellation
+remains effective throughout.
 
 `contracts/issue-edit/v2.json` supersedes the historical validation-only v1.
 Persisted native config and self-managed mapping on the shipped Windows CLI
@@ -416,10 +418,11 @@ symlink/package-managed installs, and Windows self-replacement fail closed.
 - `glab-axi/ux-v1` has a separate envelope and one closed data schema per
   product command under `schema/ux-v1/`.
 - TOON and JSON use the same normalized fields and deterministic ordering.
-- Issue-edit preview and refusal receipts hash text over 4 KiB and label sets
-  over 100 names or 16 KiB while retaining exact byte/count evidence. Text
-  hashes cover exact UTF-8 bytes; label hashes cover the compact JSON encoding
-  of sorted names.
+- Issue-edit receipt handling is described in
+  [the issue-edit architecture](#issue-edit-best-effort-guarded-mutation).
+  `issueEditTextValue` and `issueEditLabelSetValue` in
+  `internal/product/commands_issue_edit.go` own evidence thresholds and hash
+  encoding; `issueEditReceipt` applies the native text-confidentiality policy.
 - Shared output bounds and pointers to tighter command-specific budgets are
   in the [security model](security.md#hard-limits).
 - Errors never include causes, server HTML, headers, cookies, tokens, proxy URLs,

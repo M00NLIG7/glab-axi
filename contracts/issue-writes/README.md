@@ -31,8 +31,8 @@ or resubmitted by state actions; fenced code permits read-only no-ops.
 
 Labels, assignment, milestones, custom types, attachments, delete/move, lock,
 hierarchy, GitHub close reasons and bundled comment+close are outside this contract.
-Existing `issue edit` remains validation-only. Windows persisted-native-config/
-self-managed mapping remains unproven.
+`issue edit` has a [separate contract](../issue-edit/README.md).
+Windows persisted-native-config/self-managed mapping remains unproven.
 
 ## Receipts and concurrency
 

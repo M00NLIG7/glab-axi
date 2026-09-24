@@ -361,7 +361,7 @@ pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 | shared operation/output ceiling (command-specific budgets may be lower) | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |
-| issue edit | 20 s preflight + 15 s one PUT + 10 s verification (45 s total) |
+| issue edit | [consumer-contract phase and response bounds](../contracts/issue-edit/v2.json) |
 | guarded merge phases | 20 s preflight / 15 s PUT / 10 s reconcile (45 s total) |
 | pagination | 10 pages / 1,000 items (merge jobs + bridges combined) |
 | existing release-view metadata | 100 entries |
@@ -384,7 +384,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate, ambiguous MR create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
+| 6 | conflict/duplicate, ambiguous create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |
@@ -431,8 +431,9 @@ version, dashboard, or native contract execution.
   macOS/Linux, stdin remains the human terminal while child output uses a PTY;
   on Windows, terminal input passes through one fixed, wiped relay buffer. A
   platform that cannot establish that monitored terminal boundary fails closed.
-- Delegated fixed API calls, including guarded issue edits and merge,
-  inherit official-glab/profile TLS, proxy, and redirect behavior. Returned
+- Delegated fixed API calls inherit official-glab/profile TLS, proxy, and
+  redirect behavior. The [official adapter contract](../contracts/official-glab/v1.112.0/README.md)
+  defines which issue-edit reads are delegated; live issue edits are not. Returned
   project and resource identities must still match the selected canonical
   target. Exact-version TLS contract tests prove the expected issue GET paths
   and guarded MR mutation paths; native private-host transport controls remain

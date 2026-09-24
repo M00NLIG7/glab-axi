@@ -23,6 +23,7 @@ func TestIssueEditExecutableAliasesEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	validateCLI := issueEditCLIValidator(t)
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			binDir := t.TempDir()
@@ -60,6 +61,7 @@ func TestIssueEditExecutableAliasesEndToEnd(t *testing.T) {
 					var stdout, stderr bytes.Buffer
 					command.Stdout, command.Stderr = &stdout, &stderr
 					runErr := command.Run()
+					validateCLI(t, stdout.Bytes())
 					var envelope struct {
 						Schema string          `json:"schema"`
 						OK     bool            `json:"ok"`
@@ -90,6 +92,8 @@ func TestIssueEditExecutableAliasesEndToEnd(t *testing.T) {
 					if mode == "default refusal" && (envelope.Error.Code != uxv1.CodeSafety || envelope.Error.Receipt.Edit.Action != "refused" || envelope.Error.Receipt.Edit.RefusalReason != "native_auth_required") {
 						t.Fatalf("default did not require opt-in: %s", &stdout)
 					}
+					t.Logf("CLI receipt: %s", stdout.Bytes())
+					t.Logf("Delegated argv: %s", recorded)
 				})
 			}
 		})

@@ -279,6 +279,8 @@ type issueEditNativeFixture struct {
 	redirectStatus                                      int
 	keyring                                             *issueEditNativeKeyring
 	before, after                                       upstreamIssue
+	catalog                                             []issueEditLabel
+	payload                                             map[string]any
 	mu                                                  sync.Mutex
 	records                                             []issueEditNativeRequest
 	issueReads, labelReads                              int
@@ -379,13 +381,20 @@ func (f *issueEditNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		labels := issueEditCatalog()
+		if f.catalog != nil {
+			labels = f.catalog
+		}
 		if f.mode == "label reused" && f.labelReads == 2 {
 			labels[0].ID = 99
 		}
 		write(labels)
 	case "PUT /gitlab/api/v4/projects/101/issues/42":
 		var payload map[string]any
-		if json.Unmarshal(body, &payload) != nil || !reflect.DeepEqual(payload, map[string]any{"title": "new title", "add_labels": "triage"}) {
+		want := f.payload
+		if want == nil {
+			want = map[string]any{"title": "new title", "add_labels": "triage"}
+		}
+		if json.Unmarshal(body, &payload) != nil || !reflect.DeepEqual(payload, want) {
 			w.WriteHeader(400)
 			return
 		}
