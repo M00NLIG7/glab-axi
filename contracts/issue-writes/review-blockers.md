@@ -4,7 +4,7 @@ State transitions and blank creation are temporarily refused to prevent provider
 content/quick-action effects outside the authorized scope. Nonblank ordinary
 creation, plain comments and the thin `note` alias remain supported. This boundary
 does not establish full issue parity or resolve the provider mechanisms below.
-Existing `issue edit` remains validation-only.
+For `issue edit`, see its [separate contract](../issue-edit/README.md).
 
 ## State transitions
 

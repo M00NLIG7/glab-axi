@@ -118,8 +118,10 @@ argv function. Each operation has one fixed builder in
 
 Most reads use official commands with documented JSON output. Operations for
 which v1.112.0 has no safe dedicated JSON command, including job detail/trace,
-bounded search, MR discussions, exact issue-edit validation, MR ensure, and
-guarded MR merge, use internal fixed `glab api` routes.
+bounded search, MR discussions, delegated issue-edit validation, MR ensure, and
+guarded MR merge, use internal fixed `glab api` routes. The
+[official adapter contract](../contracts/official-glab/v1.112.0/README.md)
+owns the distinction between delegated issue reads and native-only edits.
 The public AXI has no `api` command, endpoint/method/header/body authority, or
 passthrough. Every fixed API argv is represented in the upstream capability
 fixture and exact-argv tests. Guarded merge callers cannot choose any route,
@@ -183,23 +185,31 @@ config is atomically written, and a config failure restores the prior keyring
 entry. Private MR files are opened with no-follow semantics and validated from
 the descriptor to prevent path-swap reads.
 
-## Issue edit: exact-identity validation and refusal
+## Issue edit: best-effort guarded mutation
 
-Product `issue edit` validates the captain-approved field surface but does not
-mutate GitLab. Its parser requires an explicit host and nested project,
+Product `issue edit --auth-source native` supports title, description, and label
+deltas with drift checks and bounded reconciliation. After validating private
+input, it opens the shared `productnative` client once and uses its selected
+credential and configured API/web authority for the entire operation. The
+feature adapter selects only its closed routes; it owns no credential resolver
+or HTTP policy. Native and official identities are not assumed equivalent.
+Omitting the selector preserves delegated preview/no-op validation and returns
+`native_auth_required` for live changes before any PUT. No fallback occurs. Its parser requires an explicit host and nested project,
 canonical positive IID and issue URL, `opened` or `closed` expected state, exact
 RFC 3339 `updated_at`, and at least one title, description, or label request.
 It validates these values before target or child discovery. Content comes only
 from descriptor-validated private regular non-symlink files at the established
 title and description bounds. A title cannot be blank; an empty description
-represents a proposed clear.
+represents a clear. Slash-leading description lines are refused, including
+inside code blocks, because GitLab's update service interprets quick actions.
+The effective existing description is checked before a title/label-only write.
 
 Label arguments are repeatable and comma-free. The command rejects empty,
 duplicate, case-colliding, overlapping, missing, ambiguous, or case-substituted
 names. It consumes every bounded page of project and inherited labels, resolves
 requested names to numeric identities, repeats that complete lookup after the
-second issue read, and rejects identity drift. Previewed add/remove semantics
-preserve unrelated labels without sending a replacement set.
+second issue read, and rejects identity drift. Add/remove semantics preserve
+unrelated labels without sending a replacement set.
 
 The state machine is:
 
@@ -210,22 +220,40 @@ The state machine is:
    label resolution and reject stale issue evidence, snapshot drift, or label
    identity drift;
 4. return `preview` for `--dry-run` or `unchanged` for an exact no-op, with zero
-   mutation; and
-5. for every non-no-op live request, return `safety_violation` with a bounded
-   `refused`/`not_applied` receipt before any PUT.
+   mutation;
+5. send one fixed PUT to the validated numeric project ID and issue IID with
+   only changed title/description and comma-separated label deltas;
+6. validate the response and read the exact canonical issue once. Require bound
+   identity/state, intended title/body/labels, and a non-regressing timestamp.
+   Re-resolve all requested label identities in one bounded catalog;
+7. return `updated` or `reconciled_update` with `observed_applied` only after
+   verification. An intelligible wrong-identity or wrong-poststate response
+   remains ambiguous even if a later read matches. Lost/malformed responses may
+   reconcile by canonical observation. Any unproven result returns
+   `ambiguous_update` with an `ambiguous`/`unknown` receipt. Never retry or roll back.
 
-GitLab's issue PUT accepts no expected issue revision and only label names, so
-it cannot atomically bind the validated issue and requested numeric label
-identities. Any sequence of separate reads leaves a TOCTOU window, so the
-issue-edit command exposes no content/label PUT. Refusals carry the same bounded
-receipt shape under `error.receipt`. Receipts include canonical project/issue
-identity, caller evidence, ordered proposed fields, before/after values or
-SHA-256 evidence at output bounds, label IDs, observed `updated_at`,
-action, outcome, and a machine-readable refusal reason. Validation has a
-20-second phase budget inside the ordinary 30-second read operation budget. The
-approved v1 surface is pinned in `contracts/issue-edit/v1.json`; creation,
-comments, state changes, assignment, milestones, hierarchy, boards, approvals,
-credentials, and pipelines remain outside it.
+GitLab accepts no atomic expected revision and writes labels by name, not ID.
+A residual check/write race remains: concurrent edits can be overwritten and
+renamed/deleted labels can be reused or recreated by `add_labels`. Separate reads
+cannot prove the absence of concurrent writes. Receipts explicitly disclose
+`best_effort` and the race; `observed_applied` proves observed state, not which
+actor applied it. No-op fields are not sent and unrelated labels are never replaced.
+
+Receipts include bound identity, caller evidence, ordered changes, and requested
+label IDs. Native private-text evidence is always byte counts and SHA-256 digests,
+including previews or rejected payloads; unverified proposed content cannot bypass
+the native response credential scanner by appearing verbatim in a receipt.
+The default delegated preview retains its bounded values/digests. The
+[receipt schema](../schema/ux-v1/issue-edit.schema.json) owns action-dependent
+fields, including timestamp presence. Phase and response budgets are pinned in
+[the consumer contract](../contracts/issue-edit/v2.json); caller cancellation
+remains effective throughout.
+
+`contracts/issue-edit/v2.json` supersedes the historical validation-only v1.
+Persisted native config and self-managed mapping on the shipped Windows CLI
+remain unproven. Assignees, milestones, attachments, and GitHub organization types remain explicit
+parity gaps; GitLab incident/task types are not treated as equivalents. Creation,
+comments, state changes, hierarchy and boards are separate contracts.
 
 ## Typed issue creation, notes and state observations
 
@@ -393,10 +421,11 @@ symlink/package-managed installs, and Windows self-replacement fail closed.
 - `glab-axi/ux-v1` has a separate envelope and one closed data schema per
   product command under `schema/ux-v1/`.
 - TOON and JSON use the same normalized fields and deterministic ordering.
-- Issue-edit preview and refusal receipts hash text over 4 KiB and label sets
-  over 100 names or 16 KiB while retaining exact byte/count evidence. Text
-  hashes cover exact UTF-8 bytes; label hashes cover the compact JSON encoding
-  of sorted names.
+- Issue-edit receipt handling is described in
+  [the issue-edit architecture](#issue-edit-best-effort-guarded-mutation).
+  `issueEditTextValue` and `issueEditLabelSetValue` in
+  `internal/product/commands_issue_edit.go` own evidence thresholds and hash
+  encoding; `issueEditReceipt` applies the native text-confidentiality policy.
 - Shared output bounds and pointers to tighter command-specific budgets are
   in the [security model](security.md#hard-limits).
 - Errors never include causes, server HTML, headers, cookies, tokens, proxy URLs,

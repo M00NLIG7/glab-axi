@@ -38,15 +38,22 @@ GitLab project (not Rune).
    `-R namespace/project --hostname host`; authority must match. A self-managed
    checkout without explicit hostname/environment authority must fail before
    official-glab execution.
-9. Against read-only synthetic issue data, run issue-edit validation with exact
-   URL, state, and `updated_at`. Exercise `--dry-run` for title-only,
-   description-only, label-only, and combined proposals, plus no-op, stale
-   evidence, changed target, validation timeout/cancellation, and unavailable
-   or ambiguous labels. Then omit
-   `--dry-run` for each non-no-op shape and require `safety_violation` with a
-   bounded `refused`/`not_applied` receipt. Audit two exact issue reads, two
-   complete label catalogs when labels are requested, and zero PUTs or mutation
-   bodies on every path. Unrelated labels must remain in the preview.
+9. Against isolated synthetic issue fixtures only, run issue edit with explicit
+   `--auth-source native` and exact
+   URL, state, and `updated_at`. Exercise title, description, description clear,
+   label deltas, and combined edits through both compiled executable names.
+   Require successful one-PUT receipts and canonical verification; no-op and
+   dry-run must send zero PUTs. Stale evidence, wrong target, preflight drift,
+   quick-action descriptions, or missing/ambiguous/renamed/reused labels refuse
+   before mutation. Audit bounded canonical/catalog reconciliation after lost,
+   malformed, rejected or mismatched responses, concurrent drift, and failed
+   reads; every path has at most one PUT and no rollback. Check page/byte/time
+   bounds and cancellation. Receipts must disclose the non-atomic race and
+   distinguish observed state from attribution. Use the pinned official package
+   TLS fixture only as negative redirect evidence. Compiled native CLI/TLS
+   fixtures must prove label-name deltas, numeric target, one credential/authority
+   throughout, no retries or redirects, private payload and confidentiality.
+   Omitted/invalid selectors must never silently switch to native or fall back.
 10. In the disposable project only, run MR ensure twice. The second invocation
    must replay/update the exact MR and never create a duplicate. Exercise an
    applied-but-ambiguous update whose exact official view carries the head in
@@ -75,7 +82,7 @@ GitLab project (not Rune).
     path.
 
 Pass: a new human reaches authenticated, repository-scoped useful reads,
-exact issue-edit preview and fail-closed live refusal, idempotent MR ensure, and
+best-effort guarded issue edits with disclosed residual race, idempotent MR ensure, and
 guarded squash merge without manually discovering API bases on the default
 host, without an agent handling interactive credentials, and without plaintext
 fallback.

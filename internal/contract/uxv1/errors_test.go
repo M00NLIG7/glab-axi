@@ -3,6 +3,7 @@ package uxv1
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -22,19 +23,39 @@ func TestAmbiguousMergeUsesConflictExitWithoutSerializingCause(t *testing.T) {
 	}
 }
 
-func TestSafetyRefusalSerializesOnlyExplicitReceipt(t *testing.T) {
+func TestAmbiguousUpdateSerializesOnlyExplicitReceipt(t *testing.T) {
 	raw := "provider-controlled-refusal-sentinel"
-	err := Wrap(CodeSafety, "mutation refused before provider write", errors.New(raw))
+	err := Wrap(CodeAmbiguousUpdate, "mutation outcome is unknown", errors.New(raw))
 	err.Receipt = struct {
 		Action  string `json:"action"`
 		Outcome string `json:"outcome"`
-	}{Action: "refused", Outcome: "not_applied"}
+	}{Action: "ambiguous", Outcome: "unknown"}
 	encoded, marshalErr := json.Marshal(Failure(err, Meta{Complete: false}))
 	if marshalErr != nil {
 		t.Fatal(marshalErr)
 	}
-	if ExitCode(err) != 9 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"refused","outcome":"not_applied"}`) {
+	if ExitCode(err) != 6 || strings.Contains(string(encoded), raw) || !strings.Contains(string(encoded), `"receipt":{"action":"ambiguous","outcome":"unknown"}`) {
 		t.Fatalf("safety refusal envelope=%s exit=%d", encoded, ExitCode(err))
+	}
+}
+
+func TestAmbiguousMutationRecoveryGuidance(t *testing.T) {
+	for _, test := range []struct {
+		code Code
+		help string
+	}{
+		{CodeAmbiguousCreate, "inspect exact matching merge requests before retrying"},
+		{CodeAmbiguousUpdate, "refresh and inspect the exact selected GitLab resource before retrying"},
+		{CodeAmbiguousMerge, "inspect the exact merge request URL and expected head before any retry"},
+	} {
+		for _, backend := range []string{"official-glab", "native-v1", "native"} {
+			t.Run(string(test.code)+"/"+backend, func(t *testing.T) {
+				envelope := Failure(NewError(test.code, "mutation outcome is unknown"), Meta{Backend: backend})
+				if envelope.OK || envelope.Error.Retryable || !reflect.DeepEqual(envelope.Help, []string{test.help}) {
+					t.Fatalf("unexpected recovery envelope: %#v", envelope)
+				}
+			})
+		}
 	}
 }
 

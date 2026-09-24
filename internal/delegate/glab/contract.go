@@ -23,11 +23,14 @@ const (
 type Operation string
 
 const (
-	OpIssueList                  Operation = "issue-list"
-	OpIssueView                  Operation = "issue-view"
-	OpIssueEditProject           Operation = "issue-edit-project"
-	OpIssueEditView              Operation = "issue-edit-view"
-	OpIssueEditLabelList         Operation = "issue-edit-label-list"
+	OpIssueList          Operation = "issue-list"
+	OpIssueView          Operation = "issue-view"
+	OpIssueEditProject   Operation = "issue-edit-project"
+	OpIssueEditView      Operation = "issue-edit-view"
+	OpIssueEditLabelList Operation = "issue-edit-label-list"
+	// OpIssueEditUpdate identifies the product-native edit only. build must
+	// reject it: the pinned official CLI can follow mutation redirects.
+	OpIssueEditUpdate            Operation = "issue-edit-native-update"
 	OpMRList                     Operation = "mr-list"
 	OpMRView                     Operation = "mr-view"
 	OpMRDiff                     Operation = "mr-diff"

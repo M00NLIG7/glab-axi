@@ -44,7 +44,7 @@ native HTTP transport.
 - fixed internal API routes only where official v1.112.0 lacks safe JSON
   commands; MR discussion and canonical project-identity routes are GET-only,
   the fork route accepts only a provider-bound positive project ID, issue-edit
-  validation owns only exact project/issue/label GETs and exposes no issue PUT,
+  owns exact project/issue/label GETs; its live PUT is native-only,
   and public `api` remains denied;
 - MR discussion evidence binds canonical source and target project IDs, paths,
   and URLs to MR global/project IDs, IID, branches, base/head SHAs, URL, and
@@ -122,14 +122,25 @@ are supported. The [temporary parity gaps](../contracts/issue-writes/review-bloc
 remain explicit; the increment does not claim full issue parity or authorize
 collateral content/quick-action effects.
 
-Issue-edit validation requires explicit host/project and caller-supplied
+Live issue editing requires explicit `--auth-source native`. The shared
+`productnative` client is opened once after private input validation and owns
+one existing native credential and configured authority for the full sequence.
+It never acquires the official profile or assumes account equivalence. Omission
+preserves the delegated preview/no-op lane and refuses actual changes with
+`native_auth_required`, without trying native auth. The underlying official
+CLI's 301/302/303 follow-up GET behavior is negative evidence, not a supported
+mutation route. Native redirects and retries are disabled before transmission.
+Windows persisted config/self-managed mapping remains an unproven limitation.
+
+Issue editing requires explicit host/project and caller-supplied
 canonical URL, state, and `updated_at` for one canonical positive IID. It binds
 project ID, full path, and URL plus issue global/project IDs. Title and
 description use descriptor-based private-file reads and established size caps.
 Requested label names are bounded and comma-free, resolve to one numeric
 identity in two complete project/ancestor catalog snapshots, and cannot
 duplicate, overlap, resolve through a case alias, or drift. Proposed add/remove
-semantics preserve unrelated labels.
+semantics preserve unrelated labels. Scoped-label additions cannot implicitly
+replace another same-scope label: the removal must be explicitly requested.
 
 The exact issue is read twice and requested labels are resolved before and after
 the second read. Any stale state/time, identity mismatch, mutable snapshot
@@ -137,12 +148,25 @@ drift, malformed response, or label drift fails closed. Preview returns the
 bounded proposed change receipt, and an exact no-op returns `unchanged`.
 GitLab's issue PUT accepts no expected issue revision and only label names, so
 it cannot atomically bind the validated issue and requested numeric label
-identities. A non-no-op live request therefore
-returns `safety_violation` with a deterministic `refused`/`not_applied` receipt
-under `error.receipt` before mutation. Issue edit has no content/label PUT operation,
-creates no mutation body, performs no post-write reconciliation, and cannot
-expose residual TOCTOU
-as a supported write.
+identities. The supported contract is explicitly best-effort: one typed PUT to
+the validated numeric project ID and IID, with only changed title/description
+and label deltas. No full label replacement, timestamp setter, quick-action
+slash-leading description lines, or implicit work-item/type mutation is accepted.
+Existing slash-leading descriptions also block writes unless safely replaced.
+
+Every attempted PUT is followed by at most one bounded canonical issue read and,
+when labels were requested, one complete bounded catalog. Identity, intended
+postconditions, and observed unchanged title/body/labels must match. Lost or
+malformed responses reconcile only by observation; an intelligible mismatched
+response cannot be repaired by a later matching read. Cancellation, failed
+verification, label rename/reuse, or observed concurrent drift returns
+`ambiguous_update` with an `ambiguous`/`unknown` receipt, never a blind retry.
+
+Residual TOCTOU is unavoidable: a concurrent writer can race after preflight,
+and `add_labels` can recreate a deleted/renamed label name. Postchecks do not
+undo side effects or prove absence of concurrency. Success receipts say
+`observed_applied`, not exclusive attribution, and every receipt discloses the
+race. This is not atomic compare-and-swap or general issue mutation authority.
 
 MR ensure permits only title/description on one exact open same-project
 source/target pair. It uses validated project identity, all-page lookup,
@@ -182,7 +206,7 @@ additionally requires:
   preserves only a recognized framed rejection, and otherwise
   `ambiguous_merge` prevents a blind retry.
 
-Generic API, existing-issue content/label mutation, alternate/unguarded merge,
+Generic API, issue mutation outside the declared contracts, alternate/unguarded merge,
 approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
 mutation, MR delete, repository mutation, and other release/pipeline/job writes
 remain denied. Issue-edit preview
@@ -337,7 +361,7 @@ pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 | shared operation/output ceiling (command-specific budgets may be lower) | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |
-| issue-edit validation | 20 s preflight (30 s outer read budget), no PUT |
+| issue edit | [consumer-contract phase and response bounds](../contracts/issue-edit/v2.json) |
 | guarded merge phases | 20 s preflight / 15 s PUT / 10 s reconcile (45 s total) |
 | pagination | 10 pages / 1,000 items (merge jobs + bridges combined) |
 | existing release-view metadata | 100 entries |
@@ -360,7 +384,7 @@ Partial CI or duplicate-MR lookup is never used for a green/unique decision.
 | 3 | authentication or human-interaction required |
 | 4 | authenticated but forbidden |
 | 5 | resource not found |
-| 6 | conflict/duplicate, ambiguous MR create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
+| 6 | conflict/duplicate, ambiguous create/update/merge, ambiguous resource deletion, or ambiguous CI-variable mutation |
 | 7 | rate limited |
 | 8 | dependency/version/network/timeout/malformed upstream/internal |
 | 9 | authority, URL, secure-storage, TLS, redirect, or local safety violation |
@@ -407,8 +431,9 @@ version, dashboard, or native contract execution.
   macOS/Linux, stdin remains the human terminal while child output uses a PTY;
   on Windows, terminal input passes through one fixed, wiped relay buffer. A
   platform that cannot establish that monitored terminal boundary fails closed.
-- Delegated fixed API calls, including issue-edit validation and guarded merge,
-  inherit official-glab/profile TLS, proxy, and redirect behavior. Returned
+- Delegated fixed API calls inherit official-glab/profile TLS, proxy, and
+  redirect behavior. The [official adapter contract](../contracts/official-glab/v1.112.0/README.md)
+  defines which issue-edit reads are delegated; live issue edits are not. Returned
   project and resource identities must still match the selected canonical
   target. Exact-version TLS contract tests prove the expected issue GET paths
   and guarded MR mutation paths; native private-host transport controls remain

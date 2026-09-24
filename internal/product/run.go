@@ -261,7 +261,7 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 	case "issue view":
 		return executeIssueView(ctx, client, target, parsed, meta)
 	case "issue edit":
-		return executeIssueEdit(ctx, client, target, parsed, meta)
+		return executeIssueEdit(ctx, client, target, parsed, meta, deps)
 	case "issue create", "issue comment", "issue note", "issue close", "issue reopen":
 		return executeIssueWrite(ctx, target, parsed, deps, meta)
 	case "mr list":
