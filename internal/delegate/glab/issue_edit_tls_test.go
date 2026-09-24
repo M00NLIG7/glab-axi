@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gl-axi/internal/contract/uxv1"
 )
 
 func writeIssueEditTestCAProfile(t *testing.T, home, host, caPath string) {
@@ -111,6 +114,14 @@ func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), duration)
 			defer cancel()
+			if mode == "deadline" {
+				// An operation deadline includes child startup. Requiring a PUT
+				// before this timer fires was a scheduler-dependent assertion.
+				// Pin expiry before launch and require exactly zero requests; the
+				// cancel case separately pins termination after exactly one PUT.
+				// Keep the one-second deadline, not a larger startup allowance.
+				<-ctx.Done()
+			}
 			type result struct {
 				response Response
 				err      error
@@ -121,21 +132,29 @@ func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 				body, err := client.runCapture(ctx, args, host, 2<<20, true, false, OpIssueEditUpdate)
 				done <- result{Response{Body: body, Write: true, UpstreamVersion: SupportedVersion}, err}
 			}()
-			select {
-			case record := <-records:
-				if record.method != "PUT" || record.host != host || record.requestURI != "/api/v4/projects/101/issues/42" || record.contentType != "application/json" || record.readErr != nil || !bytes.Equal(record.body, payload) || strings.Contains(record.requestURI+string(record.body), token) {
-					t.Fatalf("wrong wire request: %#v", record)
+			if mode != "deadline" {
+				select {
+				case record := <-records:
+					if record.method != "PUT" || record.host != host || record.requestURI != "/api/v4/projects/101/issues/42" || record.contentType != "application/json" || record.readErr != nil || !bytes.Equal(record.body, payload) || strings.Contains(record.requestURI+string(record.body), token) {
+						t.Fatalf("wrong wire request: %#v", record)
+					}
+					if mode == "cancel" {
+						cancel()
+					}
+				case <-time.After(6 * time.Second):
+					t.Fatal("no TLS request")
 				}
-				if mode == "cancel" {
-					cancel()
-				}
-			case <-time.After(6 * time.Second):
-				t.Fatal("no TLS request")
 			}
 			select {
 			case got := <-done:
 				if !got.response.Write || (mode == "200" || mode == "malformed") != (got.err == nil) {
 					t.Fatalf("response=%#v err=%v", got.response, got.err)
+				}
+				if mode == "deadline" && (!errors.Is(got.err, context.DeadlineExceeded) || uxv1.AsError(got.err).Code != uxv1.CodeUpstream) {
+					t.Fatalf("pre-launch deadline not preserved: %v", got.err)
+				}
+				if mode == "cancel" && (!errors.Is(got.err, context.Canceled) || uxv1.AsError(got.err).Code != uxv1.CodeCanceled) {
+					t.Fatalf("in-flight cancellation not preserved: %v", got.err)
 				}
 				if got.err != nil && (strings.Contains(got.err.Error(), token) || strings.Contains(got.err.Error(), "synthetic upstream detail")) {
 					t.Fatal("raw error leaked")
@@ -144,6 +163,9 @@ func testPinnedOfficialGlabIssueEditMutationTLS(t *testing.T) {
 				t.Fatal("unbounded child")
 			}
 			wantRequests := int32(1)
+			if mode == "deadline" {
+				wantRequests = 0
+			}
 			if mode == "301" || mode == "302" || mode == "303" {
 				wantRequests = 2 // pinned defect, never an allowed product behavior
 				select {

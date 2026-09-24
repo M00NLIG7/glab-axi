@@ -34,10 +34,15 @@ func TestIssueEditNativeExecutableAliasesEndToEnd(t *testing.T) {
 			if output, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v: %s", err, output)
 			}
-			for _, mode := range []string{"success", "noop", "preview", "stale", "wrong target", "lost", "redirect"} {
+			for _, mode := range []string{"success", "noop", "preview", "stale", "wrong target", "wrong issue", "ID drift", "alternate ID", "lost", "redirect"} {
 				t.Run(mode, func(t *testing.T) {
 					f := newIssueEditNativeFixture(t)
 					f.mode = mode
+					if mode == "alternate ID" {
+						// The caller binds IID/URL, not a fixture-specific global ID.
+						f.before.ID++
+						f.after.ID++
+					}
 					f.redirectStatus = 301
 					f.redirectURL = f.server.URL + "/gitlab/api/v4/unapproved-path"
 					home := t.TempDir()
@@ -87,13 +92,16 @@ func TestIssueEditNativeExecutableAliasesEndToEnd(t *testing.T) {
 						OK     bool            `json:"ok"`
 						Data   issueEditOutput `json:"data"`
 						Meta   uxv1.Meta       `json:"meta"`
+						Error  struct {
+							Code uxv1.Code `json:"code"`
+						} `json:"error"`
 					}
 					if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 						t.Fatalf("decode: %v output=%s stderr=%s", err, &stdout, &stderr)
 					}
 					wantAction, wantPuts := "", 0
 					switch mode {
-					case "success":
+					case "success", "alternate ID":
 						wantAction, wantPuts = "updated", 1
 					case "noop":
 						wantAction = "unchanged"
@@ -116,6 +124,24 @@ func TestIssueEditNativeExecutableAliasesEndToEnd(t *testing.T) {
 					}
 					if mode == "redirect" {
 						assertIssueEditAmbiguous(t, 1, stdout.Bytes())
+					}
+					if mode == "wrong issue" || mode == "ID drift" {
+						if envelope.Error.Code != uxv1.CodeSafety {
+							t.Fatalf("identity refusal code=%s output=%s", envelope.Error.Code, &stdout)
+						}
+						wantReads := 1
+						if mode == "ID drift" {
+							wantReads = 2
+						}
+						f.mu.Lock()
+						reads := f.issueReads
+						f.mu.Unlock()
+						if reads != wantReads {
+							t.Fatalf("issue reads=%d want=%d", reads, wantReads)
+						}
+					}
+					if mode == "alternate ID" && envelope.Data.Edit.Identity.IssueID != f.before.ID {
+						t.Fatalf("receipt did not retain observed identity: %s", &stdout)
 					}
 					f.assertRequests(t, -1, wantPuts)
 					for _, record := range f.snapshot() {

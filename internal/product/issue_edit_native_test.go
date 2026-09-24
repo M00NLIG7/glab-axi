@@ -144,7 +144,7 @@ func TestIssueEditNativeDefaultRemainsNonMutating(t *testing.T) {
 }
 
 func TestIssueEditNativePrestateAndNoOp(t *testing.T) {
-	for _, mode := range []string{"preview", "noop", "wrong issue", "stale", "drift", "label reused", "duplicate project", "duplicate issue"} {
+	for _, mode := range []string{"preview", "noop", "wrong issue", "ID drift", "stale", "drift", "label reused", "duplicate project", "duplicate issue"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newIssueEditNativeFixture(t)
 			f.mode = mode
@@ -360,6 +360,9 @@ func (f *issueEditNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
 			issue = f.after
 		}
 		if f.mode == "wrong issue" {
+			issue.IID++
+		}
+		if f.mode == "ID drift" && f.issueReads == 2 {
 			issue.ID++
 		}
 		if f.mode == "stale" {
