@@ -145,10 +145,26 @@ func TestStackOfficialGlabTLSExecutable(t *testing.T) {
 		t.Skip("POSIX official-glab path fixture")
 	}
 	binary := stackBinary(t, "gl-axi")
+	for _, mode := range []string{"valid", "equals-branches", "unicode-branches", "wrong-head", "wrong-target", "fork", "drift", "partial-failure"} {
+		t.Run(mode, func(t *testing.T) {
+			runStackOfficialGlabTLSExecutable(t, binary, upstream, mode)
+		})
+	}
+}
+
+func runStackOfficialGlabTLSExecutable(t *testing.T, binary, upstream, mode string) {
+	t.Helper()
 	home := t.TempDir()
 	var mu sync.Mutex
 	host := ""
+	base, first, last := "main", "one", "two"
+	if mode == "equals-branches" {
+		base, first, last = "base=a=b", "feature/a=b", "feature/c=d=e="
+	} else if mode == "unicode-branches" {
+		base, first, last = "main\u2003", "topic", "topic\u00a0"
+	}
 	heads := map[string]string{}
+	count := 0
 	server := testgitlab.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -161,6 +177,7 @@ func TestStackOfficialGlabTLSExecutable(t *testing.T) {
 			http.Error(w, "no synthetic token", 401)
 			return
 		}
+		count++
 		if strings.HasSuffix(r.URL.Path, "/team/repo") {
 			_ = json.NewEncoder(w).Encode(mergeProject{ID: 7, PathWithNamespace: "team/repo", WebURL: "https://" + host + "/team/repo"})
 			return
@@ -170,20 +187,44 @@ func TestStackOfficialGlabTLSExecutable(t *testing.T) {
 			return
 		}
 		iid := int64(11)
-		branch, parent := "one", "main"
+		branch, parent := first, base
 		if strings.HasSuffix(r.URL.Path, "/12") {
 			iid = 12
-			branch, parent = "two", "one"
+			branch, parent = last, first
 		}
-		_ = json.NewEncoder(w).Encode(upstreamMR{ID: 100 + iid, IID: iid, State: "opened", WebURL: canonicalMRURL(host, "team/repo", iid), SourceProjectID: 7, TargetProjectID: 7, SourceBranch: branch, TargetBranch: parent, SHA: heads[branch]})
+		mr := upstreamMR{ID: 100 + iid, IID: iid, State: "opened", WebURL: canonicalMRURL(host, "team/repo", iid), SourceProjectID: 7, TargetProjectID: 7, SourceBranch: branch, TargetBranch: parent, SHA: heads[branch]}
+		switch mode {
+		case "wrong-head":
+			mr.SHA = strings.Repeat("a", 40)
+		case "wrong-target":
+			mr.TargetBranch = "another"
+		case "fork":
+			mr.SourceProjectID = 8
+		case "drift":
+			if count > 3 {
+				mr.ID++
+			}
+		case "partial-failure":
+			if iid == 12 {
+				http.Error(w, "synthetic failure", 502)
+				return
+			}
+		}
+		_ = json.NewEncoder(w).Encode(mr)
 	}))
 	defer server.Close()
 	mu.Lock()
 	host = "gitlab.stack.example"
 	mu.Unlock()
 	dir := stackFixture(t, host)
+	if base != "main" {
+		stackGit(t, dir, "branch", "-m", "main", base)
+		stackGit(t, dir, "branch", "-m", "one", first)
+		stackGit(t, dir, "branch", "-m", "two", last)
+	}
+	before := stackGit(t, dir, "show-ref", "--heads")
 	mu.Lock()
-	for _, b := range []string{"one", "two"} {
+	for _, b := range []string{first, last} {
 		heads[b] = stackGit(t, dir, "rev-parse", b)
 	}
 	mu.Unlock()
@@ -210,11 +251,47 @@ func TestStackOfficialGlabTLSExecutable(t *testing.T) {
 		t.Fatal(e)
 	}
 	env := []string{"PATH=" + tools + string(os.PathListSeparator) + os.Getenv("PATH"), "HOME=" + home, "GLAB_CONFIG_DIR=" + config, "GITLAB_TOKEN=" + strings.Join([]string{"synthetic", "stack", "token"}, "-"), "NO_PROXY=*", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_NOSYSTEM=1"}
-	out := stackExec(t, binary, dir, env, stackArgs("link", host, "one", "two", "--base", "main", "--mr", "one=11", "--mr", "two=12", "--allow-local-metadata")...)
-	if !out.OK || out.Meta.UpstreamVersion != glab.SupportedVersion || out.Data.Stack.MRObservation != "observed" {
+	args := stackArgs("link", host, first, last, "--base", base, "--mr", first+"=11", "--mr", last+"=12", "--allow-local-metadata")
+	out := stackExec(t, binary, dir, env, args...)
+	body, _ := json.Marshal(out)
+	t.Logf("CLI stack link %q: %s", mode, body)
+	success := mode == "valid" || mode == "equals-branches" || mode == "unicode-branches"
+	if out.OK != success {
 		t.Fatalf("official TLS %+v requests=%d", out, len(server.Requests()))
 	}
-	if len(server.Requests()) != 6 {
-		t.Fatalf("expected 6 exact reads, got %d", len(server.Requests()))
+	if success {
+		if out.Meta.UpstreamVersion != glab.SupportedVersion || out.Data.Stack.MRObservation != "observed" || len(server.Requests()) != 6 {
+			t.Fatalf("expected two exact observation passes: %+v requests=%d", out, len(server.Requests()))
+		}
+		if again := stackExec(t, binary, dir, env, args...); !again.OK || again.Data.Stack.Action != "unchanged" {
+			t.Fatalf("replay: %+v", again)
+		}
+		view := stackExec(t, binary, dir, env, stackArgs("view", host, "--mrs")...)
+		body, _ = json.Marshal(view)
+		t.Logf("CLI stack view --mrs: %s", body)
+		if !view.OK || !view.Meta.Complete || view.Data.Stack.Base != base || view.Data.Stack.Current != last || len(view.Data.Stack.Branches) != 2 {
+			t.Fatalf("bound view: %+v", view)
+		}
+		for i, name := range []string{first, last} {
+			node := view.Data.Stack.Branches[i]
+			if node.Name != name || node.MR != int64(11+i) || node.Parent != []string{base, first}[i] {
+				t.Fatalf("binding identity: %+v", node)
+			}
+		}
+	} else {
+		view := stackExec(t, binary, dir, env, stackArgs("view", host)...)
+		if view.OK || view.Error == nil || view.Error.Code != "not_found" {
+			t.Fatalf("failed binding published metadata: %+v", view)
+		}
+		t.Logf("after refused link: metadata not_found")
+	}
+	if stackGit(t, dir, "show-ref", "--heads") != before {
+		t.Fatal("binding changed local branch tips")
+	}
+	for _, req := range server.Requests() {
+		t.Logf("provider request: %s %s", req.Method, req.URL)
+		if req.Method != "GET" || len(req.Body) != 0 {
+			t.Fatal("provider mutation attempted")
+		}
 	}
 }
