@@ -1,0 +1,14 @@
+=== RUN   TestStackExecutableAliases
+=== RUN   TestStackExecutableAliases/gl-axi
+    stack_e2e_test.go:95: {action:down want:one args:[]} output {OK:false Data:{Stack:{Name: Base: BaseHead: Current: Action: MRObservation: Total:0 Branches:[]}} Meta:{Backend:local Host:gitlab.example Repo:team/repo Complete:false Truncated:false Count:0 Limit:0 Reason: UpstreamVersion:} Error:custom filters, sparse or partial checkout configuration is not supported}
+=== RUN   TestStackExecutableAliases/glab-axi
+    stack_e2e_test.go:95: {action:down want:one args:[]} output {OK:false Data:{Stack:{Name: Base: BaseHead: Current: Action: MRObservation: Total:0 Branches:[]}} Meta:{Backend:local Host:gitlab.example Repo:team/repo Complete:false Truncated:false Count:0 Limit:0 Reason: UpstreamVersion:} Error:custom filters, sparse or partial checkout configuration is not supported}
+--- FAIL: TestStackExecutableAliases (64.28s)
+    --- FAIL: TestStackExecutableAliases/gl-axi (53.73s)
+    --- FAIL: TestStackExecutableAliases/glab-axi (10.56s)
+=== RUN   TestStackExecutableUnicodeBranchIdentity
+    stack_identity_e2e_test.go:130: expected current "topic": {OK:false Data:{Stack:{Name: Base: BaseHead: Current: Action: MRObservation: Total:0 Branches:[]}} Meta:{Backend:local Host:gitlab.example Repo:team/repo Complete:false Truncated:false Count:0 Limit:0 Reason: UpstreamVersion:} Error:custom filters, sparse or partial checkout configuration is not supported}
+--- FAIL: TestStackExecutableUnicodeBranchIdentity (12.70s)
+FAIL
+FAIL	gl-axi/internal/product	77.502s
+FAIL

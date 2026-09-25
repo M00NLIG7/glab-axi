@@ -1,0 +1,27 @@
+=== RUN   TestStackExecutableUnicodeBranchIdentity
+    stack_identity_e2e_test.go:105: expected current "topic\u00a0": {OK:false Data:{Stack:{Name: Base: BaseHead: Current: Action: MRObservation: Total:0 Branches:[]}} Meta:{Backend:local Host:gitlab.example Repo:team/repo Complete:false Truncated:false Count:0 Limit:30 Reason: UpstreamVersion:} Error:stack Git operation cancelled or timed out; inspect local state before retrying}
+--- FAIL: TestStackExecutableUnicodeBranchIdentity (21.53s)
+=== RUN   TestStackExecutableExactRefRace
+=== RUN   TestStackExecutableExactRefRace/ordinary-stable
+    stack_ref_race_e2e_test.go:70: mode=ordinary-stable CLI_success=false metadata_published=false
+    stack_ref_race_e2e_test.go:72: exact ordinary-ref contract violated: {OK:false Data:{Stack:{Name: Base: BaseHead: Current: Action: MRObservation: Total:0 Branches:[]}} Meta:{Backend:local Host:gitlab.example Repo:team/repo Complete:false Truncated:false Count:0 Limit:0 Reason: UpstreamVersion:} Error:stack Git operation cancelled or timed out; inspect local state before retrying}
+=== RUN   TestStackExecutableExactRefRace/ordinary-different-oid
+    stack_ref_race_e2e_test.go:70: mode=ordinary-different-oid CLI_success=false metadata_published=false
+=== RUN   TestStackExecutableExactRefRace/symbolic-same-oid
+    stack_ref_race_e2e_test.go:70: mode=symbolic-same-oid CLI_success=false metadata_published=false
+=== RUN   TestStackExecutableExactRefRace/symbolic-different-oid
+    stack_ref_race_e2e_test.go:70: mode=symbolic-different-oid CLI_success=false metadata_published=false
+=== RUN   TestStackExecutableExactRefRace/symbolic-before-preflight
+    stack_ref_race_e2e_test.go:70: mode=symbolic-before-preflight CLI_success=false metadata_published=false
+=== RUN   TestStackExecutableExactRefRace/symbolic-after-prepare
+    stack_ref_race_e2e_test.go:70: mode=symbolic-after-prepare CLI_success=true metadata_published=true
+--- FAIL: TestStackExecutableExactRefRace (54.86s)
+    --- FAIL: TestStackExecutableExactRefRace/ordinary-stable (7.38s)
+    --- PASS: TestStackExecutableExactRefRace/ordinary-different-oid (6.66s)
+    --- PASS: TestStackExecutableExactRefRace/symbolic-same-oid (5.52s)
+    --- PASS: TestStackExecutableExactRefRace/symbolic-different-oid (5.85s)
+    --- PASS: TestStackExecutableExactRefRace/symbolic-before-preflight (6.75s)
+    --- PASS: TestStackExecutableExactRefRace/symbolic-after-prepare (11.93s)
+FAIL
+FAIL	gl-axi/internal/product	76.750s
+FAIL

@@ -1,0 +1,11 @@
+=== RUN   TestStackExecutableAliases
+=== RUN   TestStackExecutableAliases/gl-axi
+=== RUN   TestStackExecutableAliases/glab-axi
+--- PASS: TestStackExecutableAliases (125.41s)
+    --- PASS: TestStackExecutableAliases/gl-axi (64.77s)
+    --- PASS: TestStackExecutableAliases/glab-axi (60.64s)
+=== RUN   TestStackExecutableExactRefIdentity
+=== RUN   TestStackExecutableExactRefIdentity/loose/refs/heads/main
+=== RUN   TestStackExecutableExactRefIdentity/loose/refs/heads/one
+=== RUN   TestStackExecutableExactRefIdentity/loose/refs/heads/two
+=== RUN   TestStackExecutableExactRefIdentity/loose/refs/glab-axi/stacks/demo

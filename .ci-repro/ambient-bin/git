@@ -1,0 +1,3 @@
+#!/bin/bash
+export GIT_CONFIG_SYSTEM=/Users/cmagana/.no-mistakes/worktrees/8f09a8fbf076/01M3B1YDJ765BZ36GT8ZWVG71R/.ci-repro/system.gitconfig
+exec /Applications/Xcode.app/Contents/Developer/usr/bin/git "$@"
