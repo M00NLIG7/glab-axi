@@ -53,8 +53,8 @@ func executeMREnsure(ctx context.Context, client mrOperationClient, target Targe
 		return ensureExisting(ctx, client, target, project.ID, matches[0], source, targetBranch, title, description, meta, selection)
 	}
 
-	// Recheck immediately before POST. A competing creator becomes an update or
-	// replay rather than a duplicate write.
+	// Recheck immediately before POST. A competing creator goes through the
+	// existing-match checks, including creation-only selection, instead of POST.
 	matches, version, err = loadEnsureMatches(ctx, client, target, project.ID, source, targetBranch)
 	if version != "" {
 		meta.UpstreamVersion = version

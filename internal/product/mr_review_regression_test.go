@@ -50,6 +50,7 @@ func runNativeMRBinary(t *testing.T, binary string, args []string, f *mrNativeFi
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("native invocation started official glab")
 	}
+	t.Logf("CLI %s %q exit=%d stdout=%s stderr=%s", filepath.Base(binary), args, exit, stdout.String(), stderr.String())
 	return stdout.Bytes(), exit
 }
 
@@ -194,6 +195,7 @@ func TestMRReviewBoundariesExecutableTLS(t *testing.T) {
 							}
 							f.mu.Lock()
 							defer f.mu.Unlock()
+							t.Logf("Provider observations: mutations=%d state=%s description=%q environment_active=%v pages_active=%v", f.writes, f.state, description, environmentActive, pagesActive)
 							if f.writes != 0 || f.state != state || description != original || !environmentActive || !pagesActive {
 								t.Errorf("collateral mutation: writes=%d state=%s description=%q environment=%v pages=%v", f.writes, f.state, description, environmentActive, pagesActive)
 							}
@@ -298,6 +300,7 @@ func TestMRReviewBoundariesExecutableTLS(t *testing.T) {
 							if writes != 1 {
 								t.Errorf("mutations=%d want=1 total", writes)
 							}
+							t.Logf("Provider observations: invocation=%d cumulative_mutations=%d", attempt+1, writes)
 						}
 					})
 				}

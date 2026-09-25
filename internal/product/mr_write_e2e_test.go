@@ -250,6 +250,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 					if f.writes != tc.writes {
 						t.Fatalf("writes=%d want=%d", f.writes, tc.writes)
 					}
+					t.Logf("CLI %s %q exit=%d mutations=%d stdout=%s stderr=%s", program, args, exit, f.writes, stdout.String(), stderr.String())
 					if len(other.Requests()) != 0 {
 						t.Fatal("native MR command followed a cross-origin redirect")
 					}
@@ -389,6 +390,7 @@ func TestMRNativeEnsureDescriptionExecutableTLS(t *testing.T) {
 						if writes != 1 {
 							t.Errorf("invocation=%d mutations=%d want=1 total", attempt+1, writes)
 						}
+						t.Logf("CLI %s %q invocation=%d exit=%d cumulative_mutations=%d stdout=%s stderr=%s", program, args, attempt+1, exit, writes, stdout.String(), stderr.String())
 					}
 					for _, request := range f.server.Requests() {
 						if request.Method == http.MethodPost {

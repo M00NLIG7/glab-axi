@@ -261,14 +261,16 @@ lifetime. Fixed reads need no pagination. The shared native client owns both the
 
 ## MR ensure: bounded create/update write
 
-Product `mr ensure` / `mr create-or-update` uses official authentication but
-preserves native ensure semantics:
+Product `mr ensure` / `mr create-or-update` defaults to official authentication.
+Explicit `--auth-source native` selects `mr_native.go` for the complete operation;
+both transports share the reconciliation algorithm in `commands_ensure.go`:
 
 1. fetch and validate exact project identity;
 2. perform bounded all-page lookup by open source/target branch;
 3. fail on more than one match;
-4. replay identical content without a write;
-5. update only title/description for one differing match;
+4. apply the [creation-only selection contract](../contracts/mr-writes/README.md#implemented-contracts)
+   before replaying identical content without a write;
+5. update only title/description for one differing match when that contract permits;
 6. recheck immediately before create;
 7. place the fixed JSON body in a private mode-0600 temporary file;
 8. perform exactly one POST or PUT through the fixed adapter; and
@@ -288,33 +290,17 @@ otherwise unverifiable results remain ambiguous.
 
 ## Ordinary MR notes, lifecycle, and creation metadata
 
-`mr_native.go` opens the landed shared native client exactly once after feature
-input validation, and maps a closed MR operation set to its fixed routes. It
-reuses shipped ensure reconciliation without an official child or profile
-fallback, preserving full-operation native identity and configured API/web bases.
-`commands_mr_write.go` reuses discussion identity and note normalization for
-explicit same-project MR comment/note and close/reopen commands, requiring
-`--auth-source native`. It requires
-caller URL, source/target branches, head and state, and checks a stable preflight
-snapshot including base and updated-at before one mutation. The final read must
-retain numeric/project identity, exact URL, branches and base/head. Notes require
-an attributable successful POST response and exact note-ID readback, never
-latest-note/body matching. Close/reopen return read-only unchanged receipts only
-when already in the target state; actual transitions return unsupported with zero
-mutation attempts. The native adapter has no lifecycle PUT operation, preventing
-collateral stored-description extraction and environment/Pages deployment effects.
-Receipts explicitly deny provider revision enforcement; these APIs have no CAS.
-Phase budgets are 20/15/10 seconds inside the 45-second write deadline.
+`mr_native.go` opens the shared native client exactly once after feature input
+validation and maps a closed MR operation set to fixed routes.
+`commands_mr_write.go` reuses discussion identity and note normalization;
+`mr_creation_metadata.go` owns creation selection and native content normalization.
+`mr_write_schema.go` owns the two write schemas emitted by `cmd/gen-product`;
+native-v1 remains unchanged.
 
-`mr_creation_metadata.go` extends ensure with creation-only numeric assignee IDs,
-reviewer IDs, milestone ID and draft title prefix, requiring explicit native
-authentication. Existing default title/body ensure remains delegated. Existing matches must already
-have the selected metadata and exact content; no stale collection replacement is
-attempted. The ordinary endpoint's lack of expected revision and ready's title
-rewrite leave rich existing edits and ready pending. Labels may implicitly create
-resources by name and are also pending. See `contracts/mr-writes/` for pinned
-provider and reference evidence. `mr_write_schema.go` owns the two write schemas
-emitted by `cmd/gen-product`; native-v1 remains unchanged.
+The [ordinary MR write contract](../contracts/mr-writes/README.md) owns identity
+checks, phase budgets, note attribution, creation-only matching, and the temporary
+close/reopen transition refusal, including its collateral-effect rationale and
+residual parity gaps.
 
 ## Guarded MR merge: immediate squash write
 
