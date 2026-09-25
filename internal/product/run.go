@@ -185,6 +185,9 @@ func writeFailure(stdout, stderr io.Writer, programName string, format output.Fo
 
 func execute(parent context.Context, parsed Parsed, deps Dependencies) (out commandOutput, resultErr error) {
 	path := strings.Join(parsed.Definition.Path, " ")
+	if isStack(parsed) {
+		return executeStack(parent, parsed, deps)
+	}
 	if path == "setup hooks" {
 		if deps.SetupHooks == nil {
 			return commandOutput{meta: localMeta()}, uxv1.NewError(uxv1.CodeInternal, "setup integration is unavailable")

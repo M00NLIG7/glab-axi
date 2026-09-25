@@ -12,6 +12,7 @@ cmd/gl-axi (canonical) / cmd/glab-axi (compatibility alias)
      |
      `-> product registry and strict parser
           |-> local help/setup/signed update
+          |-> stack handler -> internal/localstack (optional official-glab MR reads)
           |-> declared --auth-source native product operations
           |    -> native config/resolver + productnative bounded HTTP
           |    -> feature-owned download / issue-write / CI-variable / deletion handlers
@@ -57,6 +58,9 @@ are in the [generated command reference](command-reference.md). Where host
 inference is permitted, precedence is explicit `--hostname`, `GITLAB_HOST`, an
 exact `gitlab.com` origin, then `gitlab.com`. Git context never exposes a native
 credential or changes the native API authority mapping.
+
+The [local-stack contract](../contracts/stacks/v1.md) owns repository-local
+metadata, navigation authority, exact-ref identity and concurrency guarantees.
 
 ## Explicit product-native boundary
 

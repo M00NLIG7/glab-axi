@@ -49,6 +49,7 @@ func TestGeneratedPublicAssetsMatchCommandRegistry(t *testing.T) {
 		{filepath.Join("..", "..", "skills", "glab-axi", "SKILL.md"), LegacySkillMarkdown()},
 		{filepath.Join("..", "..", "docs", "command-reference.md"), CommandReferenceMarkdown()},
 		{filepath.Join("..", "..", "schema", "ux-v1", "issue-write.schema.json"), IssueWriteSchema()},
+		{filepath.Join("..", "..", "schema", "ux-v1", "stack.schema.json"), StackSchema()},
 	}
 	for name, content := range PlanningSchemas() {
 		contracts = append(contracts, struct {

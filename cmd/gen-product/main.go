@@ -18,6 +18,7 @@ func main() {
 		fail("unexpected positional arguments")
 	}
 	files := map[string]string{
+		filepath.Join("schema", "ux-v1", "stack.schema.json"):       product.StackSchema(),
 		filepath.Join("schema", "ux-v1", "issue-write.schema.json"): product.IssueWriteSchema(),
 		filepath.Join("skills", "gl-axi", "SKILL.md"):               product.SkillMarkdown(),
 		filepath.Join("skills", "glab-axi", "SKILL.md"):             product.LegacySkillMarkdown(),

@@ -63,6 +63,19 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi release delete <TAG> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-release URL --acknowledge-catalog-unpublication URL --expected-commit SHA --expected-created-at TIMESTAMP [--format toon|json]` - Guardedly delete one exact release.
 - `glab-axi snippet delete <ID> --auth-source native --hostname HOST --expected-url URL --confirm-delete-snippet URL --expected-author-id ID --expected-updated-at TIMESTAMP [--format toon|json]` - Guardedly delete one exact snippet.
 - `glab-axi snippet delete-project <ID> --auth-source native --hostname HOST -R PROJECT --expected-project-id ID --expected-url URL --confirm-delete-snippet URL --expected-author-id ID --expected-updated-at TIMESTAMP [--format toon|json]` - Guardedly delete one exact snippet.
+- `glab-axi stack view [--mrs] [--limit N] --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - View a bounded local stack and optionally observe linked GitLab MRs.
+- `glab-axi stack init <branches...> --base BRANCH --allow-local-metadata --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Register an existing local branch chain without switching branches.
+- `glab-axi stack link <branches...> --base BRANCH --allow-local-metadata --mr BRANCH=IID ... --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Bind an existing local chain to exact existing same-project GitLab MRs.
+- `glab-axi stack checkout BRANCH --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+- `glab-axi stack up [N] --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+- `glab-axi stack down [N] --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+- `glab-axi stack top --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+- `glab-axi stack bottom --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+- `glab-axi stack trunk --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]` - Safely switch to an existing branch in the selected local stack.
+
+## Local stacks
+
+`stack` operates only on the current repository and requires explicit host/project matching its origin and an explicit stack name. `init` adopts existing branches without switching; `link` binds exact existing same-project MRs without provider writes. Navigation requires per-call checkout permission and expected current/destination heads. No stash, force, branch creation, fetch, push, submit, rebase or stack merge. See `docs/stacks.md`.
 
 ## Safety
 

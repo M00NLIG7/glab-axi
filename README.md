@@ -45,6 +45,7 @@ gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
+gl-axi stack view|init|link|checkout|up|down|top|bottom|trunk  # explicit local chain, no remote publication
 gl-axi pipeline list|view|watch
 gl-axi job list|view|trace
 gl-axi job artifacts|download ID ... --auth-source native  # exact job/pipeline/ref/commit
@@ -60,6 +61,12 @@ gl-axi update [--check]
 
 For additional commands, see [GitLab-native planning](#gitlab-native-planning)
 and [guarded native resource deletion](#guarded-native-resource-deletion).
+
+[Local GitLab stacks](docs/stacks.md) register existing branch chains, optionally
+bind exact existing same-project MRs, and navigate with explicit checkout
+permission and expected heads. Registration does not switch branches; navigation
+never stashes, forces or discards work. No stack push, submit, sync, rebase or
+merge is implemented by this foundation.
 
 Commands that permit inferred targets use current Git context or command-first
 `-R/--repo namespace/project` and `--hostname host`; space and equals forms are

@@ -1,5 +1,6 @@
 /dist/
 /.scratch/
+/.ci-repro/
 /coverage.out
 *.test
 .DS_Store

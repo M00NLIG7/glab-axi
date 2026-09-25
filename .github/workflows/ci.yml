@@ -49,6 +49,22 @@ jobs:
       - name: Vet and static analysis
         run: go vet ./...
 
+      - name: Isolate test Git from runner configuration
+        shell: bash
+        run: |
+          # Stack operations deliberately strip GIT_* overrides. Apply test
+          # isolation at the executable boundary, not in the product guard.
+          tools="${RUNNER_TEMP}/isolated-git"
+          mkdir -p "${tools}"
+          {
+            printf '%s\n' '#!/bin/bash' \
+              'export GIT_CONFIG_NOSYSTEM=1' \
+              'export GIT_CONFIG_GLOBAL=/dev/null'
+            printf 'exec %q "$@"\n' "$(command -v git)"
+          } > "${tools}/git"
+          chmod +x "${tools}/git"
+          printf '%s\n' "${tools}" >> "${GITHUB_PATH}"
+
       - name: Run test suite
         run: go test ./...
 
@@ -194,6 +210,11 @@ jobs:
             f1c52907558b665f2032b615787d353cd06e54240b501a81f9489bfc8f6a8ebf \
             upstream-glab/glab.tar.gz | sha256sum --check --strict
           tar -xzf upstream-glab/glab.tar.gz -C upstream-glab
+
+      - name: Exercise stack executable against synthetic GitLab TLS
+        env:
+          GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
+        run: go test ./internal/product -run '^TestStackOfficialGlabTLSExecutable$' -count=1
 
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
