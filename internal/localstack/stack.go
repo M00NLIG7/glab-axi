@@ -1,5 +1,5 @@
 // Package localstack owns the repository-local linear stack contract. It never
-// contacts remotes, changes branch tips, creates commits, or publishes refs.
+// contacts remotes, changes branch tips, creates commits, or pushes refs.
 package localstack
 
 import (
