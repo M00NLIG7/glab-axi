@@ -774,6 +774,114 @@ Requires explicit --auth-source native and operation-specific URL confirmation. 
 
 Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
+## `stack view`
+
+```text
+gl-axi stack view [--mrs] [--limit N] --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+View a bounded local stack and optionally observe linked GitLab MRs.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack init`
+
+```text
+gl-axi stack init <branches...> --base BRANCH --allow-local-metadata --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Register an existing local branch chain without switching branches.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack link`
+
+```text
+gl-axi stack link <branches...> --base BRANCH --allow-local-metadata --mr BRANCH=IID ... --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Bind an existing local chain to exact existing same-project GitLab MRs.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `official-glab`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack checkout`
+
+```text
+gl-axi stack checkout BRANCH --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack up`
+
+```text
+gl-axi stack up [N] --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack down`
+
+```text
+gl-axi stack down [N] --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack top`
+
+```text
+gl-axi stack top --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack bottom`
+
+```text
+gl-axi stack bottom --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
+## `stack trunk`
+
+```text
+gl-axi stack trunk --allow-checkout --expected-current BRANCH --expected-head SHA --expected-target SHA --stack NAME --hostname HOST -R PROJECT [--format toon|json]
+```
+
+Safely switch to an existing branch in the selected local stack.
+
+Operates only on the current local repository; explicit host/project must match its unique origin. Linear stack, at most 32 existing local branches. No fetch, push, branch creation, commit, history rewriting or merge. See docs/stacks.md and contracts/stacks/v1.md.
+
+Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
+
 ## Current undeclared operations
 
 Generic API, issue mutation outside the declared contracts, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --auth-source native` supports title, description, and label deltas with drift detection and reconciliation, not atomic revision enforcement. `--dry-run` validates without mutation; omission of the auth selector retains delegated preview/no-op behavior and refuses live changes. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

@@ -195,6 +195,11 @@ jobs:
             upstream-glab/glab.tar.gz | sha256sum --check --strict
           tar -xzf upstream-glab/glab.tar.gz -C upstream-glab
 
+      - name: Exercise stack executable against synthetic GitLab TLS
+        env:
+          GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
+        run: go test ./internal/product -run '^TestStackOfficialGlabTLSExecutable$' -count=1
+
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab

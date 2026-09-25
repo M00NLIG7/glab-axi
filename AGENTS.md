@@ -7,7 +7,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Run `go test ./...`, `go test -race ./...`, and `go vet ./...`; build locally with `make build`. Provider tests must use TLS fake servers and synthetic credentials only - never live GitLab or real credentials. Use `go run ./cmd/gen-product` for the [generated public assets](cmd/gen-product/main.go).
 - `contracts/no-mistakes/v1.45.4.json` is the authoritative legacy argv boundary; direct run-private automation remains standalone `glab-axi/v1`. A no-mistakes upgrade requires a new versioned fixture before parser changes.
 - Keep credentials out of argv, config, output, logs, fixtures, and source. Token-import tests construct runtime sentinels and inject an in-memory keyring. Proposed writable content and CI values enter through validated private inputs; CI-variable responses never expose values, descriptions, or value hashes.
-- Host/API/web binding, returned URL validation, pagination limits, replay reconciliation, and stale-pipeline normalization are security properties, not convenience behavior.
+- Host/API/web binding, returned URL validation, pagination limits, replay reconciliation, and stale-pipeline normalization are security properties, not convenience behavior. Local-stack ref/checkout contracts live in `contracts/stacks/v1.md` and `internal/localstack`; OID-only verification is not ref-kind proof, so preserve the prepared Git transaction and exact-ref race regressions.
 
 ## Maintaining this file
 
