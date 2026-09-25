@@ -35,7 +35,7 @@ func stackGit(t *testing.T, dir string, args ...string) string {
 	if e != nil {
 		t.Fatalf("git %v: %v %s", args, e, b)
 	}
-	return strings.TrimSpace(string(b))
+	return strings.TrimSuffix(string(b), "\n")
 }
 func stackFixture(t *testing.T, host string) string {
 	t.Helper()
@@ -108,6 +108,12 @@ func TestStackGrammarContract(t *testing.T) {
 	valid := stackArgs("init", "gitlab.example", "one", "two", "--base", "main", "--allow-local-metadata")
 	if _, e := Parse(valid); e != nil {
 		t.Fatal(e)
+	}
+	for _, binding := range []string{"feature/a=b", "feature/a=b=", "feature/a=b=0", "feature/a=b=01", "feature/a=b=+1", "feature/a=b=-1", "feature/a=b=9223372036854775808", "feature/a=b=11=12", "feature/a=b=11\u00a0", "feature/a=b=one"} {
+		args := stackArgs("link", "gitlab.example", "feature/a=b", "two", "--base", "main", "--allow-local-metadata", "--mr", binding, "--mr", "two=12")
+		if _, e := Parse(args); e == nil {
+			t.Fatalf("invalid binding accepted: %q", binding)
+		}
 	}
 	args := []string{"stack", "view", "--stack", "demo"}
 	if _, e := Parse(args); e == nil {
@@ -188,10 +194,22 @@ func (d *stackTLSDelegate) Do(ctx context.Context, r glab.Request) (glab.Respons
 	return glab.Response{Body: body, UpstreamVersion: glab.SupportedVersion}, e
 }
 func TestStackBindingTLSIdentityAndReplay(t *testing.T) {
-	for _, mode := range []string{"valid", "wrong-project", "wrong-iid", "wrong-url", "fork", "wrong-source", "wrong-base", "wrong-head", "closed", "merged", "partial-failure", "drift", "local-race", "cancel"} {
+	for _, mode := range []string{"valid", "equals-branches", "unicode-branches", "wrong-project", "wrong-iid", "wrong-url", "fork", "wrong-source", "wrong-base", "wrong-head", "closed", "merged", "partial-failure", "drift", "local-race", "cancel"} {
 		t.Run(mode, func(t *testing.T) {
 			dir := stackFixture(t, "gitlab.example")
-			heads := map[string]string{"one": stackGit(t, dir, "rev-parse", "one"), "two": stackGit(t, dir, "rev-parse", "two")}
+			base, first, last := "main", "one", "two"
+			success := mode == "valid" || mode == "equals-branches" || mode == "unicode-branches"
+			if mode == "equals-branches" {
+				base, first, last = "base=a=b", "feature/a=b", "feature/c=d=e="
+			} else if mode == "unicode-branches" {
+				base, first, last = "main\u2003", "topic", "topic\u00a0"
+			}
+			if base != "main" {
+				stackGit(t, dir, "branch", "-m", "main", base)
+				stackGit(t, dir, "branch", "-m", "one", first)
+				stackGit(t, dir, "branch", "-m", "two", last)
+			}
+			heads := map[string]string{first: stackGit(t, dir, "rev-parse", first), last: stackGit(t, dir, "rev-parse", last)}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			var mu sync.Mutex
@@ -216,10 +234,10 @@ func TestStackBindingTLSIdentityAndReplay(t *testing.T) {
 					return
 				}
 				iid := int64(11)
-				branch, parent := "one", "main"
+				branch, parent := first, base
 				if strings.HasSuffix(r.URL.Path, "/12") {
 					iid = 12
-					branch, parent = "two", "one"
+					branch, parent = last, first
 				}
 				m := upstreamMR{ID: 100 + iid, IID: iid, State: "opened", WebURL: canonicalMRURL("gitlab.example", "team/repo", iid), SourceProjectID: 7, TargetProjectID: 7, SourceBranch: branch, TargetBranch: parent, SHA: heads[branch]}
 				switch mode {
@@ -248,7 +266,7 @@ func TestStackBindingTLSIdentityAndReplay(t *testing.T) {
 					}
 				case "local-race":
 					if count == 6 {
-						stackGit(t, dir, "update-ref", "refs/heads/one", heads["two"])
+						stackGit(t, dir, "update-ref", "refs/heads/"+first, heads[last])
 					}
 				case "cancel":
 					cancel()
@@ -257,13 +275,13 @@ func TestStackBindingTLSIdentityAndReplay(t *testing.T) {
 			}))
 			defer server.Close()
 			d := &stackTLSDelegate{server: server}
-			args := stackArgs("link", "gitlab.example", "one", "two", "--base", "main", "--mr", "one=11", "--mr", "two=12", "--allow-local-metadata")
+			args := stackArgs("link", "gitlab.example", first, last, "--base", base, "--mr", first+"=11", "--mr", last+"=12", "--allow-local-metadata")
 			before := stackGit(t, dir, "show-ref", "--heads")
 			out := runStackTest(t, ctx, dir, d, args...)
-			if out.OK != (mode == "valid") {
+			if out.OK != success {
 				t.Fatalf("mode %s output %+v", mode, out)
 			}
-			if mode == "valid" {
+			if success {
 				if out.Data.Stack.MRObservation != "observed" || out.Meta.UpstreamVersion != glab.SupportedVersion {
 					t.Fatalf("missing evidence %+v", out)
 				}
@@ -272,8 +290,14 @@ func TestStackBindingTLSIdentityAndReplay(t *testing.T) {
 					t.Fatalf("replay %+v", again)
 				}
 				view := runStackTest(t, ctx, dir, d, stackArgs("view", "gitlab.example", "--mrs")...)
-				if !view.OK || !view.Meta.Complete {
+				if !view.OK || !view.Meta.Complete || view.Data.Stack.Base != base || view.Data.Stack.Current != last || len(view.Data.Stack.Branches) != 2 {
 					t.Fatalf("view %+v", view)
+				}
+				for i, name := range []string{first, last} {
+					node := view.Data.Stack.Branches[i]
+					if node.Name != name || node.MR != int64(11+i) || node.Current != (name == last) || node.Parent != []string{base, first}[i] {
+						t.Fatalf("persisted binding: %+v", node)
+					}
 				}
 			} else {
 				r, e := localstack.Open(context.Background(), dir, "gitlab.example", "team/repo", "demo", false)

@@ -92,9 +92,13 @@ func stackRecord(p Parsed) (localstack.Record, error) {
 	r := localstack.Record{Version: localstack.Version, Host: p.Values["--hostname"], Project: p.Values["--repo"], Base: p.Values["--base"], Branches: []localstack.Branch{}}
 	bindings := map[string]int64{}
 	for _, value := range p.MultiValues["--mr"] {
-		branch, raw, ok := strings.Cut(value, "=")
+		separator := strings.LastIndexByte(value, '=')
+		if separator < 0 {
+			return r, uxv1.NewError(uxv1.CodeValidation, "invalid or duplicate BRANCH=IID binding")
+		}
+		branch, raw := value[:separator], value[separator+1:]
 		iid, e := strconv.ParseInt(raw, 10, 64)
-		if !ok || !localstack.ValidBranch(branch) || e != nil || iid < 1 || strconv.FormatInt(iid, 10) != raw || bindings[branch] != 0 {
+		if !localstack.ValidBranch(branch) || e != nil || iid < 1 || strconv.FormatInt(iid, 10) != raw || bindings[branch] != 0 {
 			return r, uxv1.NewError(uxv1.CodeValidation, "invalid or duplicate BRANCH=IID binding")
 		}
 		bindings[branch] = iid

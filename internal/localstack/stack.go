@@ -198,14 +198,18 @@ func (r *Repo) readRef(ref string, commit bool) (string, error) {
 	if !exit(e, 1) {
 		return "", e
 	}
-	value, e := r.git(nil, "rev-parse", "--verify", "--quiet", ref)
+	_, e = r.git(nil, "show-ref", "--verify", "--quiet", "--", ref)
 	if exit(e, 1) {
 		return "", nil
 	}
 	if e != nil {
 		return "", e
 	}
-	value = strings.TrimSpace(value)
+	value, e := r.git(nil, "show-ref", "--verify", "--hash", "--", ref)
+	if e != nil {
+		return "", e
+	}
+	value = strings.TrimSuffix(value, "\n")
 	if !OID(value) {
 		return "", failure("invalid local ref object")
 	}
@@ -225,7 +229,7 @@ func (r *Repo) Current() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	value = strings.TrimSpace(value)
+	value = strings.TrimSuffix(value, "\n")
 	if !strings.HasPrefix(value, "refs/heads/") || !ValidBranch(strings.TrimPrefix(value, "refs/heads/")) {
 		return "", failure("invalid current local branch")
 	}
