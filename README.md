@@ -221,9 +221,11 @@ Ordinary `mr comment` (`mr note`), `mr close`, and `mr reopen` require explicit
 `--auth-source native`, host/project and exact configured-web URL, source/target,
 head and observed-state evidence. The complete operation uses one existing native
 environment/keyring identity, which may differ from the official profile. There
-is no fallback, automatic redirect or retry. They attempt one mutation and validate bounded readback. State receipts report
-an **observed** postcondition, not exclusive authorship or an atomic revision
-guard. Notes require a private `--body-file` without quick actions or emoji-only
+is no fallback, automatic redirect or retry. Close/reopen transitions are
+temporarily refused with zero mutation attempts to prevent unauthorized collateral
+description and deployment changes. Already-matching states return read-only
+`unchanged` receipts; this is not full MR parity. Notes attempt one mutation and
+validate bounded readback without claiming an atomic revision guard. Notes require a private `--body-file` without quick actions or emoji-only
 content; a lost trustworthy note ID stays ambiguous and is never guessed from
 latest-note order. `mr ensure` adds creation-only numeric `--assignee-id`,
 `--reviewer-id`, `--milestone-id`, and `--draft`, also requiring explicit native
@@ -232,7 +234,7 @@ configuration and self-managed mapping are not yet proven for this surface.
 Existing metadata and content
 must already match when these selectors are used. See
 [`contracts/mr-writes`](contracts/mr-writes/) for tested semantics and residual
-ready/rich-edit/label-selection concurrency gaps.
+lifecycle/ready/rich-edit/label-selection gaps.
 
 The currently unavailable surface includes generic API, existing-issue content/label
 mutation, unguarded or alternate merge, approve, MR reply/resolve, existing rich

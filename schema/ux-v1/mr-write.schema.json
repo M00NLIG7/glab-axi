@@ -55,7 +55,8 @@
             "observed",
             "unchanged",
             "unknown",
-            "rejected"
+            "rejected",
+            "refused"
           ]
         },
         "provider_revision_enforced": {

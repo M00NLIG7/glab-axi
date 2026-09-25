@@ -205,15 +205,15 @@ func (f *mrNativeFixture) checkNoCredentialOutput(t *testing.T) {
 func TestMRNativeFullSequenceIdentityAndConfiguredAuthority(t *testing.T) {
 	for _, tc := range []struct {
 		action, state, outcome string
-		writes                 int
+		writes, exit           int
 	}{
-		{"comment", "opened", "created", 1}, {"note", "closed", "created", 1},
-		{"close", "opened", "observed", 1}, {"reopen", "closed", "observed", 1},
-		{"close", "closed", "unchanged", 0}, {"reopen", "opened", "unchanged", 0},
+		{"comment", "opened", "created", 1, 0}, {"note", "closed", "created", 1, 0},
+		{"close", "opened", "refused", 0, 2}, {"reopen", "closed", "refused", 0, 2},
+		{"close", "closed", "unchanged", 0, 0}, {"reopen", "opened", "unchanged", 0, 0},
 	} {
 		t.Run(tc.action+"-"+tc.state, func(t *testing.T) {
 			f := newMRNativeFixture(t, tc.state)
-			if code := Run(context.Background(), f.args(tc.action), f.deps); code != 0 {
+			if code := Run(context.Background(), f.args(tc.action), f.deps); code != tc.exit {
 				t.Fatalf("exit=%d output=%s", code, f.stdout.String())
 			}
 			if !strings.Contains(f.stdout.String(), `"backend":"native"`) || !strings.Contains(f.stdout.String(), `"outcome":"`+tc.outcome+`"`) {
@@ -291,8 +291,8 @@ func TestMRNativeRedirectsNeverTransmitASecondTarget(t *testing.T) {
 		{"project read", "close", "project", 302, true, 0},
 		{"note write cross authority", "comment", "write", 302, true, 1},
 		{"note write cross path", "comment", "write", 307, false, 1},
-		{"state write cross authority", "close", "write", 303, true, 1},
-		{"state write cross path", "close", "write", 308, false, 1},
+		{"note write 303 cross authority", "note", "write", 303, true, 1},
+		{"note write 308 cross path", "note", "write", 308, false, 1},
 		{"note readback", "comment", "note", 302, true, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -337,15 +337,12 @@ func TestMRNativeRedirectsNeverTransmitASecondTarget(t *testing.T) {
 }
 
 func TestMRNativeLostMutationResponseNeverBlindRetries(t *testing.T) {
-	for _, action := range []string{"comment", "close"} {
+	for _, action := range []string{"comment", "note"} {
 		t.Run(action, func(t *testing.T) {
 			f := newMRNativeFixture(t, "opened")
 			f.mutate = func(w http.ResponseWriter, r *http.Request) bool {
 				if r.Method == http.MethodGet {
 					return false
-				}
-				if action == "close" {
-					f.state = "closed"
 				}
 				connection, _, err := w.(http.Hijacker).Hijack()
 				if err != nil {
@@ -356,11 +353,8 @@ func TestMRNativeLostMutationResponseNeverBlindRetries(t *testing.T) {
 				return true
 			}
 			code := Run(context.Background(), f.args(action), f.deps)
-			if action == "comment" && (code != 6 || !strings.Contains(f.stdout.String(), string(uxv1.CodeAmbiguousCreate))) {
+			if code != 6 || !strings.Contains(f.stdout.String(), string(uxv1.CodeAmbiguousCreate)) {
 				t.Fatalf("lost note ID was guessed: exit=%d output=%s", code, f.stdout.String())
-			}
-			if action == "close" && (code != 0 || !strings.Contains(f.stdout.String(), `"outcome":"observed"`)) {
-				t.Fatalf("exact state readback failed: exit=%d output=%s", code, f.stdout.String())
 			}
 			f.checkNoCredentialOutput(t)
 			f.mu.Lock()

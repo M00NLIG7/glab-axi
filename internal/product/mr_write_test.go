@@ -112,7 +112,9 @@ func mrWriteDelegate(t *testing.T) *fakeDelegate {
 	}
 	return &fakeDelegate{responses: map[glab.Operation][]glab.Response{
 		glab.OpMRDiscussionsTargetProject: {encode(map[string]any{"id": 101, "path_with_namespace": "group/project", "web_url": "https://" + mrWriteTestHost + "/group/project"})},
-		glab.OpMRView:                     {encode(mrWriteRecord("opened")), encode(mrWriteRecord("opened")), encode(mrWriteRecord("closed"))},
+		glab.OpMRView:                     {encode(mrWriteRecord("opened")), encode(mrWriteRecord("opened")), encode(mrWriteRecord("opened"))},
+		mrOpNoteCreate:                    {encode(mrWriteNote("ordinary note"))},
+		mrOpNoteView:                      {encode(mrWriteNote("ordinary note"))},
 	}}
 }
 
@@ -129,7 +131,7 @@ func TestMRWriteBoundsCancellationAndPrivatePayload(t *testing.T) {
 				if mode == "page" && request.Operation == glab.OpMRView {
 					return glab.Response{Body: bytes.Repeat([]byte{' '}, limits.MaxJSONPageBytes+1)}, nil, true
 				}
-				if request.Operation == mrOpStateUpdate {
+				if request.Operation == mrOpNoteCreate {
 					deadline, ok := callCtx.Deadline()
 					if !ok || time.Until(deadline) > limits.MergeMutationOperation {
 						t.Fatal("unbounded mutation")
@@ -147,14 +149,18 @@ func TestMRWriteBoundsCancellationAndPrivatePayload(t *testing.T) {
 				}
 				return glab.Response{}, nil, false
 			}
-			stdout, code := runMRWriteAlgorithm(t, ctx, delegate, append(mrWriteArgs("close", "opened"), "--auth-source", "native"))
-			writes := countOperation(delegate.requests, mrOpStateUpdate)
+			body := filepath.Join(t.TempDir(), "body")
+			if err := os.WriteFile(body, []byte("ordinary note"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			stdout, code := runMRWriteAlgorithm(t, ctx, delegate, append(mrWriteArgs("comment", "opened"), "--auth-source", "native", "--body-file", body))
+			writes := countOperation(delegate.requests, mrOpNoteCreate)
 			switch mode {
 			case "page", "canceled preflight":
 				if code == 0 || writes != 0 {
 					t.Fatalf("exit=%d writes=%d", code, writes)
 				}
-			case "canceled mutation":
+			case "canceled mutation", "deadline mutation":
 				if code != 6 || writes != 1 || !strings.Contains(stdout.String(), `"outcome":"unknown"`) {
 					t.Fatalf("exit=%d writes=%d output=%s", code, writes, stdout.String())
 				}
@@ -162,7 +168,7 @@ func TestMRWriteBoundsCancellationAndPrivatePayload(t *testing.T) {
 				if code != 0 || writes != 1 {
 					t.Fatalf("exit=%d writes=%d output=%s", code, writes, stdout.String())
 				}
-				assertPrivateEnsurePayload(t, delegate, map[string]any{"state_event": "close"})
+				assertPrivateEnsurePayload(t, delegate, map[string]any{"body": "ordinary note"})
 			}
 		})
 	}

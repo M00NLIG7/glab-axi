@@ -299,7 +299,10 @@ caller URL, source/target branches, head and state, and checks a stable prefligh
 snapshot including base and updated-at before one mutation. The final read must
 retain numeric/project identity, exact URL, branches and base/head. Notes require
 an attributable successful POST response and exact note-ID readback, never
-latest-note/body matching. State success reports only an observed postcondition.
+latest-note/body matching. Close/reopen return read-only unchanged receipts only
+when already in the target state; actual transitions return unsupported with zero
+mutation attempts. The native adapter has no lifecycle PUT operation, preventing
+collateral stored-description extraction and environment/Pages deployment effects.
 Receipts explicitly deny provider revision enforcement; these APIs have no CAS.
 Phase budgets are 20/15/10 seconds inside the 45-second write deadline.
 

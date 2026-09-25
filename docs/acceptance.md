@@ -82,10 +82,14 @@ fallback.
 
 ## Ordinary MR write regression fixtures
 
-Run `go test ./internal/product -run 'TestMRWrite|TestMRNative|TestMREnsureCreationMetadata|TestMRCreationMetadata|TestPinnedMRWriteConsumerGrammar'`.
-Both executable names exercise synthetic TLS note and close/reopen flows,
-identity/preflight/post-write drift, malformed or lost responses, no-ops and
-one-write counts. Invalid input and quick actions produce zero dependency work.
+Run `go test ./internal/product -run 'TestMRWrite|TestMRNative|TestMRReviewBoundaries|TestMREnsureCreationMetadata|TestMRCreationMetadata|TestPinnedMRWriteConsumerGrammar'`.
+Both executable names exercise synthetic TLS notes, close/reopen transition
+refusals and read-only no-ops, identity/preflight/post-write drift, malformed or
+lost note responses and one-write counts. Counterfactual lifecycle fixtures model
+stored/concurrent description extraction and environment/Pages deactivation;
+refusals must preserve content, deployments and state with zero writes. Both ensure
+aliases cover final native title stripping, draft/plain creation, updates,
+reconciliation and no-write replay, without changing delegated normalization. Invalid input and quick actions produce zero dependency work.
 Private body and creation selection tests cover bounds, cancellation, stable
 numeric identities and refusal to replace unseen existing metadata. Optional
 `TestPinnedOfficialGlabMRWriteRedirectEvidenceTLS` records the old CLI's unsafe

@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	mrOpStateUpdate glab.Operation = "mr-state-update"
-	mrOpNoteCreate  glab.Operation = "mr-note-create"
-	mrOpNoteView    glab.Operation = "mr-note-view"
+	mrOpNoteCreate glab.Operation = "mr-note-create"
+	mrOpNoteView   glab.Operation = "mr-note-view"
 )
 
 // Only Do is shared with legacy ensure. The native feature adapter maps this
@@ -55,14 +54,14 @@ func (c nativeMROperations) Do(ctx context.Context, request glab.Request) (glab.
 		r.Query = url.Values{"state": {"opened"}, "source_branch": {request.Source}, "target_branch": {request.Target}, "page": {strconv.Itoa(request.Page)}, "per_page": {strconv.Itoa(request.PerPage)}}
 	case glab.OpEnsureCreate:
 		r.Method, r.Path = http.MethodPost, base+"/merge_requests"
-	case glab.OpMRView, glab.OpEnsureUpdate, mrOpStateUpdate, mrOpNoteCreate, mrOpNoteView:
+	case glab.OpMRView, glab.OpEnsureUpdate, mrOpNoteCreate, mrOpNoteView:
 		path, err := mrPath()
 		if err != nil {
 			return glab.Response{}, err
 		}
 		r.Path = path
 		switch request.Operation {
-		case glab.OpEnsureUpdate, mrOpStateUpdate:
+		case glab.OpEnsureUpdate:
 			r.Method = http.MethodPut
 		case mrOpNoteCreate:
 			r.Method, r.Path = http.MethodPost, path+"/notes"

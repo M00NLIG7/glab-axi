@@ -58,6 +58,9 @@ func readMREnsureContent(parsed Parsed) (string, string, error) {
 		return "", "", err
 	}
 	title, err = selection.title(title)
+	if parsed.Values["--auth-source"] == "native" {
+		title = strings.Trim(title, "\x00\t\n\v\f\r ")
+	}
 	return title, description, err
 }
 

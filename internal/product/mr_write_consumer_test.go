@@ -25,6 +25,8 @@ func TestPinnedMRWriteConsumerGrammar(t *testing.T) {
 		AuthSource               string                                      `json:"auth_source"`
 		Commands                 []string                                    `json:"ordinary_commands"`
 		RequiredFlags            []string                                    `json:"required_flags"`
+		StateTransitions         string                                      `json:"state_transitions"`
+		StateNoop                string                                      `json:"state_noop"`
 		NoteInput                string                                      `json:"note_input"`
 		CreationFlags            []string                                    `json:"creation_flags"`
 		ProviderRevisionEnforced bool                                        `json:"provider_revision_enforced"`
@@ -36,6 +38,9 @@ func TestPinnedMRWriteConsumerGrammar(t *testing.T) {
 	}
 	if fixture.Schema != "glab-axi/mr-writes-consumer-contract/v1" || fixture.Reference.Repository != "https://github.com/kunchenguid/gh-axi" || fixture.Reference.Commit != "2bffd9a5b60ded64d6c9851683b27a480173a7ee" || fixture.Reference.Source != "src/commands/pr.ts" || fixture.Envelope != uxv1.Schema || fixture.Backend != "native" || fixture.AuthSource != "native" || fixture.ProviderRevisionEnforced || fixture.MaximumMutationAttempts != 1 || fixture.NoteReconciliation != "attributable-post-id-then-exact-readback-never-latest-note" {
 		t.Fatalf("invalid consumer contract identity: %#v", fixture)
+	}
+	if fixture.StateTransitions != "temporarily-refused-before-mutation" || fixture.StateNoop != "read-only-unchanged" {
+		t.Fatal("unexpected lifecycle authority")
 	}
 	if !reflect.DeepEqual(fixture.Commands, []string{"comment", "note", "close", "reopen"}) || !reflect.DeepEqual(fixture.CreationFlags, []string{"--assignee-id", "--reviewer-id", "--milestone-id", "--draft"}) {
 		t.Fatal("unexpected command/field graph")

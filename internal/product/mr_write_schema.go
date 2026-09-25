@@ -15,7 +15,7 @@ func MRWriteSchemas() map[string]string {
 	delete(creation, "required")
 	write := closed([]string{"action", "outcome", "iid", "web_url", "source_branch", "target_branch", "head_sha", "expected_state", "attempts", "provider_revision_enforced"}, map[string]any{
 		"action":  map[string]any{"enum": []string{"comment", "note", "close", "reopen"}},
-		"outcome": map[string]any{"enum": []string{"created", "observed", "unchanged", "unknown", "rejected"}},
+		"outcome": map[string]any{"enum": []string{"created", "observed", "unchanged", "unknown", "rejected", "refused"}},
 		"iid":     positive, "web_url": text, "source_branch": text, "target_branch": text,
 		"head_sha":                   map[string]any{"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
 		"expected_state":             map[string]any{"enum": []string{"opened", "closed"}},

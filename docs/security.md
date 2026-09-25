@@ -125,10 +125,13 @@ collateral content/quick-action effects.
 The ordinary-write evidence and residual gaps are in `contracts/mr-writes/`.
 Notes reject quick-action-shaped lines and emoji-only content before dependency
 work. An attributable POST note ID plus exact readback is required for success;
-matching the latest note body is never evidence. State receipts report observed
-postconditions after one attempt, explicitly without provider revision
-enforcement. These endpoints cannot atomically enforce a head/revision; stable
-preflight and exact post-read identity detect drift, not prevent the final race.
+matching the latest note body is never evidence. Close/reopen transitions return
+`unsupported` with zero mutation attempts; only already-matching bound states
+return read-only `unchanged` receipts. State-only PUTs can strip stored description
+quick actions, and close can stop environments and deactivate Pages deployments.
+Those collateral effects are not authorized. This temporary gap does not claim
+full MR parity. Notes cannot atomically enforce a head/revision; stable preflight
+and exact post-read identity detect drift, not prevent the final race.
 Rich existing-MR edits and ready-title rewriting remain unavailable. Native
 note/state and creation-metadata requests cannot fall back to delegated glab.
 The existing Windows persisted-config/self-managed mapping limitation is retained;

@@ -232,8 +232,8 @@ Create one ordinary MR note (not an approval or review).
 
 Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
 Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
-One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
-GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen transitions return unsupported with zero mutation attempts; already-matching states return read-only unchanged receipts. GitLab can otherwise edit stored descriptions, stop environments or deactivate Pages deployments. These effects are not authorized; this is a temporary parity gap.
+Notes attempt one mutation with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
 Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
@@ -248,8 +248,8 @@ Create one ordinary MR note (not an approval or review).
 
 Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
 Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
-One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
-GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen transitions return unsupported with zero mutation attempts; already-matching states return read-only unchanged receipts. GitLab can otherwise edit stored descriptions, stop environments or deactivate Pages deployments. These effects are not authorized; this is a temporary parity gap.
+Notes attempt one mutation with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
 Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
@@ -260,12 +260,12 @@ Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 gl-axi mr close <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
 ```
 
-Observe or request one exact reversible MR close transition.
+Observe an already-matching MR state; close transitions are temporarily refused.
 
 Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
 Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
-One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
-GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen transitions return unsupported with zero mutation attempts; already-matching states return read-only unchanged receipts. GitLab can otherwise edit stored descriptions, stop environments or deactivate Pages deployments. These effects are not authorized; this is a temporary parity gap.
+Notes attempt one mutation with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
 Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
@@ -276,12 +276,12 @@ Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
 gl-axi mr reopen <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
 ```
 
-Observe or request one exact reversible MR reopen transition.
+Observe an already-matching MR state; reopen transitions are temporarily refused.
 
 Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
 Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
-One mutation attempt; no blind retry. Post-write reads prove observed state, not exclusive authorship.
-GitLab supplies no atomic expected-revision guard for these endpoints. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen transitions return unsupported with zero mutation attempts; already-matching states return read-only unchanged receipts. GitLab can otherwise edit stored descriptions, stop environments or deactivate Pages deployments. These effects are not authorized; this is a temporary parity gap.
+Notes attempt one mutation with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
 No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
 
 Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
@@ -807,4 +807,4 @@ Backend: `native`. Schema: `schema/ux-v1/resource-delete.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR reply/resolve, rich existing-MR metadata replacement, ready-title rewriting or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+MR close/reopen transitions are temporarily refused to prevent collateral description and deployment changes; already-matching states remain read-only no-ops (contracts/mr-writes/). Generic API, existing-issue content/label mutation, unguarded or alternate-strategy merge, approve, MR reply/resolve, rich existing-MR metadata replacement, ready-title rewriting or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --dry-run` retains exact-identity validation and preview, while non-no-op live requests fail closed before PUT. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

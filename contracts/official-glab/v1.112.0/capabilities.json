@@ -248,7 +248,7 @@
     "issue field or label mutation and issue creation",
     "merge request label mutation, existing rich metadata replacement, or ready title rewrite",
     "label-resource mutation",
-    "close, reopen, or delete (ordinary MR state writes require the native backend)",
+    "close, reopen, or delete (MR close/reopen transitions are temporarily refused; read-only no-ops require the native backend)",
     "repository mutation",
     "release mutation",
     "pipeline trigger, retry, cancel, or delete",

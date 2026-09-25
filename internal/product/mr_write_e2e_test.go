@@ -50,7 +50,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			binary := filepath.Join(t.TempDir(), program)
-			build := exec.Command("go", "build", "-o", binary, "./cmd/"+program)
+			build := exec.Command("go", "build", "-p", "1", "-o", binary, "./cmd/"+program)
 			build.Dir = root
 			if output, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v %s", err, output)
@@ -60,22 +60,19 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 				writes, exit                int
 				outcome                     string
 			}{
-				{"close", "close", "opened", "", 1, 0, "observed"},
-				{"reopen", "reopen", "closed", "", 1, 0, "observed"},
+				{"close refused", "close", "opened", "", 0, 2, "refused"},
+				{"reopen refused", "reopen", "closed", "", 0, 2, "refused"},
 				{"already closed", "close", "closed", "", 0, 0, "unchanged"},
 				{"already open", "reopen", "opened", "", 0, 0, "unchanged"},
 				{"note", "comment", "opened", "", 1, 0, "created"},
 				{"note alias on closed", "note", "closed", "", 1, 0, "created"},
-				{"malformed state reply", "close", "opened", "malformed", 1, 0, "observed"},
-				{"lost state reply", "reopen", "closed", "lost", 1, 0, "observed"},
-				{"unchanged postcondition", "close", "opened", "not-applied", 1, 6, "unknown"},
 				{"lost note ID", "comment", "opened", "lost", 1, 6, "unknown"},
 				{"malformed note ID", "comment", "opened", "malformed", 1, 6, "unknown"},
 				{"note ID drift", "comment", "opened", "note-id", 1, 6, "unknown"},
 				{"note body drift", "comment", "opened", "note-body", 1, 6, "unknown"},
 				{"note whitespace drift", "comment", "opened", "note-whitespace", 1, 6, "unknown"},
 				{"wrong note resource", "comment", "opened", "note-resource", 1, 6, "unknown"},
-				{"state rejection", "close", "opened", "rejected", 1, 4, "rejected"},
+				{"note alias rejection", "note", "closed", "rejected", 1, 4, "rejected"},
 				{"note rejection", "comment", "opened", "rejected", 1, 4, "rejected"},
 				{"preflight drift", "close", "opened", "drift", 0, 6, ""},
 				{"wrong project", "comment", "opened", "project", 0, 9, ""},
@@ -86,13 +83,13 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 				{"fork denied", "close", "opened", "fork", 0, 6, ""},
 				{"merged denied", "reopen", "closed", "merged", 0, 6, ""},
 				{"missing base", "close", "opened", "missing-base", 0, 8, ""},
-				{"post head drift", "close", "opened", "post-head", 1, 6, "unknown"},
-				{"post malformed", "close", "opened", "post-malformed", 1, 6, "unknown"},
+				{"post head drift", "comment", "opened", "post-head", 1, 6, "unknown"},
+				{"post malformed", "comment", "opened", "post-malformed", 1, 6, "unknown"},
 				{"invalid selector", "close", "opened", "invalid-selector", 0, 2, ""},
 				{"missing opt-in", "close", "opened", "missing-opt-in", 0, 2, ""},
 				{"quick action", "comment", "opened", "quick-action", 0, 2, ""},
 				{"note redirect cross origin", "comment", "opened", "redirect-cross", 1, 6, "unknown"},
-				{"state redirect cross path", "close", "opened", "redirect-path", 1, 6, "unknown"},
+				{"note redirect cross path", "note", "opened", "redirect-path", 1, 6, "unknown"},
 				{"creation metadata", "ensure", "opened", "", 1, 0, ""},
 				{"creation selection drift", "ensure", "opened", "ensure-drift", 0, 6, ""},
 			} {
@@ -185,16 +182,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 							case "rejected":
 								w.WriteHeader(403)
 								return true
-							case "not-applied":
-								_ = json.NewEncoder(w).Encode(f.mr())
-								return true
 							case "malformed", "lost":
-								if r.Method == "PUT" {
-									f.state = "closed"
-									if tc.action == "reopen" {
-										f.state = "opened"
-									}
-								}
 								if tc.mode == "malformed" {
 									_, _ = io.WriteString(w, "{broken")
 								} else {
@@ -270,7 +258,7 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 							t.Fatal("native MR command followed a cross-path redirect")
 						}
 					}
-					if tc.exit == 2 && len(f.server.Requests()) != 0 {
+					if tc.exit == 2 && tc.outcome != "refused" && len(f.server.Requests()) != 0 {
 						t.Fatal("invalid input performed network work")
 					}
 				})

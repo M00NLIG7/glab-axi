@@ -189,16 +189,6 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 	if action == "reopen" {
 		desired = "opened"
 	}
-	inputValue := map[string]any{"state_event": action}
-	operation := mrOpStateUpdate
-	if isNote {
-		inputValue, operation = map[string]any{"body": body}, mrOpNoteCreate
-	}
-	input, cleanup, err := writePrivateJSON(inputValue)
-	if err != nil {
-		return commandOutput{meta: meta}, err
-	}
-	defer cleanup()
 	final, err := load(preflight)
 	if err != nil {
 		return commandOutput{meta: meta}, err
@@ -208,9 +198,20 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 	}
 	receipt := mrWriteReceipt{Action: action, Outcome: "unchanged", IID: iid, WebURL: initial.Identity.WebURL, SourceBranch: initial.Identity.SourceBranch, TargetBranch: initial.Identity.TargetBranch, HeadSHA: initial.Identity.HeadSHA, ExpectedState: initial.State, ObservedState: initial.State}
 	result := func() commandOutput { return commandOutput{data: map[string]any{"write": receipt}, meta: meta} }
-	if !isNote && initial.State == desired {
-		return result(), nil
+	if !isNote {
+		if initial.State == desired {
+			return result(), nil
+		}
+		receipt.Outcome = "refused"
+		failure := uxv1.NewError(uxv1.CodeUnsupported, "MR close/reopen transitions are temporarily unavailable because GitLab cannot prevent collateral description or deployment changes")
+		failure.Receipt = map[string]any{"write": receipt}
+		return commandOutput{meta: meta}, failure
 	}
+	input, cleanup, err := writePrivateJSON(map[string]any{"body": body})
+	if err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	defer cleanup()
 	cancelPreflight()
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
@@ -219,7 +220,7 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 		return commandOutput{meta: meta}, uxv1.Wrap(uxv1.CodeUpstream, "merge request write timed out before mutation", ctx.Err())
 	}
 	mutation, cancelMutation := context.WithTimeout(ctx, limits.MergeMutationOperation)
-	response, writeErr := client.Do(mutation, glab.Request{Operation: operation, Host: target.Host, Repo: target.Repo, IID: iid, InputFile: input})
+	response, writeErr := client.Do(mutation, glab.Request{Operation: mrOpNoteCreate, Host: target.Host, Repo: target.Repo, IID: iid, InputFile: input})
 	cancelMutation()
 	receipt.Attempts, receipt.Outcome, receipt.ObservedState = 1, "unknown", ""
 	if response.UpstreamVersion != "" {
@@ -231,7 +232,7 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 	// Only a validated note in this invocation's successful POST response gives
 	// us an attributable ID. Never search by body, timestamp, or latest note.
 	var created DiscussionNote
-	if isNote && writeErr == nil {
+	if writeErr == nil {
 		created, writeErr = validateMRCreatedNote(response.Body, initial, body, 0)
 	}
 	readCtx, cancelRead := context.WithTimeout(ctx, limits.MergeReconcileOperation)
@@ -243,7 +244,7 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 	if readErr == nil {
 		receipt.ObservedState = post.State
 	}
-	if isNote && writeErr == nil && readErr == nil && post.State == initial.State {
+	if writeErr == nil && readErr == nil && post.State == initial.State {
 		noteResponse, noteErr := client.Do(readCtx, glab.Request{Operation: mrOpNoteView, Host: target.Host, Repo: target.Repo, IID: iid, ID: created.ID})
 		if noteErr == nil {
 			noteErr = budget.add(noteResponse.Body)
@@ -262,15 +263,7 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 		}
 		readErr = noteErr
 	}
-	if !isNote && readErr == nil && post.State == desired {
-		receipt.Outcome = "observed"
-		return result(), nil
-	}
-	code := uxv1.CodeAmbiguousUpdate
-	if isNote {
-		code = uxv1.CodeAmbiguousCreate
-	}
-	failure := uxv1.Wrap(code, "merge request write outcome is ambiguous; do not blindly retry", errors.Join(writeErr, readErr))
+	failure := uxv1.Wrap(uxv1.CodeAmbiguousCreate, "merge request write outcome is ambiguous; do not blindly retry", errors.Join(writeErr, readErr))
 	if writeErr != nil && readErr == nil && post.State == initial.State {
 		if rejection, ok := uxv1.NewHTTPRejection(uxv1.AsError(writeErr).StatusCode); ok {
 			failure = rejection
@@ -282,8 +275,6 @@ func executeMRWrite(ctx context.Context, client mrOperationClient, target Target
 }
 
 func sameMRWriteTarget(left, right mrDiscussionSnapshotIdentity) bool {
-	// State writes and comments may legitimately change updated_at, but never
-	// the selected numeric identity, projects, branches, or diff base/head.
 	right.UpdatedAt = left.UpdatedAt
 	return sameMRDiscussionSnapshot(left, right)
 }
