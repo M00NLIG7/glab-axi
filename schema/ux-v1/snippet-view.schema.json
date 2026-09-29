@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glab-axi.invalid/schema/ux-v1/snippet-view.schema.json",
+  "title": "glab-axi/ux-v1 snippet-view data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["snippet", "authenticated_user"],
+  "properties": {
+    "snippet": {"$ref": "#/$defs/snippet"},
+    "authenticated_user": {"$ref": "#/$defs/user"}
+  },
+  "$defs": {
+    "user": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "username"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "username": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "snippet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "scope", "visibility", "owner", "web_url", "files", "files_available"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "scope": {"enum": ["personal", "project"]},
+        "project_id": {"type": "integer", "minimum": 1},
+        "visibility": {"enum": ["public", "internal", "private"]},
+        "owner": {"$ref": "#/$defs/user"},
+        "web_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "files": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1024}},
+        "files_available": {"type": "boolean"},
+        "description": {"type": "string", "maxLength": 32768},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"},
+        "content": {
+          "type": "object", "additionalProperties": false,
+          "required": ["filename", "ref", "text", "truncated"],
+          "properties": {
+            "filename": {"type": "string", "minLength": 1, "maxLength": 1024},
+            "ref": {"type": "string", "minLength": 1, "maxLength": 1024},
+            "text": {"type": "string", "maxLength": 131072},
+            "truncated": {"type": "boolean"}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"scope": {"const": "project"}}}, "then": {"required": ["project_id"]}, "else": {"not": {"required": ["project_id"]}}}
+      ]
+    }
+  }
+}

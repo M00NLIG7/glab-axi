@@ -62,6 +62,16 @@ author/assignee username-to-ID resolution, issue milestone and descending sort,
 MR branches, state and draft (`wip=yes`). Field selection is performed locally;
 no arbitrary fields or query expressions are passed to the provider.
 
+`snippet-reads.json` pins authenticated personal/project snippet reads against
+GitLab v18.0.0-ee and client-go v2.53.0. The fixed routes cover identity, metadata,
+locally filtered visibility and inventory-bound file content; no returned URL
+is fetched. Root refs and filenames have distinct canonical URL encoding, and
+API filename colons are escaped to prevent official-glab placeholder expansion.
+`TestSnippetCLIWithPinnedOfficialGlabTLS` exercises both executable names against
+verified local TLS using synthetic credentials, including cancellation and
+encoding regressions. These delegated reads retain the official transport's
+trust properties; they do not claim native redirect guarantees.
+
 CI read parity is pinned separately in `contracts/read-parity/ci-reads.json`.
 `ci-list-source.go.txt` is the exact upstream `internal/commands/ci/list/list.go`
 from this release; it proves typed ref/status/source/username/SHA translation
@@ -74,11 +84,9 @@ executes the pinned CLI against a local TLS fake for all five route shapes.
 Filtered job reads are not used by guarded merge's complete jobs/bridges proof.
 
 The Linux checksum in `capabilities.json` is also used by the offline upstream
-contract job in CI. That job executes version/help plus isolated TLS fake-server
-ensure, exact-MR-view normalization, pipeline/job selectors and trace reads,
-issue-read and negative redirect evidence, test-only issue-write characterization and
-guarded-merge requests with synthetic credentials; it never contacts a live
-GitLab API.
+contract job in [CI](../../../.github/workflows/ci.yml). That workflow owns the
+current executable coverage inventory. Provider tests use isolated TLS fake
+servers and synthetic credentials; they never contact a live GitLab API.
 Updating official `glab` requires a new versioned directory, fresh
 public-interface evidence, and adapter
 tests before changing the runtime pin.

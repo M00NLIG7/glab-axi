@@ -45,7 +45,7 @@ type FlagDefinition struct {
 	Repeatable  bool
 }
 
-var definitions = append(baseDefinitions, stackDefinitions()...)
+var definitions = append(append(baseDefinitions, snippetDefinitions()...), stackDefinitions()...)
 
 var baseDefinitions = append(issueWriteDefinitions(), append(append([]Definition{
 	{Path: nil, Summary: "Show a bounded current-project dashboard.", Usage: "gl-axi [global flags]", RepoMode: RepoRequired, Schema: "dashboard", Backend: "official-glab"},

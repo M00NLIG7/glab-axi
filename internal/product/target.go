@@ -21,6 +21,9 @@ func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.L
 	if lookup == nil {
 		lookup = os.LookupEnv
 	}
+	if len(parsed.Definition.Path) == 2 && parsed.Definition.Path[0] == "snippet" && parsed.Values["--scope"] == "personal" {
+		parsed.Definition.RepoMode = RepoNone
+	}
 	target := Target{Host: parsed.Values["--hostname"], Repo: parsed.Values["--repo"]}
 	repoMode := parsed.Definition.RepoMode
 	if len(parsed.Definition.Path) == 2 && parsed.Definition.Path[0] == "search" && (parsed.Values["--scope"] == "host" || parsed.Values["--group"] != "") {

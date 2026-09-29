@@ -219,6 +219,11 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		return commandOutput{meta: meta}, err
 	}
 	meta.Host, meta.Repo = target.Host, target.Repo
+	if path == "snippet view" {
+		if _, err := snippetSelector(parsed.Positionals[0], target, parsed.Values["--scope"]); err != nil {
+			return commandOutput{meta: meta}, err
+		}
+	}
 	var client delegateClient
 	if parsed.Values["--auth-source"] != "native" {
 		client = deps.delegate()
@@ -261,6 +266,8 @@ func execute(parent context.Context, parsed Parsed, deps Dependencies) (out comm
 		return executeResourceDeletion(ctx, parsed, deps, meta)
 	}
 	switch path {
+	case "snippet list", "snippet view":
+		return executeSnippet(ctx, client, target, parsed, meta)
 	case "auth status":
 		version, err := client.AuthStatus(ctx, target.Host)
 		meta.UpstreamVersion = version

@@ -223,6 +223,13 @@ jobs:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
         run: go test ./internal/product -run '^TestStackOfficialGlabTLSExecutable$' -count=1
 
+      - name: Exercise snippet executables against synthetic GitLab TLS
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+          GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
+        run: go test -p 1 ./internal/product -run '^TestSnippetCLIWithPinnedOfficialGlabTLS$' -count=1
+
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab

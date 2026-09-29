@@ -24,6 +24,9 @@ func main() {
 		filepath.Join("skills", "glab-axi", "SKILL.md"):             product.LegacySkillMarkdown(),
 		filepath.Join("docs", "command-reference.md"):               product.CommandReferenceMarkdown(),
 	}
+	for name, content := range product.SnippetSchemas() {
+		files[filepath.Join("schema", "ux-v1", name)] = content
+	}
 	for name, content := range product.PlanningSchemas() {
 		files[filepath.Join("schema", "ux-v1", name)] = content
 	}

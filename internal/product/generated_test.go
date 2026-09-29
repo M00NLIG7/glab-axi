@@ -51,6 +51,12 @@ func TestGeneratedPublicAssetsMatchCommandRegistry(t *testing.T) {
 		{filepath.Join("..", "..", "schema", "ux-v1", "issue-write.schema.json"), IssueWriteSchema()},
 		{filepath.Join("..", "..", "schema", "ux-v1", "stack.schema.json"), StackSchema()},
 	}
+	for name, content := range SnippetSchemas() {
+		contracts = append(contracts, struct {
+			path string
+			want string
+		}{filepath.Join("..", "..", "schema", "ux-v1", name), content})
+	}
 	for name, content := range PlanningSchemas() {
 		contracts = append(contracts, struct {
 			path string
