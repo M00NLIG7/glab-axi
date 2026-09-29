@@ -44,18 +44,9 @@ func TestMRWritesExecutableTLS(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows persisted-native-config and self-managed mapping remain unproven")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := filepath.Join(t.TempDir(), program)
-			build := exec.Command("go", "build", "-p", "1", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, false)
 			for _, tc := range []struct {
 				name, action, initial, mode string
 				writes, exit                int
@@ -294,18 +285,9 @@ func TestMRNativeEnsureDescriptionExecutableTLS(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows persisted-native-config and self-managed mapping remain unproven")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := filepath.Join(t.TempDir(), program)
-			build := exec.Command("go", "build", "-p", "1", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, false)
 			for _, tc := range []struct{ name, description, want, response string }{
 				{"final newline", "body\n", "body", ""},
 				{"trailing whitespace", "body \t\n\n\t ", "body", ""},

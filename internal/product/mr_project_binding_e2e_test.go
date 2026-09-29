@@ -17,7 +17,7 @@ func TestMRNativeImmutableProjectRouteExecutableTLS(t *testing.T) {
 	const bound = "/gitlab/api/v4/projects/101"
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := buildMRExecutable(t, program)
+			binary := productTestExecutable(t, program, false)
 			for _, action := range []string{"comment", "ensure"} {
 				t.Run(action, func(t *testing.T) {
 					t.Parallel()

@@ -18,7 +18,7 @@ func TestMRNoteBoundaryExecutableTLS(t *testing.T) {
 	t.Parallel()
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := buildMRExecutable(t, program)
+			binary := productTestExecutable(t, program, false)
 			for _, mode := range []string{"preflight-page-bound", "post-page-bound", "pending-ready", "pending-edit", "pending-label", "wrong-configured-url"} {
 				t.Run(mode, func(t *testing.T) {
 					t.Parallel()

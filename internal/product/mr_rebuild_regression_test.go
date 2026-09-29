@@ -6,28 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
-
-func buildMRExecutable(t *testing.T, program string) string {
-	t.Helper()
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(t.TempDir(), program)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-p", "1", "-o", binary, "./cmd/"+program)
-	cmd.Dir = root
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v %s", err, out)
-	}
-	return binary
-}
 
 func runMRExecutable(t *testing.T, binary string, f *mrNativeFixture, args []string) (int, string) {
 	t.Helper()
@@ -60,7 +42,7 @@ func TestMRRebuildLifecycleAndTitleExecutableTLS(t *testing.T) {
 	t.Parallel()
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := buildMRExecutable(t, program)
+			binary := productTestExecutable(t, program, false)
 			for _, tc := range []struct {
 				action, state string
 				transition    bool

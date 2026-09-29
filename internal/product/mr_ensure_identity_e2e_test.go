@@ -12,7 +12,7 @@ func TestMRNativeEnsureExactUpdateIdentityExecutableTLS(t *testing.T) {
 	t.Parallel()
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := buildMRExecutable(t, program)
+			binary := productTestExecutable(t, program, false)
 			for _, mode := range []string{"valid", "head", "global-id", "duplicate-project"} {
 				t.Run(mode, func(t *testing.T) {
 					t.Parallel()
