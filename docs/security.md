@@ -366,16 +366,18 @@ Deletion-specific request, phase and response bounds live in the
 [resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
 Product CI-read request, trace-selection, final-data and watch budgets are
 pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
+Snippet reads have separate [request/content bounds](../contracts/official-glab/v1.112.0/snippet-reads.json)
+and [normalized field limits](../schema/ux-v1/snippet-view.schema.json).
 
 | Input/output | Limit |
 |---|---:|
 | host | 253 bytes |
 | project | 1,024 bytes / 32 segments |
 | branch | 1,024 bytes |
-| title | 1,024 bytes |
+| requested title | 1,024 bytes |
 | issue-edit requested label name / changes | 1,024 bytes / 100 |
 | issue-edit exact labels / label catalog | 1,000 / 10 pages |
-| description / individual discussion body | 128 KiB |
+| description / individual discussion body (except snippet reads) | 128 KiB |
 | all discussion bodies / nested notes | 2 MiB / 1,000 notes |
 | JSON page | 2 MiB |
 | serialized envelope before framing newline (command-specific budgets may be lower) | 8 MiB |
