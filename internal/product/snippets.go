@@ -2,7 +2,6 @@ package product
 
 import (
 	"context"
-	"io"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 	"gl-axi/internal/contract/uxv1"
 	"gl-axi/internal/delegate/glab"
 	"gl-axi/internal/limits"
-	"gl-axi/internal/output"
 	"gl-axi/internal/safeurl"
 )
 
@@ -184,14 +182,6 @@ func executeSnippet(ctx context.Context, client delegateClient, target Target, p
 	session := &snippetReadSession{client: client, target: target}
 	defer func() {
 		out.meta.UpstreamVersion = session.version
-		// Check the selected encoding, including envelope overhead, before Run
-		// writes anything. Provider bytes alone do not bound escaped output.
-		if err == nil {
-			if encodeErr := output.WriteValue(io.Discard, p.Format, uxv1.Success(out.data, out.meta)); encodeErr != nil {
-				out.data = nil
-				err = uxv1.NewError(uxv1.CodeUpstream, "snippet output exceeded the encoding budget")
-			}
-		}
 	}()
 	out.meta = meta
 	body, err := session.read(ctx, glab.Request{Operation: glab.OpSnippetUser})

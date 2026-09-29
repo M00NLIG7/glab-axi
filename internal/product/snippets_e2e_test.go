@@ -63,21 +63,6 @@ func snippetTLSProxy(authority, address string) *httptest.Server {
 	}))
 }
 
-func buildSnippetCLI(t *testing.T, program, dir string) string {
-	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(dir, program)
-	cmd := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-	cmd.Dir = root
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v %s", err, output)
-	}
-	return binary
-}
-
 func TestSnippetExecutableAliases(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX child argv fixture")
@@ -85,7 +70,7 @@ func TestSnippetExecutableAliases(t *testing.T) {
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := buildSnippetCLI(t, program, dir)
+			binary := productTestExecutable(t, program, true)
 			record := filepath.Join(dir, "record")
 			fixture := snippetJSON(snippetFixture(42, false))
 			script := fmt.Sprintf(`#!/bin/sh
@@ -194,7 +179,7 @@ func TestSnippetCLIWithPinnedOfficialGlabTLS(t *testing.T) {
 func snippetOfficialTLS(t *testing.T, official, program string) {
 	validateSchema := snippetSchemaValidator(t)
 	dir := t.TempDir()
-	binary := buildSnippetCLI(t, program, dir)
+	binary := productTestExecutable(t, program, true)
 	if err := os.Symlink(official, filepath.Join(dir, "glab")); err != nil {
 		t.Fatal(err)
 	}

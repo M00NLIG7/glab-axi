@@ -22,7 +22,7 @@ func TestSnippetExecutableOutputOverflow(t *testing.T) {
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := buildSnippetCLI(t, program, dir)
+			binary := productTestExecutable(t, program, true)
 			items := make([]upstreamSnippet, 100)
 			for i := range items {
 				items[i] = snippetFixture(int64(i+1), false)
