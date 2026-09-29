@@ -91,9 +91,11 @@ jobs:
       - name: Check package documentation
         shell: bash
         run: |
+          # go doc requires non-test source; omit test-only fixture packages.
           while IFS= read -r package; do
+            [[ -n "${package}" ]] || continue
             go doc "${package}" >/dev/null
-          done < <(go list ./...)
+          done < <(go list -f '{{if or .GoFiles .CgoFiles}}{{.ImportPath}}{{end}}' ./...)
 
   build:
     name: Build (${{ matrix.goos }}-${{ matrix.goarch }})

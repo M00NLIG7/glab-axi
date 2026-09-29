@@ -118,11 +118,12 @@ Canonical `gl-axi` and the tested `glab-axi` executable alias share these behavi
 Frozen native `glab-axi/v1` routing, schemas and consumer contracts are unchanged.
 The dashboard keeps its existing preview defaults.
 
-Remaining differences include issue comments, optional milestone/closed/merged
-metadata enrichment, GitHub review state, broader search and other forge workflows.
-MR discussion evidence already ships as `mr discussions`; this slice neither
-reimplements it nor claims approvals are discussions. Existing issue writes and
-explicit-native best-effort edits retain their separate contracts in
+Remaining differences include optional milestone/closed/merged metadata
+enrichment, GitHub review-submission history, broader search and other forge workflows.
+Issue comment/discussion and MR reviewer/approval reads are covered by the
+[collaboration-read contract](../contracts/collaboration-reads/README.md).
+Existing issue writes and explicit-native best-effort edits retain their
+separate contracts in
 `contracts/issue-writes/v1.json` and `contracts/issue-edit/v2.json`.
 Distribution, live installation and separate CI repair are not part of this read
 increment.
