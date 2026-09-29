@@ -15,6 +15,7 @@ type Target struct {
 	Host        string
 	Repo        string
 	webBasePath string
+	webBase     string // configured native web authority; never caller-supplied
 }
 
 func resolveTarget(ctx context.Context, parsed Parsed, cwd string, lookup auth.LookupEnv) (Target, error) {

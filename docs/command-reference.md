@@ -245,6 +245,70 @@ View a bounded, color-free merge-request diff.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-diff.schema.json`.
 
+## `mr comment`
+
+```text
+gl-axi mr comment <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
+```
+
+Create one ordinary MR note (not an approval or review).
+
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
+Notes make one mutation attempt with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen return zero-write no-ops only when already in the requested state; transitions refuse before mutation to avoid collateral description and deployment effects.
+No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
+
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
+
+## `mr note`
+
+```text
+gl-axi mr note <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed --body-file FILE [--format toon|json]
+```
+
+Create one ordinary MR note (not an approval or review).
+
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
+Notes make one mutation attempt with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen return zero-write no-ops only when already in the requested state; transitions refuse before mutation to avoid collateral description and deployment effects.
+No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
+
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
+
+## `mr close`
+
+```text
+gl-axi mr close <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
+```
+
+Observe an already-target-state MR; actual close/reopen transitions are temporarily refused.
+
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
+Notes make one mutation attempt with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen return zero-write no-ops only when already in the requested state; transitions refuse before mutation to avoid collateral description and deployment effects.
+No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
+
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
+
+## `mr reopen`
+
+```text
+gl-axi mr reopen <iid> --auth-source native -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --expected-state opened|closed [--format toon|json]
+```
+
+Observe an already-target-state MR; actual close/reopen transitions are temporarily refused.
+
+Requires explicit native environment/keyring authentication for the complete operation, with no official-profile fallback or account-equivalence claim.
+Requires same-project identity, exact configured web URL, branches/head/state, and a stable preflight recheck.
+Notes make one mutation attempt with no blind retry. GitLab supplies no atomic expected-revision guard. Note success requires an attributable POST note ID and exact readback; a lost ID remains ambiguous.
+Close/reopen return zero-write no-ops only when already in the requested state; transitions refuse before mutation to avoid collateral description and deployment effects.
+No quick actions, reactions, attachments, reply, resolution, approval, or merge behavior.
+
+Backend: `native`. Schema: `schema/ux-v1/mr-write.schema.json`.
+
 ## `mr merge`
 
 ```text
@@ -263,6 +327,10 @@ gl-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description
 
 Create or update exactly one matching open merge request.
 
+Optional --assignee-id and --reviewer-id (repeatable, at most 20), --milestone-id, and --draft select creation metadata and require --auth-source native. The complete native operation uses one selected environment/keyring identity, which may differ from the official profile.
+With these selectors an existing match must already have all selected metadata and exact title/body; no replacement PUT is attempted.
+Numeric IDs are explicit provider identities, not username or milestone-name lookups.
+
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.
 
 ## `mr create-or-update`
@@ -272,6 +340,10 @@ gl-axi mr create-or-update --source BRANCH --target BRANCH --title-file FILE --d
 ```
 
 Alias for bounded MR ensure semantics.
+
+Optional --assignee-id and --reviewer-id (repeatable, at most 20), --milestone-id, and --draft select creation metadata and require --auth-source native. The complete native operation uses one selected environment/keyring identity, which may differ from the official profile.
+With these selectors an existing match must already have all selected metadata and exact title/body; no replacement PUT is attempted.
+Numeric IDs are explicit provider identities, not username or milestone-name lookups.
 
 Backend: `official-glab`. Schema: `schema/ux-v1/mr-ensure.schema.json`.
 
@@ -940,4 +1012,4 @@ Backend: `local`. Schema: `schema/ux-v1/stack.schema.json`.
 
 ## Current undeclared operations
 
-Generic API, issue mutation outside the declared contracts, unguarded or alternate-strategy merge, approve, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment are separate one-attempt contracts. Blank creation and close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --auth-source native` supports title, description, and label deltas with drift detection and reconciliation, not atomic revision enforcement. `--dry-run` validates without mutation; omission of the auth selector retains delegated preview/no-op behavior and refuses live changes. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.
+Generic API, issue mutation outside the declared contracts, unguarded or alternate-strategy merge, approve, MR reply/resolve, ready or existing-MR rich metadata replacement, label-resource mutation, repository mutation, and other release/pipeline/job writes remain undeclared. Guarded native issue/pipeline/release/snippet deletion is the explicit exception. CI variable set/delete are separately guarded native-only operations. Typed nonblank issue create/comment and ordinary MR notes are separate one-attempt contracts. Native MR creation metadata requires an exact existing no-op rather than replacing collections; see `contracts/mr-writes/v1.json`. Blank issue creation and issue/MR close/reopen transitions are temporarily refused; already-matching states return read-only observations; see `contracts/issue-writes/v1.json`. Label deletion remains a temporary gap due to provider ID-or-title fallback; see `contracts/resource-delete/v1.md`. `issue edit --auth-source native` supports title, description, and label deltas with drift detection and reconciliation, not atomic revision enforcement. `--dry-run` validates without mutation; omission of the auth selector retains delegated preview/no-op behavior and refuses live changes. `board issues` is the disclosed exception for possible issue ordering initialization: it requires a per-invocation acknowledgment and returns an uncertainty receipt.

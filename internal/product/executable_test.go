@@ -1,6 +1,7 @@
 package product
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Executables are immutable fixture inputs, not test-owned mutable state. Keep
@@ -71,7 +73,9 @@ func productTestExecutable(t *testing.T, program string, trimpath bool) string {
 		args = append(args, "-trimpath")
 	}
 	args = append(args, "-o", path, "./cmd/"+program)
-	command := exec.Command("go", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(ctx, "go", args...)
 	command.Dir = root
 	if output, err := command.CombinedOutput(); err != nil {
 		failure := fmt.Errorf("build %s: %w: %s", program, err, output)

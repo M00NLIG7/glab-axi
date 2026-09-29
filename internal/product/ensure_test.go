@@ -78,6 +78,36 @@ func TestMREnsureCreatesOnceAfterEmptyRecheck(t *testing.T) {
 	}
 }
 
+func TestMREnsureDelegatedDescriptionPreservesWhitespace(t *testing.T) {
+	description := "body \t\n"
+	for _, action := range []string{"created", "unchanged"} {
+		t.Run(action, func(t *testing.T) {
+			record := ensureMR(11, "title", description)
+			delegate := ensureDelegate(t, []upstreamMR{record})
+			wantWrites := 0
+			if action == "created" {
+				body, err := json.Marshal(record)
+				if err != nil {
+					t.Fatal(err)
+				}
+				delegate.responses[glab.OpEnsureList] = []glab.Response{{Body: []byte("[]")}, {Body: []byte("[]")}}
+				delegate.responses[glab.OpEnsureCreate] = []glab.Response{{Body: body}}
+				wantWrites = 1
+			}
+			stdout, _, deps := productTestDeps(t, delegate)
+			if code := Run(context.Background(), ensureArgs(t, "title", description), deps); code != 0 || !strings.Contains(stdout.String(), `"action":"`+action+`"`) {
+				t.Fatalf("exit=%d want=%s output=%s", code, action, stdout.String())
+			}
+			if countOperation(delegate.requests, glab.OpEnsureCreate) != wantWrites || countOperation(delegate.requests, glab.OpEnsureUpdate) != 0 {
+				t.Fatalf("unexpected delegated mutations: %#v", delegate.requests)
+			}
+			if action == "created" {
+				assertPrivateEnsurePayload(t, delegate, map[string]any{"source_branch": "feature", "target_branch": "main", "title": "title", "description": description})
+			}
+		})
+	}
+}
+
 func TestMREnsureRecheckObservesConcurrentCreateWithoutPost(t *testing.T) {
 	desired := ensureMR(10, "wanted", "body")
 	empty, _ := json.Marshal([]upstreamMR{})

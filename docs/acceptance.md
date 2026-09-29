@@ -87,6 +87,29 @@ guarded squash merge without manually discovering API bases on the default
 host, without an agent handling interactive credentials, and without plaintext
 fallback.
 
+## Synthetic MR collaboration acceptance
+
+`internal/product/mr_write_e2e_test.go` and
+`internal/product/mr_rebuild_regression_test.go` build both executable names and
+exercise the landed native transport against synthetic TLS servers. They use only
+runtime synthetic credentials and private test files, never live GitLab or a real
+credential store. The fixtures prove single-note creation and exact note-ID
+readback, lost/malformed response ambiguity, target/head/branch drift, redirect
+refusal, zero-work input denials, creation-only metadata selection, and the
+accepted close/reopen transition refusal with already-target-state no-ops.
+Native title/description normalization must replay without another write.
+
+`mr_note_boundary_e2e_test.go` additionally exercises actual process cancellation,
+the unchanged mutation deadline, response-byte limits and deferred-operation
+zero-network denials. `mr_ensure_identity_e2e_test.go` and
+`mr_project_binding_e2e_test.go` check direct update acknowledgments and immutable
+numeric project routing against a synthetic path-reassignment race. Algorithm
+fixtures separately verify private payloads and phase contexts. Notes are not approvals or
+review objects. These synthetic tests do not establish live provider acceptance,
+ready/existing-MR rich metadata support, label assignment, Windows native-config
+support or complete parity. The pinned provider semantics and residual gaps live
+in `contracts/mr-writes/README.md`. No live mutation is authorized by this section.
+
 ## Safe read-only Rune MR/CI
 
 This requires separate captain authorization for private metadata access and a
