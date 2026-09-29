@@ -13,7 +13,7 @@ Both `issue list` and `mr list` accept:
 | Flag | Contract |
 | --- | --- |
 | `--state` | `open` (default; returned state remains `opened`), `closed`, `all`; MR also `merged`. GitLab `closed` excludes merged MRs. |
-| `--label NAME` | Repeat up to 20 distinct exact names, requiring every label (AND). Commas, quotes/backslashes, control characters, padded names, leading dashes, and provider selector keywords are rejected rather than reinterpreted. |
+| `--label NAME` | Repeat up to 20 distinct exact names, requiring every label (AND). Commas, double quotes/backslashes, control characters, padded names, leading dashes, and provider selector keywords are rejected rather than reinterpreted. |
 | `--author USERNAME` | One explicit username, not `@me` or an expression. |
 | `--assignee USERNAME` | One explicit username, not `@me` or a comma-separated set. |
 
@@ -30,9 +30,11 @@ MRs additionally accept `--source-branch BRANCH`, `--target-branch BRANCH`, and
 `--draft` to select draft MRs. Omitting `--draft` includes both draft and
 non-draft MRs. Branches must be valid Git branch names. Returned MRs must match selected branches.
 
-All flags accept space or equals values. Duplicate singleton flags, empty values,
-unknown flags, and ambiguous input fail before official-glab child work. These
-are typed selectors, not raw upstream argv or query-language passthrough.
+Value-taking flags accept space or equals forms. `--draft` is a bare boolean
+flag and accepts no value, including `=true` or `=false`. Duplicate singleton
+flags, empty values, unknown flags, and ambiguous input fail before official-glab
+child work. These are typed selectors, not raw upstream argv or query-language
+passthrough.
 
 ```sh
 gl-axi issue list -R group/project --state closed --label bug --author alice --sort updated
@@ -48,11 +50,11 @@ with synthetic credentials, without using a real account or profile.
 ## Optional fields and descriptions
 
 `--fields FIELD,...` adds declared normalized fields to lists, retaining every
-default field. Fields already included by default remain unchanged. Arbitrary
-GitLab JSON keys are not accepted, and views do not accept `--fields`.
+default field. Only `description` changes inclusion; the other supported names
+retain their existing conditional output without extra provider reads. Arbitrary
+GitLab JSON keys are not accepted, and views do not accept `--fields`. Each
+command's local `--help` lists its supported field names.
 
-- Issue optional fields: `description`, `author`, `labels`, `created_at`, `updated_at`.
-- MR optional fields: the above plus `base_sha`, `head_sha`, `head_pipeline`, `raw_merge_status`.
 - Default fields always remain, including `iid`, `title`, `state`,
   `web_url`, and MR source/target branches, draft/conflict/merge status. Selection
   cannot hide an invalid returned identity, URL or branch.
@@ -77,7 +79,7 @@ Existing page/display-limit reasons take precedence over field truncation.
 
 | Capability | Pinned reference | This increment |
 | --- | --- | --- |
-| State | `--state open|closed|all` | Equivalent issue states; GitLab MR `closed` excludes `merged`, with a separate `--state merged` selector |
+| State | `--state open\|closed\|all` | Equivalent issue states; GitLab MR `closed` excludes `merged`, with a separate `--state merged` selector |
 | Labels, author, assignee | Repeated labels and usernames | Typed AND labels and explicit usernames; no `@me` selector |
 | Issue milestone | `--milestone TITLE` | Exact title; provider-special selectors refused |
 | Issue order | `created`, `updated`, `comments` | Descending created/updated; comment-count order remains a gap |
@@ -100,17 +102,12 @@ provide unbounded body output or caller-configurable byte limits.
 ## Bounds and compatibility
 
 All pages retain identical filters and page width. The display limit remains
-1..1000, at most 100 items/page and 10 pages, with 2 MiB provider JSON/page,
-an 8 MiB serialized-output cap, and a 30-second read deadline. The output cap
-is not a cumulative provider-download limit: several individually bounded pages
-can exceed it before serialization. Exact-limit lists probe one further
-page when necessary; the hard page limit never claims completeness. There is no
-unbounded `--full`, arbitrary `--json`, jq, raw API or new provider mutation.
-Accumulated results exceeding the 8 MiB serialization cap return a bounded
-`upstream_error` envelope without data, with `meta.complete=false`,
-`meta.truncated=true`, and reason `operation_limit`. Serialization completes before
-any stdout write. An actual writer failure instead returns exit 8 with one
-bounded stderr diagnostic; it never appends a second envelope to partial output.
+1..1000, at most 100 items/page and 10 pages, with a 30-second read deadline.
+Shared JSON-page and serialized-output bounds, including overflow and
+writer-failure behavior, are owned by the [security model](security.md#hard-limits).
+Exact-limit lists probe one further page when necessary; the hard page limit
+never claims completeness. There is no unbounded `--full`, arbitrary `--json`, jq,
+raw API or new provider mutation.
 
 Host/project/resource identity is checked before rendering, including exact IID
 for views. Issue URLs accept only the exact project paths `/-/issues/IID` and
