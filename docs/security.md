@@ -56,8 +56,11 @@ native HTTP transport.
 - completeness and truncation follow each command's contract; the
   [planning contract](../contracts/gitlab-planning/v19.3.0/README.md#comparison-and-material-differences)
   distinguishes collection completeness from field truncation;
-  malformed, unsupported, unavailable, or drifting identity
-  returns a controlled incomplete error instead of partial trusted evidence.
+  malformed, unsupported, unavailable, or drifting identity returns a controlled
+  incomplete error instead of partial trusted evidence. Unavailable approval
+  state instead follows the
+  [collaboration-read uncertainty contract](../contracts/collaboration-reads/README.md#meaning-and-uncertainty),
+  not a blanket error or empty-result rule.
 
 Approved environment credentials pass directly to official glab for headless
 product operations but are never placed in AXI argv/output; login removes them

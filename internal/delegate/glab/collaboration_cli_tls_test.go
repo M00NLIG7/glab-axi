@@ -35,6 +35,12 @@ func TestPinnedOfficialGlabApprovalCLIAvailabilityTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Preserve the caller-selected Git executable in the isolated child PATH.
+	// On macOS /usr/bin/git is a slow developer-tools launcher.
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
 	root, err := filepath.Abs("../../..")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +125,7 @@ func TestPinnedOfficialGlabApprovalCLIAvailabilityTLS(t *testing.T) {
 					defer cancel()
 					command := exec.CommandContext(ctx, cli, "mr", "approvals", "7", "-R", "group/project", "--hostname", host, "--format", "json")
 					command.Dir = home
-					command.Env = []string{"PATH=" + home + ":/usr/bin:/bin", "HOME=" + home, "GLAB_CONFIG_DIR=" + configDir, "GITLAB_TOKEN=" + secret, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caPath, "GOMAXPROCS=2", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=false"}
+					command.Env = []string{"PATH=" + home + string(os.PathListSeparator) + filepath.Dir(gitPath) + ":/usr/bin:/bin", "HOME=" + home, "GLAB_CONFIG_DIR=" + configDir, "GITLAB_TOKEN=" + secret, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caPath, "GOMAXPROCS=2", "NO_PROMPT=1", "PROMPT_DISABLED=1", "GLAB_NO_PROMPT=false"}
 					var stdout, stderr bytes.Buffer
 					command.Stdout, command.Stderr = &stdout, &stderr
 					runErr := command.Run()

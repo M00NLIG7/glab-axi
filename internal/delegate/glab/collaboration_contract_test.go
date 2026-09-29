@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -125,6 +126,12 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Preserve the caller-selected Git executable in the isolated child PATH.
+	// On macOS /usr/bin/git is a slow developer-tools launcher.
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
 	host := "gitlab.collaboration.example"
 	certificate, ca := selfManagedTestCertificate(t, host)
 	var mu sync.Mutex
@@ -176,7 +183,7 @@ func TestPinnedOfficialGlabCollaborationReadsTLS(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), []byte(config), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + filepath.Join(home, "config"), "GITLAB_TOKEN=" + strings.Join([]string{"synthetic", "collaboration", "tls"}, "-"), "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caFile, "PATH=/usr/bin:/bin"}})
+	client := NewClient(ClientConfig{Path: binary, Env: []string{"HOME=" + home, "GLAB_CONFIG_DIR=" + filepath.Join(home, "config"), "GITLAB_TOKEN=" + strings.Join([]string{"synthetic", "collaboration", "tls"}, "-"), "HTTPS_PROXY=" + proxy.URL, "NO_PROXY=", "SSL_CERT_FILE=" + caFile, "PATH=" + filepath.Dir(gitPath) + ":/usr/bin:/bin"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	for _, op := range []Operation{OpIssueDiscussions, OpMRApprovals} {
