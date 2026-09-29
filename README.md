@@ -38,10 +38,10 @@ gl-axi                               # current-project dashboard
 gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
-gl-axi issue list|view
+gl-axi issue list|view|discussions
 gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
 gl-axi issue edit IID --auth-source native ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # best-effort edit; --dry-run previews
-gl-axi mr list|view|checks|diff|discussions
+gl-axi mr list|view|checks|diff|discussions|approvals
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
@@ -81,6 +81,15 @@ selectors, search scopes, and remaining parity limitations are documented in the
 [discovery and search contract](contracts/discovery-search/README.md).
 Issue/MR typed list filters, additive description selection, and the fixed view
 body cap are documented in [read selection](docs/read-parity.md).
+
+Collaboration read equivalents also include `issue discussions <iid>` for
+comments/threaded notes and `mr approvals <iid>` for assigned reviewers and
+current GitLab approval state. They use separate closed schemas without changing
+default issue/MR views. Assigned reviewers and notes are not GitHub review
+submissions. Unknown/denied approval state never becomes approval or zero required
+approvals; edition/license remains unknown. See the
+[versioned collaboration contract](contracts/collaboration-reads/README.md) for
+bounds, identity rechecks, uncertainty and exact scope.
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note

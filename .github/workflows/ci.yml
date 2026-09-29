@@ -91,9 +91,11 @@ jobs:
       - name: Check package documentation
         shell: bash
         run: |
+          # go doc requires non-test source; omit test-only fixture packages.
           while IFS= read -r package; do
+            [[ -n "${package}" ]] || continue
             go doc "${package}" >/dev/null
-          done < <(go list ./...)
+          done < <(go list -f '{{if or .GoFiles .CgoFiles}}{{.ImportPath}}{{end}}' ./...)
 
   build:
     name: Build (${{ matrix.goos }}-${{ matrix.goarch }})
@@ -226,4 +228,4 @@ jobs:
       - name: Execute version, help, TLS read, and guarded MR write contract surfaces
         env:
           GL_AXI_OFFICIAL_GLAB_TEST_BINARY: ${{ github.workspace }}/upstream-glab/bin/glab
-        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS|TestPinnedOfficialGlabReadFiltersTLS)$' -count=1
+        run: go test ./internal/delegate/glab -run '^(TestPinnedUpstreamPublicContract|TestPinnedOfficialGlabEnsureCreateTLS|TestPinnedOfficialGlabMRViewTLS|TestPinnedOfficialGlabMRDiscussionsTLS|TestPinnedOfficialGlabIssueEditTLS|TestPinnedOfficialGlabIssueWritesTLS|TestPinnedOfficialGlabIssueWritesRedirectCharacterization|TestPinnedOfficialGlabMRMergeTLS|TestPinnedOfficialGlabVariableRedirectCounterevidenceTLS|TestPinnedOfficialGlabCIReadsTLS|TestPinnedOfficialGlabReadFiltersTLS|TestPinnedOfficialGlabCollaborationReadsTLS|TestPinnedOfficialGlabApprovalCLIAvailabilityTLS)$' -count=1
