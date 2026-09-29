@@ -68,6 +68,26 @@ selecting the destination for an environment credential. `GLAB_DEBUG_HTTP`, CI a
 checks, and output helpers are forced off. The AXI does not inspect the official
 profile or token source.
 
+## Snippet reads
+
+`snippet list|view` use the authenticated official-glab transport, not native
+credentials or anonymous fallback. Scope must be explicit. Personal lists check
+that every returned owner matches the authenticated user and exclude project
+snippets locally; project reads require explicit repository selection and bind
+the provider's numeric project ID. View accepts another owner only when the
+selected personal snippet is visible to the authenticated identity.
+
+Host, snippet ID, project, owner URLs, raw metadata URLs and file inventory are
+validated before exposing content. Returned URLs are never followed. File URLs
+supply only a validated root ref for a fixed API route, with filenames encoded
+as one segment including colons so official-glab cannot expand placeholders.
+Metadata is rechecked after a selected file read; this is drift detection, not
+atomic revision enforcement. Public/internal/private are GitLab semantics, not
+secret/unlisted aliases. The [contract](../contracts/official-glab/v1.112.0/snippet-reads.json)
+owns field, page, byte and time bounds. Serialized output overflow returns a
+bounded incomplete error rather than empty stdout. Existing official transport
+limitations still apply; no native redirect protection is claimed.
+
 ## Provider-write boundary
 
 The executable command registry owns the provider-write allowlist; see the
@@ -346,16 +366,18 @@ Deletion-specific request, phase and response bounds live in the
 [resource-deletion contract](../contracts/resource-delete/v1.md#outcome-and-concurrency-rules).
 Product CI-read request, trace-selection, final-data and watch budgets are
 pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
+Snippet reads have separate [request/content bounds](../contracts/official-glab/v1.112.0/snippet-reads.json)
+and [normalized field limits](../schema/ux-v1/snippet-view.schema.json).
 
 | Input/output | Limit |
 |---|---:|
 | host | 253 bytes |
 | project | 1,024 bytes / 32 segments |
 | branch | 1,024 bytes |
-| title | 1,024 bytes |
+| requested title | 1,024 bytes |
 | issue-edit requested label name / changes | 1,024 bytes / 100 |
 | issue-edit exact labels / label catalog | 1,000 / 10 pages |
-| description / individual discussion body | 128 KiB |
+| description / individual discussion body (except snippet reads) | 128 KiB |
 | all discussion bodies / nested notes | 2 MiB / 1,000 notes |
 | JSON page | 2 MiB |
 | serialized envelope before framing newline (command-specific budgets may be lower) | 8 MiB |

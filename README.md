@@ -53,6 +53,7 @@ gl-axi release list|view
 gl-axi release download TAG ... --auth-source native      # exact link ID/name/commit
 gl-axi repo list|view
 gl-axi label list
+gl-axi snippet list|view --scope personal|project
 gl-axi search issues|mrs|repos|commits|code
 
 gl-axi setup hooks
@@ -81,6 +82,40 @@ selectors, search scopes, and remaining parity limitations are documented in the
 [discovery and search contract](contracts/discovery-search/README.md).
 Issue/MR typed list filters, additive description selection, and the fixed view
 body cap are documented in [read selection](docs/read-parity.md).
+
+`snippet list` and `snippet view` provide bounded GitLab-native gist-read
+equivalents, not GitHub visibility aliases. Both require `--scope personal|project`;
+project scope also requires explicit `-R namespace/project`. Every read verifies
+the current official-glab identity, with no anonymous fallback. Personal lists
+contain only that user's personal snippets; personal view accepts any personal
+snippet visible to that identity. Project reads bind numeric project identity,
+exact path, snippet ID, owner metadata and selected-host URLs.
+
+```sh
+gl-axi snippet list --scope personal --visibility private --fields created_at,updated_at
+gl-axi snippet view 42 --scope project -R group/project --files
+gl-axi snippet view 42 --scope personal --filename notes.md --content-limit 32768
+```
+
+Visibility is exactly `public|internal|private`, filtered locally over at most
+ten provider pages. Private personal snippets are creator-only; private project
+snippets are member-visible. Neither means GitHub secret or unlisted. Completeness
+is scoped to the selection, separate from field truncation. Default view returns
+metadata/file names, not every file's contents. `--filename` selects one exact
+inventory path at its reported root ref, builds a fixed API route instead of
+following a returned URL, and rechecks metadata afterward. This detects drift,
+not an atomic immutable-content snapshot. Selectors accept canonical positive
+IDs or selected-host `/-/snippets/ID` URLs, prefixed by the project for project scope.
+
+Content defaults to 32768 UTF-8 bytes, with an adjustable 0..131072-byte bound.
+Binary or unavailable content fails. File paths containing traversal, controls,
+backslashes, `%`, `?`, or `#` are unsupported. Additive `--fields` accepts only
+`description,created_at,updated_at`; identity, visibility, owner and URL always
+remain. Responses are bounded to 2 MiB each, 8 MiB cumulatively and 8 MiB encoded
+output, within 30 seconds. Comment counts, arbitrary-owner listing, all-file
+content, raw/unlimited output and clone are not provided. These read commands
+add no writes; existing guarded native deletion remains a separate contract.
+See the [pinned snippet contract](contracts/official-glab/v1.112.0/snippet-reads.json).
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note

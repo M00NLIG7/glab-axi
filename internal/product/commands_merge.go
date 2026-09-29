@@ -90,6 +90,9 @@ func (b *mergeReadBudget) add(body []byte) error {
 // validateParsedCommand keeps guarded-write identity and policy denials ahead
 // of target discovery, credential resolution, executable lookup, and child work.
 func validateParsedCommand(parsed Parsed) error {
+	if path := strings.Join(parsed.Definition.Path, " "); path == "snippet list" || path == "snippet view" {
+		return validateSnippetParsed(parsed)
+	}
 	path := strings.Join(parsed.Definition.Path, " ")
 	if path == "issue list" || path == "issue view" || path == "mr list" || path == "mr view" {
 		return validateReadParsed(parsed)
