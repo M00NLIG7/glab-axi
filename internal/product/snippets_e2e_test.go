@@ -364,7 +364,13 @@ func snippetOfficialTLS(t *testing.T, official, program string) {
 	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env := []string{"HOME=" + dir, "GLAB_CONFIG_DIR=" + configDir, "PATH=" + dir + ":/usr/bin:/bin", "GITLAB_TOKEN=" + secret, "SSL_CERT_FILE=" + cert, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY="}
+	// Preserve the caller-selected Git executable: /usr/bin/git on macOS is
+	// a launcher that can block on Xcode checks under an isolated HOME.
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"HOME=" + dir, "GLAB_CONFIG_DIR=" + configDir, "PATH=" + dir + ":" + filepath.Dir(gitPath) + ":/usr/bin:/bin", "GITLAB_TOKEN=" + secret, "SSL_CERT_FILE=" + cert, "HTTPS_PROXY=" + proxy.URL, "NO_PROXY="}
 	type testCase struct {
 		name    string
 		args    []string
@@ -467,13 +473,33 @@ func snippetOfficialTLS(t *testing.T, official, program string) {
 			}
 			mu.Lock()
 			count := len(requests)
+			t.Logf("CLI %s %q exit=%v\n%s\nGET requests: %q", program, args, runErr, out.String(), requests)
 			bad := unsafeRequest
 			mu.Unlock()
 			if bad {
 				t.Fatal("unsafe protocol request")
 			}
+			if !strings.HasPrefix(test.name, "invalid-") && (count == 0 || e.Meta.UpstreamVersion != "1.112.0") {
+				t.Fatalf("scenario did not reach the pinned provider: requests=%d result=%+v", count, e)
+			}
 			if strings.HasPrefix(test.name, "invalid-") && count != 0 {
 				t.Fatalf("invalid input sent %d requests", count)
+			}
+			if test.failure && !strings.HasPrefix(test.name, "invalid-") {
+				wantCode := uxv1.CodeUpstream
+				switch {
+				case strings.HasPrefix(test.name, "wrong-"):
+					wantCode = uxv1.CodeSafety
+				case test.name == "unauthenticated":
+					wantCode = uxv1.CodeAuthentication
+				case test.name == "missing-file", test.name == "missing-content":
+					wantCode = uxv1.CodeNotFound
+				case test.name == "unavailable":
+					wantCode = uxv1.CodeUnsupported
+				}
+				if e.Error == nil || e.Error.Code != wantCode {
+					t.Fatalf("wrong failure: got %+v want %s", e.Error, wantCode)
+				}
 			}
 			if test.name == "unauthenticated" && count != 1 {
 				t.Fatal("anonymous fallback")
