@@ -353,12 +353,12 @@ pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 | project | 1,024 bytes / 32 segments |
 | branch | 1,024 bytes |
 | title | 1,024 bytes |
-| requested label name / changes | 1,024 bytes / 100 |
-| exact issue labels / label catalog | 1,000 / 10 pages |
+| issue-edit requested label name / changes | 1,024 bytes / 100 |
+| issue-edit exact labels / label catalog | 1,000 / 10 pages |
 | description / individual discussion body | 128 KiB |
 | all discussion bodies / nested notes | 2 MiB / 1,000 notes |
 | JSON page | 2 MiB |
-| shared operation/output ceiling (command-specific budgets may be lower) | 8 MiB |
+| serialized envelope before framing newline (command-specific budgets may be lower) | 8 MiB |
 | interactive official login output | 8 MiB (relayed, not retained) |
 | official data-command child stderr | 4 KiB (never rendered raw) |
 | issue edit | [consumer-contract phase and response bounds](../contracts/issue-edit/v2.json) |
@@ -370,6 +370,15 @@ pinned in the [CI read contract](../contracts/read-parity/ci-reads.json).
 | product diff | 1 MiB |
 | release executable/custody | 128 MiB |
 | setup/config/manifest | 1 MiB |
+
+The serialized-output ceiling is not a cumulative provider-download limit;
+command-specific contracts own aggregate request budgets. Issue/MR list reads
+can consume several individually bounded pages whose total exceeds that ceiling.
+Product envelopes are fully serialized before any stdout write. An oversized
+success is replaced by a bounded `upstream_error` envelope without data, with
+`meta.complete=false`, `meta.truncated=true`, and reason `operation_limit`.
+An actual writer failure returns exit 8 with one bounded stderr diagnostic;
+it never appends a second envelope to partial output.
 
 A limit overflow is an error unless a product display/field/trace/diff contract
 explicitly returns bounded content with `complete:false` or `truncated:true`.

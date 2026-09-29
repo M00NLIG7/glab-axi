@@ -21,20 +21,10 @@ func TestIssueEditNativeExecutableAliasesEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("child-denial sentinel uses a POSIX shell")
 	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	validateCLI := issueEditCLIValidator(t)
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binDir := t.TempDir()
-			binary := filepath.Join(binDir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v: %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			for _, mode := range []string{"success", "description", "clear description", "combined", "nested distinct", "nested conflict", "nested replacement", "quick action", "public title file", "noop", "preview", "stale", "drift", "label reused", "wrong target", "wrong issue", "ID drift", "alternate ID", "lost", "server failure", "malformed", "unapplied", "wrong response", "partial wrong identity", "duplicate response", "read failure", "redirect"} {
 				t.Run(mode, func(t *testing.T) {
 					f := newIssueEditNativeFixture(t)

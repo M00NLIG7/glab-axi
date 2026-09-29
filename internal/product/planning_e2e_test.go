@@ -52,19 +52,10 @@ func TestPlanningExecutableAliasesEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX process fixture")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := filepath.Join(dir, program)
-			build := exec.Command("go", "build", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if body, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, body)
-			}
+			binary := productTestExecutable(t, program, false)
 			fakePlanningProcess(t, dir)
 			fixture, record := filepath.Join(dir, "response"), filepath.Join(dir, "record")
 			secret := strings.Join([]string{"synthetic", "planning", "credential"}, "-")

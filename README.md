@@ -79,6 +79,8 @@ local and does not probe authentication or execute official `glab`. See the
 [generated command reference](docs/command-reference.md). Repository discovery
 selectors, search scopes, and remaining parity limitations are documented in the
 [discovery and search contract](contracts/discovery-search/README.md).
+Issue/MR typed list filters, additive description selection, and the fixed view
+body cap are documented in [read selection](docs/read-parity.md).
 
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note

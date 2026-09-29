@@ -21,20 +21,7 @@ import (
 
 func stackBinary(t *testing.T, name string) string {
 	t.Helper()
-	root, e := filepath.Abs("../..")
-	if e != nil {
-		t.Fatal(e)
-	}
-	path := filepath.Join(t.TempDir(), name)
-	if runtime.GOOS == "windows" {
-		path += ".exe"
-	}
-	cmd := exec.Command("go", "build", "-o", path, "./cmd/"+name)
-	cmd.Dir = root
-	if out, e := cmd.CombinedOutput(); e != nil {
-		t.Fatalf("build %v %s", e, out)
-	}
-	return path
+	return productTestExecutable(t, name, false)
 }
 func stackExec(t *testing.T, binary, dir string, env []string, args ...string) stackEnvelope {
 	t.Helper()

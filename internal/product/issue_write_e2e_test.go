@@ -29,12 +29,7 @@ func TestIssueWritesNativeContractExecutableAliases(t *testing.T) {
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := filepath.Join(dir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			sentinel := filepath.Join(dir, "child-invoked")
 			if err := os.WriteFile(filepath.Join(dir, "glab"), []byte("#!/bin/sh\nprintf invoked > \"$ISSUE_NATIVE_CHILD_SENTINEL\"\nexit 91\n"), 0700); err != nil {
 				t.Fatal(err)

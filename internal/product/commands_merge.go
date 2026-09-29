@@ -91,6 +91,9 @@ func (b *mergeReadBudget) add(body []byte) error {
 // of target discovery, credential resolution, executable lookup, and child work.
 func validateParsedCommand(parsed Parsed) error {
 	path := strings.Join(parsed.Definition.Path, " ")
+	if path == "issue list" || path == "issue view" || path == "mr list" || path == "mr view" {
+		return validateReadParsed(parsed)
+	}
 	if isStack(parsed) {
 		return validateStackParsed(parsed)
 	}

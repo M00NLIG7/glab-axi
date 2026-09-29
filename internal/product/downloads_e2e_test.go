@@ -316,21 +316,9 @@ func assertDownloadCleanup(t *testing.T, f *downloadCLIFixture) {
 }
 
 func TestDownloadExecutableAliasesEndToEnd(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := filepath.Join(t.TempDir(), program)
-			if runtime.GOOS == "windows" {
-				binary += ".exe"
-			}
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if out, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, out)
-			}
+			binary := productTestExecutable(t, program, true)
 			t.Run("publication", func(t *testing.T) {
 				testDownloadExecutablePublication(t, binary, newDownloadCLIFixture)
 			})

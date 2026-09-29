@@ -78,6 +78,7 @@ type Request struct {
 	Source                      string
 	Target                      string
 	InputFile                   string
+	Filters                     ListFilters
 	Group                       string
 	ListID                      int64
 	Cursor                      string
@@ -151,6 +152,13 @@ func build(request Request) (invocation, error) {
 				return invocation{}, err
 			}
 			base = append(base, request.PipelineFilters.args()...)
+		}
+		if request.Operation == OpIssueList || request.Operation == OpMRList {
+			filters, err := request.Filters.argv(request.Operation)
+			if err != nil {
+				return invocation{}, err
+			}
+			base = append(base, filters...)
 		}
 		base = append(base, page...)
 		base = append(base, repoArgs()...)

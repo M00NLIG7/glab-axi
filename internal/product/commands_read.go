@@ -120,7 +120,12 @@ func executeIssueView(ctx context.Context, client delegateClient, target Target,
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	issue, truncated, err := normalizeIssueObject(response.Body, target.Host, target.Repo)
+	selection, _ := parseReadSelection(parsed) // validated before target discovery
+	var source upstreamIssue
+	if err := decodeStrict(response.Body, &source); err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	issue, truncated, err := selection.issue(source, target, iid)
 	meta.Truncated, meta.Complete = truncated, true
 	if truncated {
 		meta.Reason = "field_limit"
@@ -138,7 +143,12 @@ func executeMRView(ctx context.Context, client delegateClient, target Target, pa
 	if err != nil {
 		return commandOutput{meta: meta}, err
 	}
-	mr, truncated, err := normalizeMRObject(response.Body, target.Host, target.Repo)
+	selection, _ := parseReadSelection(parsed)
+	var source upstreamMR
+	if err := decodeStrict(response.Body, &source); err != nil {
+		return commandOutput{meta: meta}, err
+	}
+	mr, truncated, err := selection.mr(source, target, iid, glab.ListFilters{})
 	meta.Truncated, meta.Complete = truncated, true
 	if truncated {
 		meta.Reason = "field_limit"

@@ -19,20 +19,11 @@ func TestIssueEditExecutableAliasesEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process fixture uses a POSIX shell")
 	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	validateCLI := issueEditCLIValidator(t)
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			binDir := t.TempDir()
-			binary := filepath.Join(binDir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v: %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			if err := os.WriteFile(filepath.Join(binDir, "glab"), []byte(issueEditProcessFixture), 0o700); err != nil {
 				t.Fatal(err)
 			}
