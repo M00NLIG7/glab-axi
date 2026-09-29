@@ -11,6 +11,7 @@ Two deliberately separate backends share one executable:
   reads, issue-edit validation, two MR write contracts,
   [opted-in board issue enumeration](#gitlab-native-planning), and human login
   to **official `glab` 1.112.0 (`816e3a52`)** by default. Downloads, best-effort issue edits, typed issue writes,
+  [ordinary MR writes and creation metadata](contracts/mr-writes/),
   [guarded project CI variables](docs/ci-variables.md), and
   [guarded resource deletion](#guarded-native-resource-deletion) use
   [explicit native authentication](docs/authentication.md#explicit-product-native-operations)
@@ -44,6 +45,8 @@ gl-axi issue edit IID --auth-source native ... --expected-url URL --expected-sta
 gl-axi mr list|view|checks|diff|discussions
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
+gl-axi mr comment|note IID ... --auth-source native  # ordinary note from a private body file
+gl-axi mr close|reopen IID ... --auth-source native  # already-target-state observations only
 gl-axi mr merge IID ... --squash     # guarded exact-head write
 gl-axi stack view|init|link|checkout|up|down|top|bottom|trunk  # explicit local chain, no remote publication
 gl-axi pipeline list|view|watch

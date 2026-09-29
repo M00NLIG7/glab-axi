@@ -168,13 +168,10 @@ undo side effects or prove absence of concurrency. Success receipts say
 `observed_applied`, not exclusive attribution, and every receipt discloses the
 race. This is not atomic compare-and-swap or general issue mutation authority.
 
-Default MR ensure permits only title/description on one exact open same-project
-source/target pair. Explicit native selection additionally supports creation-only
-numeric assignee/reviewer/milestone IDs and a draft title. Existing matches must
-already have the selected metadata and exact content; selection never replaces
-existing collections. Private native content rejects quick actions and normalizes
-provider-trimmed whitespace. The complete operation uses the landed native client,
-with no official-profile fallback or account-equivalence claim. It uses validated project identity, all-page lookup,
+The [MR write contract](../contracts/mr-writes/README.md) owns native ensure's
+creation-only selectors, existing-match restrictions and input normalization;
+selecting native authentication alone does not make ensure creation-only.
+MR ensure uses validated project identity, all-page lookup,
 duplicate denial, a second GET before POST, private mode-0600 JSON, one POST or
 PUT maximum, response validation, and at most one bounded read-only
 reconciliation after an unvalidated write. Create reconciliation repeats the

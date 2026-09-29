@@ -298,7 +298,9 @@ lifetime. Fixed reads need no pagination. The shared native client owns both the
 
 Product `mr ensure` / `mr create-or-update` uses official authentication by
 default or the existing native client under explicit `--auth-source native`.
-Both reuse the ensure algorithm:
+Without creation metadata selectors, both reuse the title/description ensure
+algorithm below. Selector-specific restrictions are owned by the
+[MR write contract](../contracts/mr-writes/README.md).
 
 1. fetch and validate exact project identity;
 2. perform bounded all-page lookup by open source/target branch;
