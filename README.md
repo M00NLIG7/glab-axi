@@ -38,10 +38,10 @@ gl-axi                               # current-project dashboard
 gl-axi auth login [--hostname H]    # human TTY only
 gl-axi auth status [--hostname H]
 
-gl-axi issue list|view
+gl-axi issue list|view|discussions
 gl-axi issue create|comment|note|close|reopen ... --auth-source native  # explicit identity and private content
 gl-axi issue edit IID --auth-source native ... --expected-url URL --expected-state STATE --expected-updated-at TIMESTAMP  # best-effort edit; --dry-run previews
-gl-axi mr list|view|checks|diff|discussions
+gl-axi mr list|view|checks|diff|discussions|approvals
 gl-axi mr ensure                     # bounded create/update write
 gl-axi mr create-or-update           # same ensure semantics
 gl-axi mr merge IID ... --squash     # guarded exact-head write
