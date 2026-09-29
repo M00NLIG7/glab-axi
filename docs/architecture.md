@@ -296,8 +296,9 @@ lifetime. Fixed reads need no pagination. The shared native client owns both the
 
 ## MR ensure: bounded create/update write
 
-Product `mr ensure` / `mr create-or-update` uses official authentication but
-preserves native ensure semantics:
+Product `mr ensure` / `mr create-or-update` uses official authentication by
+default or the existing native client under explicit `--auth-source native`.
+Both reuse the ensure algorithm:
 
 1. fetch and validate exact project identity;
 2. perform bounded all-page lookup by open source/target branch;
@@ -320,6 +321,28 @@ through the bounded exact-branch lookup; after a verified empty result,
 recognized HTTP rejections retain only their bounded status category.
 Transport, overflow, timeout, incomplete identity, drift, and malformed or
 otherwise unverifiable results remain ambiguous.
+
+Native-only creation selectors add numeric assignees/reviewers/milestone and
+`--draft` without replacing existing metadata. Selected existing matches must
+already preserve the full selected metadata and exact content, including when
+a competing creator wins the branch-pair recheck. Native input normalization
+accounts for provider title/description whitespace processing without changing
+delegated input semantics. The route adapter reuses the landed native client and
+MR identity normalizer; it adds no credential path or fallback.
+
+## Ordinary MR notes and lifecycle observations
+
+`commands_mr_write.go` reuses the shipped discussion identity and note validators.
+`mr_native.go` maps a closed operation set to the landed native transport. Its
+first project lookup latches the validated numeric ID for all subsequent resource
+routes; it never reselects a project by a mutable path before a write. Notes
+perform project/MR preflight, adjacent MR recheck, one POST, bound MR readback and
+exact returned note-ID readback. Lost IDs stay ambiguous; there is no note search.
+The parser reads private content before credentials or child/network work and
+refuses quick-action-shaped or emoji-only bodies. MR close/reopen only return
+already-target-state no-ops or zero-mutation refusals. Ready, exact-IID rich edit
+and label assignment remain pending. `contracts/mr-writes/v1.json` owns the
+consumer surface and `mr_write_schema.go` generates its two schemas.
 
 ## Guarded MR merge: immediate squash write
 

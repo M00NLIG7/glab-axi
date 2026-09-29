@@ -251,9 +251,28 @@ self-managed mapping remains unproven. See
 [`contracts/issue-writes`](contracts/issue-writes/) and the
 [temporary parity gaps](contracts/issue-writes/review-blockers.md).
 
+Ordinary `mr comment` (`note` alias) uses explicit `--auth-source native`,
+caller-bound project/IID/URL, branches, head and state, and a private prose file.
+One POST is followed by exact returned note-ID readback. A lost ID remains
+ambiguous; latest-note or body matching never establishes success. Notes are not
+approvals or GitHub reviews. Quick actions and emoji-only bodies are refused.
+`mr close`/`mr reopen` only observe already-target-state no-ops; actual transitions
+are temporarily refused before mutation to avoid collateral description and
+deployment effects.
+
+Native `mr ensure` also supports creation-only numeric `--assignee-id`,
+`--reviewer-id` (at most 20 unique IDs each), `--milestone-id`, and `--draft`.
+Selected metadata and content must already match an existing MR; these selectors
+never replace existing collections. Native titles/descriptions account for pinned
+provider whitespace normalization. Native and official profiles may be different
+accounts; there is no fallback or credential export. See
+[`contracts/mr-writes`](contracts/mr-writes/) for receipts, bounded synthetic TLS
+evidence and the remaining ready, exact-IID rich edit and label-assignment gaps.
+This increment does not establish full MR parity or live acceptance.
+
 The denial boundary includes generic API, issue mutation outside the declared contracts,
-unguarded or alternate merge, approve, MR comment/note/reply/resolve/close/reopen,
-merge-request and label-resource mutation, MR delete, repository writes,
+unguarded or alternate merge, approve, MR reply/resolve, ready and existing-MR rich
+metadata edits, label-resource mutation, MR delete, repository writes,
 and other release/pipeline/job writes. `issue edit --dry-run` is validation-only and changes no
 labels or issue fields.
 

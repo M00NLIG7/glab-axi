@@ -168,8 +168,13 @@ undo side effects or prove absence of concurrency. Success receipts say
 `observed_applied`, not exclusive attribution, and every receipt discloses the
 race. This is not atomic compare-and-swap or general issue mutation authority.
 
-MR ensure permits only title/description on one exact open same-project
-source/target pair. It uses validated project identity, all-page lookup,
+Default MR ensure permits only title/description on one exact open same-project
+source/target pair. Explicit native selection additionally supports creation-only
+numeric assignee/reviewer/milestone IDs and a draft title. Existing matches must
+already have the selected metadata and exact content; selection never replaces
+existing collections. Private native content rejects quick actions and normalizes
+provider-trimmed whitespace. The complete operation uses the landed native client,
+with no official-profile fallback or account-equivalence claim. It uses validated project identity, all-page lookup,
 duplicate denial, a second GET before POST, private mode-0600 JSON, one POST or
 PUT maximum, response validation, and at most one bounded read-only
 reconciliation after an unvalidated write. Create reconciliation repeats the
@@ -207,11 +212,31 @@ additionally requires:
   `ambiguous_merge` prevents a blind retry.
 
 Generic API, issue mutation outside the declared contracts, alternate/unguarded merge,
-approval, MR comment/note/reply/resolve/close/reopen, merge-request or label-resource
-mutation, MR delete, repository mutation, and other release/pipeline/job writes
+approval, MR reply/resolve, ready and existing-MR rich metadata replacement,
+label-resource mutation, MR delete, repository mutation, and other release/pipeline/job writes
 remain denied. Issue-edit preview
 changes no issue field or label. The exact native
 deletion exception below grants no broader write authority.
+
+## Ordinary MR notes and lifecycle observations
+
+Explicit native note creation requires exact project/MR identity, caller-bound
+URL, branches, head and state, and two matching preflight snapshots. The native
+adapter binds every resource read/write to the validated numeric project ID,
+not a path that could be reassigned after preflight. One private
+prose body is posted once; success requires this response's attributable ordinary
+note ID and exact-ID readback, never latest-note/body matching. Notes are not
+approvals, inline reviews, reactions or quick actions. Receipts omit body content
+and disclose `provider_revision_enforced:false`. A lost ID or drift remains
+ambiguous without retry. Preflight/mutation/readback budgets are 20/15/10 seconds
+inside the 45-second caller-bound lifetime; responses remain under native aggregate
+and per-page byte limits.
+
+MR close/reopen return a read-only no-op only for an already-target state.
+Transitions refuse before mutation because pinned provider updates can change
+stored descriptions and close can affect deployments. Ready, existing-MR rich
+metadata edits and label assignment remain explicit gaps rather than broader
+authority inferred from native transport. See `contracts/mr-writes/README.md`.
 
 ## Guarded native resource deletion
 

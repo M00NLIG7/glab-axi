@@ -1,0 +1,517 @@
+package product
+
+// Feature integration exercises the landed native boundary through Run, never
+// a competing test transport or official-profile fallback.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+
+	"gl-axi/internal/auth"
+	"gl-axi/internal/config"
+	"gl-axi/internal/contract/uxv1"
+	"gl-axi/internal/limits"
+	runtimepkg "gl-axi/internal/runtime"
+	"gl-axi/internal/testgitlab"
+)
+
+const mrNativeWebBase = "https://review.example.invalid/gitlab"
+const mrNativeProjectLookupPath = "/gitlab/api/v4/projects/group%2Fproject"
+const mrNativeAPIPath = "/gitlab/api/v4/projects/101"
+
+// Test-only in-memory credentials. No system keyring/profile is ever consulted.
+type mrNativeKeyring struct {
+	token  string
+	err    error
+	gets   int
+	writes int
+}
+
+func (k *mrNativeKeyring) Get(context.Context, string, string) (string, error) {
+	k.gets++
+	if k.gets > 1 {
+		return "", errors.New("credential was resolved more than once")
+	}
+	return k.token, k.err
+}
+func (k *mrNativeKeyring) Set(context.Context, string, string, string) error {
+	k.writes++
+	return errors.New("test keyring is read-only")
+}
+func (k *mrNativeKeyring) Delete(context.Context, string, string) error {
+	k.writes++
+	return errors.New("test keyring is read-only")
+}
+
+type mrNativeFixture struct {
+	t              *testing.T
+	server         *testgitlab.Server
+	keyring        *mrNativeKeyring
+	deps           Dependencies
+	stdout, stderr bytes.Buffer
+	mu             sync.Mutex
+	state          string
+	writes         int
+	reads          int
+	noteBody       string
+	storedNoteBody string
+	mutate         func(http.ResponseWriter, *http.Request) bool
+	ensure         bool
+	ensureRecord   upstreamMR
+}
+
+func newMRNativeFixture(t *testing.T, state string) *mrNativeFixture {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows persisted-native-config and self-managed mapping remain unproven")
+	}
+	f := &mrNativeFixture{t: t, state: state, noteBody: "A synthetic ordinary note.\n"}
+	f.keyring = &mrNativeKeyring{token: strings.Join([]string{"synthetic", "native", "mr", "sentinel"}, "-")}
+	f.server = testgitlab.New(http.HandlerFunc(f.serve))
+	t.Cleanup(f.server.Close)
+	dir := t.TempDir()
+	ca, err := f.server.CAFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.New()
+	if err := cfg.Put(mrWriteTestHost, config.Host{GitHosts: []string{mrWriteTestHost}, APIBase: f.server.HTTP.URL + "/gitlab/api/v4", WebBase: mrNativeWebBase, CABundle: ca, ProxyDisabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "config.json")
+	encoded, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	f.deps = Dependencies{Runtime: runtimepkg.Dependencies{
+		Stdin: strings.NewReader(""), Stdout: &f.stdout, Stderr: &f.stderr, Cwd: dir, ConfigPath: configPath,
+		Keyring: f.keyring, LookupEnv: func(string) (string, bool) { return "", false }, HTTPClient: f.server.HTTP.Client(),
+	}, NewDelegate: func() delegateClient {
+		t.Fatal("native MR operation constructed an official-profile delegate")
+		return nil
+	}}
+	return f
+}
+
+// Configure publishes setup to the already-running HTTP server under the same
+// mutex used by serve. Starting an external CLI is not a Go happens-before edge.
+func (f *mrNativeFixture) configure(setup func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	setup()
+}
+
+func (f *mrNativeFixture) mr() map[string]any {
+	record := mrWriteRecord(f.state)
+	record["web_url"] = mrNativeWebBase + "/group/project/-/merge_requests/42"
+	// Real REST shape: base/head diff references are nested, not fabricated
+	// canonical top-level base_sha from a fake official-client response.
+	delete(record, "base_sha")
+	record["diff_refs"] = map[string]any{"base_sha": strings.Repeat("b", 40), "head_sha": mergeTestHead, "start_sha": strings.Repeat("c", 40)}
+	return record
+}
+
+func (f *mrNativeFixture) serve(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if r.Header.Get("PRIVATE-TOKEN") != f.keyring.token {
+		f.t.Error("native operation changed/missed its selected credential")
+	}
+	w.Header().Set("Content-Type", "application/json")
+	path := r.URL.EscapedPath()
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		f.writes++
+	}
+	if f.mutate != nil && f.mutate(w, r) {
+		return
+	}
+	switch {
+	case r.Method == http.MethodGet && path == mrNativeProjectLookupPath:
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 101, "path_with_namespace": "group/project", "web_url": mrNativeWebBase + "/group/project"})
+	case r.Method == http.MethodGet && path == mrNativeAPIPath+"/merge_requests/42":
+		f.reads++
+		_ = json.NewEncoder(w).Encode(f.mr())
+	case r.Method == http.MethodPut && path == mrNativeAPIPath+"/merge_requests/42":
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload) != 1 {
+			f.t.Error("invalid native state body")
+			w.WriteHeader(400)
+			return
+		}
+		switch payload["state_event"] {
+		case "close":
+			f.state = "closed"
+		case "reopen":
+			f.state = "opened"
+		default:
+			f.t.Error("native state body broadened authority")
+		}
+		_ = json.NewEncoder(w).Encode(f.mr())
+	case r.Method == http.MethodPost && path == mrNativeAPIPath+"/merge_requests/42/notes":
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload) != 1 || payload["body"] == "" {
+			f.t.Error("invalid native note body")
+			w.WriteHeader(400)
+			return
+		}
+		f.storedNoteBody = strings.TrimRight(payload["body"], "\x00\t\n\v\f\r ")
+		_ = json.NewEncoder(w).Encode(mrWriteNote(f.storedNoteBody))
+	case r.Method == http.MethodGet && path == mrNativeAPIPath+"/merge_requests/42/notes/501":
+		_ = json.NewEncoder(w).Encode(mrWriteNote(f.storedNoteBody))
+	case f.ensure && r.Method == http.MethodGet && path == mrNativeAPIPath+"/merge_requests":
+		if r.URL.Query().Get("source_branch") != "feature" || r.URL.Query().Get("target_branch") != "main" || r.URL.Query().Get("state") != "opened" {
+			f.t.Error("native ensure lost its exact branch/state selectors")
+		}
+		_, _ = io.WriteString(w, "[]")
+	case f.ensure && r.Method == http.MethodPost && path == mrNativeAPIPath+"/merge_requests":
+		_ = json.NewEncoder(w).Encode(f.ensureRecord)
+	default:
+		f.t.Errorf("unexpected typed native MR request: %s %s", r.Method, r.URL.EscapedPath())
+		w.WriteHeader(500)
+	}
+}
+
+func (f *mrNativeFixture) args(action string) []string {
+	f.t.Helper()
+	args := replaceArg(mrWriteArgs(action, f.state), mrWriteTestURL, mrNativeWebBase+"/group/project/-/merge_requests/42")
+	args = append(args, "--auth-source", "native")
+	if action == "note" || action == "comment" {
+		path := filepath.Join(f.t.TempDir(), "body")
+		if err := os.WriteFile(path, []byte(f.noteBody), 0600); err != nil {
+			f.t.Fatal(err)
+		}
+		args = append(args, "--body-file", path)
+	}
+	return args
+}
+
+func (f *mrNativeFixture) checkNoCredentialOutput(t *testing.T) {
+	t.Helper()
+	if strings.Contains(f.stdout.String(), f.keyring.token) || strings.Contains(f.stderr.String(), f.keyring.token) {
+		t.Fatal("native credential escaped into output")
+	}
+	if f.keyring.gets != 1 || f.keyring.writes != 0 {
+		t.Fatalf("keyring reads=%d mutations=%d, want one read only", f.keyring.gets, f.keyring.writes)
+	}
+	if strings.Contains(f.stdout.String(), `"backend":"official-glab"`) || strings.Contains(f.stdout.String(), "upstream_version") {
+		t.Fatal("native operation claimed an official profile/version")
+	}
+}
+
+func TestMRNativeFullSequenceIdentityAndConfiguredAuthority(t *testing.T) {
+	for _, tc := range []struct {
+		action, state, outcome string
+		writes                 int
+	}{
+		{"comment", "opened", "created", 1}, {"note", "closed", "created", 1},
+		{"close", "opened", "refused", 0}, {"reopen", "closed", "refused", 0},
+		{"close", "closed", "unchanged", 0}, {"reopen", "opened", "unchanged", 0},
+	} {
+		t.Run(tc.action+"-"+tc.state, func(t *testing.T) {
+			f := newMRNativeFixture(t, tc.state)
+			wantCode := 0
+			if tc.outcome == "refused" {
+				wantCode = 2
+			}
+			if code := Run(context.Background(), f.args(tc.action), f.deps); code != wantCode {
+				t.Fatalf("exit=%d want=%d output=%s", code, wantCode, f.stdout.String())
+			}
+			if !strings.Contains(f.stdout.String(), `"backend":"native"`) || !strings.Contains(f.stdout.String(), `"outcome":"`+tc.outcome+`"`) {
+				t.Fatalf("untruthful native receipt: %s", f.stdout.String())
+			}
+			f.checkNoCredentialOutput(t)
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.writes != tc.writes {
+				t.Fatalf("mutations=%d want=%d", f.writes, tc.writes)
+			}
+		})
+	}
+}
+
+func TestMRNativeNoteCanonicalBody(t *testing.T) {
+	for _, action := range []string{"comment", "note"} {
+		for _, tc := range []struct{ name, body, want string }{
+			{"unchanged", "Hello", "Hello"},
+			{"final newline", "Hello\n", "Hello"},
+			{"trailing whitespace", "Hello \t\n\n\t ", "Hello"},
+			{"leading and interior whitespace", "\n \tHello  \n\tworld\t \n", "\n \tHello  \n\tworld"},
+			{"Unicode whitespace", "Hello\u00a0\u2003 \t\n", "Hello\u00a0\u2003"},
+		} {
+			t.Run(action+"/"+tc.name, func(t *testing.T) {
+				f := newMRNativeFixture(t, "opened")
+				f.configure(func() { f.noteBody = tc.body })
+				if code := Run(context.Background(), f.args(action), f.deps); code != 0 {
+					t.Fatalf("exit=%d output=%s", code, f.stdout.String())
+				}
+				var envelope struct {
+					Data struct {
+						Write mrWriteReceipt `json:"write"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal(f.stdout.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				receipt := envelope.Data.Write
+				if receipt.Action != action || receipt.Outcome != "created" || receipt.Attempts != 1 || receipt.NoteID != 501 || receipt.NoteURL != mrNativeWebBase+"/group/project/-/merge_requests/42#note_501" {
+					t.Fatalf("invalid note receipt: %+v", receipt)
+				}
+				posts, readbacks := 0, 0
+				for _, request := range f.server.Requests() {
+					if request.Method == http.MethodPost {
+						posts++
+						var payload map[string]string
+						if err := json.Unmarshal(request.Body, &payload); err != nil {
+							t.Fatal(err)
+						}
+						if len(payload) != 1 || payload["body"] != tc.want {
+							t.Fatalf("posted body=%q want=%q", payload["body"], tc.want)
+						}
+					}
+					if request.Method == http.MethodGet && request.URL == mrNativeAPIPath+"/merge_requests/42/notes/501" {
+						readbacks++
+					}
+				}
+				if posts != 1 || readbacks != 1 {
+					t.Fatalf("note posts=%d readbacks=%d, want one each", posts, readbacks)
+				}
+				f.checkNoCredentialOutput(t)
+			})
+		}
+	}
+}
+
+func TestMRNativeRedirectsNeverTransmitASecondTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name, action, phase string
+		status              int
+		crossOrigin         bool
+		writes              int
+	}{
+		{"project read", "close", "project", 302, true, 0},
+		{"note write cross authority", "comment", "write", 302, true, 1},
+		{"note write cross path", "comment", "write", 307, false, 1},
+		{"note write 303 cross authority", "note", "write", 303, true, 1},
+		{"note write 308 cross path", "note", "write", 308, false, 1},
+		{"note readback", "comment", "note", 302, true, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMRNativeFixture(t, "opened")
+			other := testgitlab.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); _, _ = io.WriteString(w, `{}`) }))
+			defer other.Close()
+			location := f.server.HTTP.URL + "/gitlab/api/v4/unauthorized"
+			if tc.crossOrigin {
+				location = other.HTTP.URL + "/unauthorized"
+			}
+			f.configure(func() {
+				f.mutate = func(w http.ResponseWriter, r *http.Request) bool {
+					match := tc.phase == "project" && r.URL.EscapedPath() == mrNativeProjectLookupPath || tc.phase == "write" && r.Method != http.MethodGet || tc.phase == "note" && strings.HasSuffix(r.URL.Path, "/notes/501")
+					if !match {
+						return false
+					}
+					w.Header().Set("Location", location)
+					w.WriteHeader(tc.status)
+					return true
+				}
+			})
+			if code := Run(context.Background(), f.args(tc.action), f.deps); code == 0 {
+				t.Fatalf("redirect produced false success: %s", f.stdout.String())
+			}
+			f.checkNoCredentialOutput(t)
+			if len(other.Requests()) != 0 {
+				t.Fatal("cross-origin redirect transmitted a second request")
+			}
+			for _, request := range f.server.Requests() {
+				if strings.Contains(request.URL, "unauthorized") {
+					t.Fatal("same-origin cross-path redirect was followed")
+				}
+			}
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.writes != tc.writes {
+				t.Fatalf("mutation attempts=%d want=%d", f.writes, tc.writes)
+			}
+			if strings.Contains(f.stdout.String(), location) {
+				t.Fatal("unsafe Location escaped into bounded output")
+			}
+		})
+	}
+}
+
+func TestMRNativeLostMutationResponseNeverBlindRetries(t *testing.T) {
+	for _, action := range []string{"comment", "note"} {
+		t.Run(action, func(t *testing.T) {
+			f := newMRNativeFixture(t, "opened")
+			f.configure(func() {
+				f.mutate = func(w http.ResponseWriter, r *http.Request) bool {
+					if r.Method == http.MethodGet {
+						return false
+					}
+					connection, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Error(err)
+						return true
+					}
+					_ = connection.Close()
+					return true
+				}
+			})
+			code := Run(context.Background(), f.args(action), f.deps)
+			if code != 6 || !strings.Contains(f.stdout.String(), string(uxv1.CodeAmbiguousCreate)) {
+				t.Fatalf("lost note ID was guessed: exit=%d output=%s", code, f.stdout.String())
+			}
+			f.checkNoCredentialOutput(t)
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.writes != 1 {
+				t.Fatalf("mutation attempts=%d want=1", f.writes)
+			}
+		})
+	}
+}
+
+func TestMRNativeUnavailableNeverFallsBack(t *testing.T) {
+	f := newMRNativeFixture(t, "opened")
+	f.keyring.err = auth.ErrKeyringUnavailable
+	if code := Run(context.Background(), f.args("close"), f.deps); code != 3 {
+		t.Fatalf("exit=%d output=%s", code, f.stdout.String())
+	}
+	if len(f.server.Requests()) != 0 {
+		t.Fatal("missing native credential performed provider work")
+	}
+	f.checkNoCredentialOutput(t)
+}
+
+func TestMRNativeCreationMetadataUsesOneNativeIdentity(t *testing.T) {
+	f := newMRNativeFixture(t, "opened")
+	f.configure(func() {
+		f.ensure = true
+		f.ensureRecord = ensureMR(11, "Draft: title", "body")
+		f.ensureRecord.WebURL = mrNativeWebBase + "/group/project/-/merge_requests/11"
+		f.ensureRecord.Draft = true
+		f.ensureRecord.Assignees = []mrMetadataIdentity{{ID: 7}}
+		f.ensureRecord.Reviewers = []mrMetadataIdentity{{ID: 8}}
+		f.ensureRecord.Milestone = &mrMetadataIdentity{ID: 9}
+		f.mutate = func(w http.ResponseWriter, r *http.Request) bool {
+			if r.Method != http.MethodPost {
+				return false
+			}
+			var input map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input) != 7 || input["title"] != "Draft: title" || input["milestone_id"] != float64(9) {
+				t.Error("native creation changed its typed metadata payload")
+			}
+			for _, field := range []struct {
+				key string
+				id  float64
+			}{{"assignee_ids", 7}, {"reviewer_ids", 8}} {
+				ids, ok := input[field.key].([]any)
+				if !ok || len(ids) != 1 || ids[0] != field.id {
+					t.Errorf("native creation did not preserve %s", field.key)
+				}
+			}
+			return false
+		}
+	})
+	args := replaceArg(ensureArgs(t, "title", "body"), "gitlab.com", mrWriteTestHost)
+	args = append(args, "--auth-source=native", "--assignee-id", "7", "--reviewer-id", "8", "--milestone-id", "9", "--draft")
+	if code := Run(context.Background(), args, f.deps); code != 0 {
+		t.Fatalf("exit=%d output=%s", code, f.stdout.String())
+	}
+	f.checkNoCredentialOutput(t)
+	if !strings.Contains(f.stdout.String(), `"backend":"native"`) || !strings.Contains(f.stdout.String(), `"action":"created"`) {
+		t.Fatalf("native ensure receipt=%s", f.stdout.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.writes != 1 {
+		t.Fatalf("native creation attempts=%d", f.writes)
+	}
+}
+
+func TestMRNativeEnsureDescriptionRefusalsBeforeDependencies(t *testing.T) {
+	for _, tc := range []struct{ name, description string }{
+		{"carriage return", "body\r\n"},
+		{"vertical tab", "body\v"},
+		{"form feed", "body\f"},
+		{"NUL", "body\x00"},
+		{"format character", "body\u200b \n"},
+		{"quick action", "body\n /merge \t\n"},
+		{"oversized trailing whitespace", "a" + strings.Repeat(" ", limits.MaxDescriptionBytes)},
+		{"invalid UTF-8", "body\xff"},
+		{"public file", "body\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMRNativeFixture(t, "opened")
+			args := replaceArg(ensureArgs(t, "title", tc.description), "gitlab.com", mrWriteTestHost)
+			args = append(args, "--auth-source", "native", "--draft")
+			if tc.name == "public file" {
+				for i, arg := range args {
+					if arg == "--description-file" {
+						if err := os.Chmod(args[i+1], 0644); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			if code := Run(context.Background(), args, f.deps); code == 0 {
+				t.Fatalf("invalid description accepted: %s", f.stdout.String())
+			}
+			if len(f.server.Requests()) != 0 || f.keyring.gets != 0 || f.keyring.writes != 0 {
+				t.Fatal("invalid description consulted native credentials or the provider")
+			}
+		})
+	}
+}
+
+func TestMRNativeCreationSelectorsRequireExplicitOptIn(t *testing.T) {
+	for _, flags := range [][]string{{"--draft"}, {"--assignee-id", "7"}, {"--reviewer-id", "8"}, {"--milestone-id", "9"}} {
+		var stdout bytes.Buffer
+		deps := Dependencies{Runtime: productRuntimeNoDiscovery(t, &stdout), NewDelegate: func() delegateClient { t.Fatal("creation metadata selected the official profile"); return nil }}
+		keyring := &mrNativeKeyring{}
+		deps.Runtime.Keyring = keyring
+		args := append(ensureArgs(t, "title", "body"), flags...)
+		if code := Run(context.Background(), args, deps); code != 2 {
+			t.Fatalf("missing native opt-in exit=%d output=%s", code, stdout.String())
+		}
+		if keyring.gets != 0 || keyring.writes != 0 {
+			t.Fatal("missing opt-in touched the keyring")
+		}
+	}
+}
+
+func TestMRNativeSelectorsRefuseBeforeAnyDependency(t *testing.T) {
+	base := append(mrWriteArgs("close", "opened"), "--auth-source", "native")
+	for _, args := range [][]string{
+		removeFlag(base, "--auth-source", true), replaceArg(base, "native", "official"), appendCopy(base, "--auth-source", "native"),
+		removeFlag(base, "--hostname", true), removeFlag(base, "--repo", true),
+		{"mr", "merge", "42", "--auth-source", "native"}, {"mr", "view", "42", "--auth-source", "native"},
+	} {
+		var stdout bytes.Buffer
+		deps := Dependencies{Runtime: productRuntimeNoDiscovery(t, &stdout), NewDelegate: func() delegateClient { t.Fatal("invalid native selector constructed a delegate"); return nil }}
+		deps.Runtime.LookupEnv = func(string) (string, bool) {
+			t.Fatal("invalid native selector consulted environment credentials")
+			return "", false
+		}
+		keyring := &mrNativeKeyring{}
+		deps.Runtime.Keyring = keyring
+		if code := Run(context.Background(), args, deps); code == 0 {
+			t.Fatalf("invalid native selector succeeded: %v", args)
+		}
+		if keyring.gets != 0 || keyring.writes != 0 {
+			t.Fatal("invalid native selector consulted keyring")
+		}
+	}
+}

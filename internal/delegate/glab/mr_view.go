@@ -18,6 +18,12 @@ import (
 // diff_refs, while fixed API reads may also carry canonical top-level fields.
 // Both forms remain accepted, but conflicting or malformed proofs fail closed.
 func normalizeMRViewResponse(body []byte) ([]byte, error) {
+	return NormalizeMRViewResponse(body)
+}
+
+// NormalizeMRViewResponse validates canonical/diff_refs identity from either
+// the pinned CLI or REST JSON. It performs no child, credential or HTTP work.
+func NormalizeMRViewResponse(body []byte) ([]byte, error) {
 	object, err := decodeUniqueJSONObject(body)
 	if err != nil {
 		return nil, err
