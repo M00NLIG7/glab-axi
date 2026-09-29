@@ -540,19 +540,10 @@ func TestNativeVariableCompiledAliasesTLS(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("private mutation ACL boundary remains unavailable")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, name := range []string{"gl-axi", "glab-axi"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := filepath.Join(dir, name)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+name)
-			build.Dir = root
-			if body, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, body)
-			}
+			binary := productTestExecutable(t, name, true)
 			// No official executable is on PATH. Native config contains only authority
 			// and the synthetic fixture CA; the credential is a runtime sentinel.
 			for _, tc := range []struct{ group, action, class string }{{"secret", "list", "hidden"}, {"variable", "list", "ordinary"}, {"secret", "set", "absent"}, {"secret", "set", "hidden"}, {"variable", "set", "ordinary"}, {"secret", "delete", "hidden"}, {"variable", "delete", "ordinary"}} {

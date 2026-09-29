@@ -22,18 +22,9 @@ func TestResourceDeletionExecutableAliasesEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("persisted native config/self-managed mapping on Windows remains unproven")
 	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			binary := filepath.Join(t.TempDir(), program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			cases := deletionCases()
 			for _, tag := range []struct{ name, value, api, web string }{
 				{"release-parentheses", "v1.0(legacy)", "v1.0%28legacy%29", "v1.0(legacy)"},

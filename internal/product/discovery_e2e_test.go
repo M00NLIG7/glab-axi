@@ -40,10 +40,6 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX protocol fixture")
 	}
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	const api = "api --method GET --hostname gitlab.com "
 	project := discoveryRepo("team/sub/project", "group")
 	group := map[string]any{"id": 17, "full_path": "team/sub", "web_url": "https://gitlab.com/groups/team/sub"}
@@ -407,13 +403,7 @@ func TestDiscoveryExecutableContracts(t *testing.T) {
 	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
-			dir := t.TempDir()
-			binary := filepath.Join(dir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			for _, test := range tests {
 				t.Run(test.name, func(t *testing.T) { runDiscoveryCase(t, binary, test) })
 			}

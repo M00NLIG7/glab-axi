@@ -55,6 +55,13 @@ pins four fixed reads and one fixed PUT; the PUT consumes only a private
 four-key JSON file, is invoked once, and is never delegated through interactive
 `glab mr merge` behavior.
 
+Issue/MR list filters are pinned in `capabilities.json` and the read-only consumer
+fixture under `contracts/read-parity/`. `TestPinnedOfficialGlabReadFiltersTLS`
+executes this exact official client against synthetic TLS: AND labels,
+author/assignee username-to-ID resolution, issue milestone and descending sort,
+MR branches, state and draft (`wip=yes`). Field selection is performed locally;
+no arbitrary fields or query expressions are passed to the provider.
+
 CI read parity is pinned separately in `contracts/read-parity/ci-reads.json`.
 `ci-list-source.go.txt` is the exact upstream `internal/commands/ci/list/list.go`
 from this release; it proves typed ref/status/source/username/SHA translation

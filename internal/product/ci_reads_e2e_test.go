@@ -17,19 +17,10 @@ func TestCIReadExecutableAliasesEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process fixture uses POSIX shell")
 	}
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, program := range []string{"gl-axi", "glab-axi"} {
 		t.Run(program, func(t *testing.T) {
 			dir := t.TempDir()
-			binary := filepath.Join(dir, program)
-			build := exec.Command("go", "build", "-trimpath", "-o", binary, "./cmd/"+program)
-			build.Dir = root
-			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v %s", err, output)
-			}
+			binary := productTestExecutable(t, program, true)
 			record := filepath.Join(dir, "record")
 			fake := `#!/bin/sh
 set -eu
