@@ -37,7 +37,11 @@ paginated discussion GET routes and exposes no note mutation. The source-project
 route accepts only the positive project ID returned by the bound MR. Each
 adapter constructs one listed argv, validates every substituted value, bounds
 child output, and normalizes it into a command-specific `glab-axi/ux-v1`
-schema. Issue editing delegates only its project, issue, and label-catalog GET
+schema. Collaboration reads additionally pin issue discussions and MR approval
+summary GETs; provider/consumer evidence and uncertainty semantics live in
+`contracts/collaboration-reads/v1.json` and its README. Assigned reviewers are
+not submitted reviews, and discussion notes are not approval votes.
+Issue editing delegates only its project, issue, and label-catalog GET
 routes. The pinned CLI follows 301/302/303 after PUT with an unapproved GET;
 `TestPinnedOfficialGlabIssueEditTLS` retains that negative evidence. No issue PUT
 is exposed by the official adapter. Explicit `--auth-source native` uses the

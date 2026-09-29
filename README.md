@@ -82,6 +82,15 @@ selectors, search scopes, and remaining parity limitations are documented in the
 Issue/MR typed list filters, additive description selection, and the fixed view
 body cap are documented in [read selection](docs/read-parity.md).
 
+Collaboration read equivalents also include `issue discussions <iid>` for
+comments/threaded notes and `mr approvals <iid>` for assigned reviewers and
+current GitLab approval state. They use separate closed schemas without changing
+default issue/MR views. Assigned reviewers and notes are not GitHub review
+submissions. Unknown/denied approval state never becomes approval or zero required
+approvals; edition/license remains unknown. See the
+[versioned collaboration contract](contracts/collaboration-reads/README.md) for
+bounds, identity rechecks, uncertainty and exact scope.
+
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note
 order is preserved. Each successful result binds the MR global ID and IID,
