@@ -19,11 +19,13 @@ Use `glab-axi` rather than official `glab` directly when operating as an agent. 
 - `glab-axi auth status [--hostname HOST]` - Check official-glab authentication without displaying a token.
 - `glab-axi issue list [filter/selection flags] [global flags]` - List project issues with typed filters and bounded field selection.
 - `glab-axi issue view <iid> [global flags]` - View one project issue with bounded descriptions.
+- `glab-axi issue discussions <iid> [global flags]` - View bounded issue comments and threaded notes.
 - `glab-axi issue edit <iid> [--auth-source native] -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-state opened|closed --expected-updated-at TIMESTAMP [--title-file FILE] [--description-file FILE] [--add-label NAME]... [--remove-label NAME]... [--dry-run] [--format toon|json]` - Edit one exact project issue with best-effort drift checks.
 - `glab-axi mr list [filter/selection flags] [global flags]` - List project merge requests with typed filters and bounded field selection.
 - `glab-axi mr view <iid> [global flags]` - View one merge request with bounded descriptions.
 - `glab-axi mr checks <iid> [global flags]` - View the head pipeline and jobs for one merge request.
 - `glab-axi mr discussions <iid> [global flags]` - View bounded, read-only discussion evidence for one merge request.
+- `glab-axi mr approvals <iid> [global flags]` - View assigned reviewers and current GitLab approval state.
 - `glab-axi mr diff <iid> [global flags]` - View a bounded, color-free merge-request diff.
 - `glab-axi mr merge <iid> -R NAMESPACE/PROJECT --hostname HOST --expected-url URL --expected-source BRANCH --expected-target BRANCH --expected-head SHA --authority captain-explicit|standing-yolo-green --squash [--format toon|json]` - Immediately squash-merge one exact green merge request.
 - `glab-axi mr ensure --source BRANCH --target BRANCH --title-file FILE --description-file FILE [global flags]` - Create or update exactly one matching open merge request.

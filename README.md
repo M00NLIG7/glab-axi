@@ -117,6 +117,15 @@ content, raw/unlimited output and clone are not provided. These read commands
 add no writes; existing guarded native deletion remains a separate contract.
 See the [pinned snippet contract](contracts/official-glab/v1.112.0/snippet-reads.json).
 
+Collaboration read equivalents also include `issue discussions <iid>` for
+comments/threaded notes and `mr approvals <iid>` for assigned reviewers and
+current GitLab approval state. They use separate closed schemas without changing
+default issue/MR views. Assigned reviewers and notes are not GitHub review
+submissions. Unknown/denied approval state never becomes approval or zero required
+approvals; edition/license remains unknown. See the
+[versioned collaboration contract](contracts/collaboration-reads/README.md) for
+bounds, identity rechecks, uncertainty and exact scope.
+
 `mr discussions` gives agents bounded, read-only evidence for one merge request
 without a browser. `--limit` counts discussion threads; provider thread and note
 order is preserved. Each successful result binds the MR global ID and IID,

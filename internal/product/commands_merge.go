@@ -97,6 +97,11 @@ func validateParsedCommand(parsed Parsed) error {
 	if path == "issue list" || path == "issue view" || path == "mr list" || path == "mr view" {
 		return validateReadParsed(parsed)
 	}
+	if path == "issue discussions" || path == "mr approvals" {
+		if _, err := positivePosition(parsed, "resource IID"); err != nil {
+			return err
+		}
+	}
 	if isStack(parsed) {
 		return validateStackParsed(parsed)
 	}
